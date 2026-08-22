@@ -13,8 +13,8 @@
     • [Movement Suite with Keybinds]: Fly Hack (X), NoClip (V), Velocity Speedhack (B),
       CFrame Speed Bypass (N), Infinite Jump Boost (J) with LinoriaLib Keybind Pickers.
     • [Teleport Suite]: Smooth Anti-Jitter Sky-Tween (default 1500 Y) to ALL 35+ Class Trainers,
-      Towns, Church (Heavens Point), Desert (Waving Sands), Deeproot (Old Ruins), Merchants,
-      and Landmarks with full cancel support and height/speed sliders.
+      Towns, Church (Heavens Point), Desert, Merchants, and Landmarks with full cancel support
+      and height/speed sliders.
     • [Ingredient ESP]: Custom BillboardGui OOP Engine with Distance, Persistent Mode, Whitelist filter.
     • [FPS Booster & Optimization]: Remove Fog, Atmosphere, Shadows, Foliage, Materials, Instant Clean RAM.
     • [Config & Theme System]: SaveManager & ThemeManager (Full save/load configurations).
@@ -918,8 +918,7 @@ local KeyLocations = {
     -- Towns & Major Hubs
     ["🏛️ Westwood Heart"] = Vector3.new(8327.3, 825.1, -5557.4),
     ["🌋 Caldera Town"] = Vector3.new(5091.2, 662.6, -4293.1),
-    ["🌲 Deeproot Town (Old Ruins)"] = Vector3.new(2815.3, 634.6, -3924.6),
-    ["🏜️ Desert (Waving Sands)"] = Vector3.new(2433.7, 685.4, -3495.1),
+    ["🏜️ Desert"] = Vector3.new(2815.3, 634.6, -3924.6),
     ["⚔️ Sanctuary of Blades"] = Vector3.new(2086.0, 386.8, -2978.3),
     ["⛪ Church (Heavens Point)"] = Vector3.new(831.6, 3436.9, -5602.3),
     ["🏛️ Forgotten Sanctum (Endgame)"] = Vector3.new(10831.2, 1581.7, -3463.6),
@@ -967,10 +966,10 @@ local KeyLocations = {
     -- Town Merchants & Services
     ["⚒️ Blacksmith (Westwood)"] = Vector3.new(8465.8, 821.8, -5589.8),
     ["⚒️ Blacksmith (Caldera)"] = Vector3.new(4921.8, 657.9, -4162.3),
-    ["⚒️ Blacksmith (Deeproot)"] = Vector3.new(2786.1, 620.0, -3840.0),
+    ["⚒️ Blacksmith (Desert)"] = Vector3.new(2786.1, 620.0, -3840.0),
     ["💊 Doctor (Westwood)"] = Vector3.new(8079.1, 822.4, -5478.8),
     ["💊 Doctor (Caldera)"] = Vector3.new(5035.6, 658.1, -4407.9),
-    ["💊 Doctor (Deeproot)"] = Vector3.new(2790.2, 615.7, -3837.2),
+    ["💊 Doctor (Desert)"] = Vector3.new(2790.2, 615.7, -3837.2),
     ["💰 Banker (Westwood)"] = Vector3.new(8470.3, 823.6, -5824.3),
     ["💰 Banker (Caldera)"] = Vector3.new(5184.7, 657.7, -4266.2),
     ["🛒 Merchant (Westwood)"] = Vector3.new(8473.8, 823.6, -5906.5),
@@ -1502,8 +1501,7 @@ TeleportGroup:AddButton({
 
 QuickWarpGroup:AddButton("🏛️ Westwood Heart", function() teleportToLocation(KeyLocations["🏛️ Westwood Heart"]) end)
 QuickWarpGroup:AddButton("🌋 Caldera Town", function() teleportToLocation(KeyLocations["🌋 Caldera Town"]) end)
-QuickWarpGroup:AddButton("🌲 Deeproot Town", function() teleportToLocation(KeyLocations["🌲 Deeproot Town (Old Ruins)"]) end)
-QuickWarpGroup:AddButton("🏜️ Desert (Waving Sands)", function() teleportToLocation(KeyLocations["🏜️ Desert (Waving Sands)"]) end)
+QuickWarpGroup:AddButton("🏜️ Desert", function() teleportToLocation(KeyLocations["🏜️ Desert"]) end)
 QuickWarpGroup:AddButton("⛪ Church", function() teleportToLocation(KeyLocations["⛪ Church (Heavens Point)"]) end)
 QuickWarpGroup:AddButton("⚔️ Sanctuary of Blades", function() teleportToLocation(KeyLocations["⚔️ Sanctuary of Blades"]) end)
 
