@@ -840,15 +840,14 @@ local Window = Library:CreateWindow({
     Title = "Arcane Lineage • Master Hub",
     Center = true,
     AutoShow = true,
-    TabPadding = 8,
+    TabPadding = 6,
     MenuFadeTime = 0.2
 })
 
 local Tabs = {
     AutoFarm = Window:AddTab("💎 Auto Farm"),
-    AutoQTE  = Window:AddTab("⚔️ Auto Combat"),
-    Visuals  = Window:AddTab("👁️ Visuals / ESP"),
-    Misc     = Window:AddTab("⚡ FPS & Misc"),
+    AutoQTE  = Window:AddTab("⚔️ Combat"),
+    Visuals  = Window:AddTab("👁️ Visuals & FPS"),
     Settings = Window:AddTab("⚙️ Settings"),
 }
 
@@ -1042,10 +1041,102 @@ WeaponGroup:AddToggle("AutoFist", {
 })
 
 -- -----------------------------------------------------------------------------
--- TAB 3: VISUALS / ESP
+-- TAB 3: VISUALS & FPS BOOSTER
 -- -----------------------------------------------------------------------------
-local ESPGroup = Tabs.Visuals:AddLeftGroupbox("Ingredient ESP")
-local FilterGroup = Tabs.Visuals:AddRightGroupbox("Filters & Colors")
+local ESPGroup = Tabs.Visuals:AddLeftGroupbox("👁️ Ingredient ESP")
+local FilterGroup = Tabs.Visuals:AddLeftGroupbox("🎯 Filters & Categories")
+local FPSGroup = Tabs.Visuals:AddRightGroupbox("⚡ FPS Booster")
+local OptGroup = Tabs.Visuals:AddRightGroupbox("🛠️ Optimization & RAM")
+
+local FPSBooster = {
+    originalFogEnd = Lighting.FogEnd,
+    originalFogStart = Lighting.FogStart,
+    originalGlobalShadows = Lighting.GlobalShadows,
+}
+
+local function applyFPSBoost()
+    task.spawn(function()
+        pcall(function()
+            local isBoost = Toggles.EnableFPSBoost and Toggles.EnableFPSBoost.Value
+            if isBoost then
+                Lighting.GlobalShadows = false
+                Lighting.FogEnd = 9e9
+                Lighting.FogStart = 9e9
+
+                local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+                if atmosphere then
+                    atmosphere.Density = 0
+                    atmosphere.Haze = 0
+                    atmosphere.Glare = 0
+                end
+
+                for _, effect in ipairs(Lighting:GetChildren()) do
+                    if effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") then
+                        effect.Enabled = false
+                    end
+                end
+
+                local terrain = workspace:FindFirstChildOfClass("Terrain")
+                if terrain then
+                    terrain.Decoration = false
+                    terrain.WaterWaveSize = 0
+                    terrain.WaterWaveSpeed = 0
+                    terrain.WaterReflectance = 0
+                end
+            else
+                Lighting.GlobalShadows = FPSBooster.originalGlobalShadows or true
+                Lighting.FogEnd = FPSBooster.originalFogEnd or 100000
+                Lighting.FogStart = FPSBooster.originalFogStart or 0
+                local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+                if atmosphere then
+                    atmosphere.Density = 0.3
+                end
+            end
+        end)
+    end)
+end
+
+local function applyTreeRemoval()
+    task.spawn(function()
+        pcall(function()
+            local hideTrees = Toggles.RemoveTrees and Toggles.RemoveTrees.Value
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                if obj:IsA("Model") and not obj:FindFirstChildOfClass("Humanoid") and not obj:FindFirstChild("ClickDetector") then
+                    local name = obj.Name:lower()
+                    if name:find("tree") or name:find("bush") or name:find("leaf") or name:find("foliage") or name:find("grass") or name:find("plant") then
+                        for _, p in ipairs(obj:GetDescendants()) do
+                            if p:IsA("BasePart") then
+                                p.Transparency = hideTrees and 1 or 0
+                                p.CastShadow = not hideTrees
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end)
+end
+
+local function applyLowGraphics()
+    task.spawn(function()
+        pcall(function()
+            local isLow = Toggles.LowGraphics and Toggles.LowGraphics.Value
+            for _, p in ipairs(workspace:GetDescendants()) do
+                if p:IsA("BasePart") and not (LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character)) then
+                    if isLow then
+                        p.Material = Enum.Material.SmoothPlastic
+                        p.Reflectance = 0
+                        p.CastShadow = false
+                    end
+                elseif p:IsA("ParticleEmitter") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") or p:IsA("Trail") then
+                    if not (LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character)) then
+                        p.Enabled = not isLow
+                    end
+                end
+            end
+        end)
+    end)
+end
 
 ESPGroup:AddToggle("MasterESP", {
     Text = "Enable Ingredient ESP",
@@ -1083,92 +1174,8 @@ FilterGroup:AddDropdown("ESPWhitelist", {
     Text = "Whitelist Selection",
 })
 
--- -----------------------------------------------------------------------------
--- TAB 4: FPS BOOSTER & MISCELLANEOUS
--- -----------------------------------------------------------------------------
-local FPSGroup = Tabs.Misc:AddLeftGroupbox("⚡ FPS Booster")
-local OptGroup = Tabs.Misc:AddRightGroupbox("🛠️ Optimization Tweaks")
-
-local FPSBooster = {
-    originalFogEnd = Lighting.FogEnd,
-    originalFogStart = Lighting.FogStart,
-    originalGlobalShadows = Lighting.GlobalShadows,
-}
-
-local function applyFPSBoost()
-    if Toggles.EnableFPSBoost and Toggles.EnableFPSBoost.Value then
-        -- Lighting & Atmosphere
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 9e9
-        Lighting.FogStart = 9e9
-
-        local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-        if atmosphere then
-            atmosphere.Density = 0
-            atmosphere.Haze = 0
-            atmosphere.Glare = 0
-        end
-
-        for _, effect in ipairs(Lighting:GetChildren()) do
-            if effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") then
-                effect.Enabled = false
-            end
-        end
-
-        -- Terrain Grass & Water
-        local terrain = workspace:FindFirstChildOfClass("Terrain")
-        if terrain then
-            terrain.Decoration = false
-            terrain.WaterWaveSize = 0
-            terrain.WaterWaveSpeed = 0
-            terrain.WaterReflectance = 0
-        end
-
-        -- Remove / Hide heavy foliage & tree models
-        if Toggles.RemoveTrees and Toggles.RemoveTrees.Value then
-            for _, obj in ipairs(workspace:GetDescendants()) do
-                if obj:IsA("Model") and not obj:FindFirstChildOfClass("Humanoid") and not obj:FindFirstChild("ClickDetector") then
-                    local name = obj.Name:lower()
-                    if name:find("tree") or name:find("bush") or name:find("leaf") or name:find("foliage") or name:find("grass") or name:find("plant") then
-                        for _, p in ipairs(obj:GetDescendants()) do
-                            if p:IsA("BasePart") then
-                                p.Transparency = 1
-                                p.CastShadow = false
-                            end
-                        end
-                    end
-                end
-            end
-        end
-
-        -- Materials & Particles
-        if Toggles.LowGraphics and Toggles.LowGraphics.Value then
-            for _, p in ipairs(workspace:GetDescendants()) do
-                if p:IsA("BasePart") and not (LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character)) then
-                    p.Material = Enum.Material.SmoothPlastic
-                    p.Reflectance = 0
-                    p.CastShadow = false
-                elseif p:IsA("ParticleEmitter") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") or p:IsA("Trail") then
-                    if not (LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character)) then
-                        p.Enabled = false
-                    end
-                end
-            end
-        end
-    else
-        -- Restore default settings
-        Lighting.GlobalShadows = FPSBooster.originalGlobalShadows or true
-        Lighting.FogEnd = FPSBooster.originalFogEnd or 100000
-        Lighting.FogStart = FPSBooster.originalFogStart or 0
-        local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-        if atmosphere then
-            atmosphere.Density = 0.3
-        end
-    end
-end
-
 FPSGroup:AddToggle("EnableFPSBoost", {
-    Text = "Master FPS Boost (Clear Fog/Atmosphere)",
+    Text = "Master FPS Boost (No Fog/Shadows)",
     Default = false,
     Callback = function(val)
         applyFPSBoost()
@@ -1179,15 +1186,15 @@ FPSGroup:AddToggle("RemoveTrees", {
     Text = "Remove Trees / Foliage / Grass",
     Default = false,
     Callback = function(val)
-        applyFPSBoost()
+        applyTreeRemoval()
     end
 })
 
 FPSGroup:AddToggle("LowGraphics", {
-    Text = "Smooth Plastic / No Particles Mode",
+    Text = "Smooth Plastic / No Particles",
     Default = false,
     Callback = function(val)
-        applyFPSBoost()
+        applyLowGraphics()
     end
 })
 
@@ -1218,7 +1225,7 @@ OptGroup:AddButton("🌫️ Remove All Fog Permanently", function()
 end)
 
 -- -----------------------------------------------------------------------------
--- TAB 5: SETTINGS / CONFIG
+-- TAB 4: SETTINGS / CONFIG
 -- -----------------------------------------------------------------------------
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
