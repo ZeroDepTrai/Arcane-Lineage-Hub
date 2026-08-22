@@ -28,7 +28,7 @@ Max Farm Luck   : ~3.5x - 4.0x (Full Luck Setup + 7 Leafed Everthistle)
 
 ---
 
-## 🐉 2. WORLD BOSSES DROP TABLES
+## 🐉 2. WORLD BOSSES DROP TABLES (T1 & T2 ORBS SEPARATED)
 
 ### 🔥 Yar'Thul, The Blazing Dragon (Mount Thul / Volcano)
 ```prolog
@@ -45,7 +45,10 @@ Frostburned Rune       | Gear     | 15.0%  | 22.5%       | 52.5%
 Chronos                | Artifact |  8.0%  | 12.0%       | 28.0%
 Narthana's Sigil       | Artifact | 10.0%  | 15.0%       | 35.0%
 Shifting Hourglass     | Artifact | 12.0%  | 18.0%       | 42.0%
-Trait Orbs (T1 & T2)   | Orb      | 35.0%  | 52.5%       | 100.0% (Guaranteed)
+-----------------------+----------+--------+-------------+------------------
+Tier 1 Trait Orb       | Orb (T1) | 28.0%  | 42.0%       | 98.0% - 100%
+Tier 2 Trait Orb       | Orb (T2) |  7.0%  | 10.5%       | 24.5% - 28.0%
+Tier 2 Orb (Corrupted) | Orb (T2) | 28.0%  | 42.0%       | 85.0% - 100%
 Soul Dust / Mem. Frag  | Resource | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 -----------------------+----------+--------+-------------+------------------
 Special: Unlocks quest for MIDAS ENCHANT at NPC Lodyssa (Caldera Inn)
@@ -68,7 +71,10 @@ Tainted Quiver         | Gear     | 15.0%  | 22.5%       | 52.5%
 Dark Sigil             | Artifact | 10.0%  | 15.0%       | 35.0%
 Metroms Amulet         | Artifact | 10.0%  | 15.0%       | 35.0%
 Stellian Core          | Artifact |  8.0%  | 12.0%       | 28.0%
-Trait Orbs (T1 & T2)   | Orb      | 35.0%  | 52.5%       | 100.0% (Guaranteed)
+-----------------------+----------+--------+-------------+------------------
+Tier 1 Trait Orb       | Orb (T1) | 28.0%  | 42.0%       | 98.0% - 100%
+Tier 2 Trait Orb       | Orb (T2) |  7.0%  | 10.5%       | 24.5% - 28.0%
+Tier 2 Orb (Corrupted) | Orb (T2) | 28.0%  | 42.0%       | 85.0% - 100%
 Soul Dust / Mem. Frag  | Resource | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 ================================================================================
 ```
@@ -89,7 +95,10 @@ Divine Promise         | Gear     | 20.0%  | 30.0%       | 70.0%
 Focused Mind           | Gear     | 20.0%  | 30.0%       | 70.0%
 Heaven's Authority     | Artifact |  6.0%  |  9.0%       | 22.0%
 Stellian Core          | Artifact | 10.0%  | 15.0%       | 35.0%
-Trait Orbs (T1 & T2)   | Orb      | 40.0%  | 60.0%       | 100.0% (Guaranteed)
+-----------------------+----------+--------+-------------+------------------
+Tier 1 Trait Orb       | Orb (T1) | 30.0%  | 45.0%       | 100.0% (Guaranteed)
+Tier 2 Trait Orb       | Orb (T2) | 10.0%  | 15.0%       | 35.0%
+Tier 2 Orb (Corrupted) | Orb (T2) | 35.0%  | 52.5%       | 100.0% (Guaranteed)
 Void Key (Corrupted)   | Raid Key | 25.0%  | 37.5%       | 87.5% - 100%
 -----------------------+----------+--------+-------------+------------------
 Special: Rapheon's Blessing (BLESSED ENCHANT) at Covenant Rank 20
@@ -113,7 +122,10 @@ Frostburned Rune       | Gear     | 15.0%  | 22.5%       | 52.5%
 Arkhaia's Visage       | Artifact |  6.0%  |  9.0%       | 22.0%
 Dark Sigil             | Artifact | 10.0%  | 15.0%       | 35.0%
 Metroms Amulet         | Artifact | 10.0%  | 15.0%       | 35.0%
-Trait Orbs (T1 & T2)   | Orb      | 40.0%  | 60.0%       | 100.0% (Guaranteed)
+-----------------------+----------+--------+-------------+------------------
+Tier 1 Trait Orb       | Orb (T1) | 30.0%  | 45.0%       | 100.0% (Guaranteed)
+Tier 2 Trait Orb       | Orb (T2) | 10.0%  | 15.0%       | 35.0%
+Tier 2 Orb (Corrupted) | Orb (T2) | 35.0%  | 52.5%       | 100.0% (Guaranteed)
 Void Key (Corrupted)   | Raid Key | 25.0%  | 37.5%       | 87.5% - 100%
 -----------------------+----------+--------+-------------+------------------
 Special: Arkhaia's Curse (SPECTRAL ENCHANT) at Covenant Rank 20
@@ -134,7 +146,8 @@ Darkblood Weapons (x8) | Weapon   | 25.0%  | 37.5%       | 87.5% - 100%
 Vainglorious Locket    | Gear     | 20.0%  | 30.0%       | 70.0%
 Chaos Orb              | Artifact | 10.0%  | 15.0%       | 35.0%
 Lost Scroll: M. Grasp  | Scroll   |  5.0%  |  7.5%       | 18.0% - 20%
-Tier 2 Trait Orbs (x2) | Orb      | 50.0%  | 75.0%       | 100.0% (Guaranteed)
+-----------------------+----------+--------+-------------+------------------
+Tier 2 Trait Orb (x2)  | Orb (T2) | 50.0%  | 75.0%       | 100.0% (Guaranteed)
 Pure Arcanium Shards   | Shard    | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 ================================================================================
 ```
@@ -157,7 +170,10 @@ Dust Devil's Eye       | Gear     | 15.0%  | 22.5%       | 52.5%
 Open Hand              | Gear     | 20.0%  | 30.0%       | 70.0%
 Paranoxian Crux        | Artifact | 10.0%  | 15.0%       | 35.0%
 Ancient Insignia       | Artifact | 10.0%  | 15.0%       | 35.0%
-Trait Orbs (T1 & T2)   | Orb      | 40.0%  | 60.0%       | 100.0% (Guaranteed)
+-----------------------+----------+--------+-------------+------------------
+Tier 1 Trait Orb       | Orb (T1) | 30.0%  | 45.0%       | 100.0% (Guaranteed)
+Tier 2 Trait Orb       | Orb (T2) | 10.0%  | 15.0%       | 35.0%
+Tier 2 Orb (Corrupted) | Orb (T2) | 35.0%  | 52.5%       | 100.0% (Guaranteed)
 -----------------------+----------+--------+-------------+------------------
 Special: Unlocks HIEMAL ENCHANT via NPC Thurisaz (Corrupted State Defeat)
 ================================================================================
