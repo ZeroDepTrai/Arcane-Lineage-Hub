@@ -33,6 +33,7 @@ local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local Lighting = game:GetService("Lighting")
 
 -- Hàm HTTP request đa năng của các Executor
 local HttpRequest = (syn and syn.request) or (http and http.request) or http_request or request
