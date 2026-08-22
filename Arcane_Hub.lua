@@ -462,6 +462,7 @@ local AutoQTE = {
     lastFistHit = 0,
 }
 
+-- 1. DODGE QTE (PERFECT DODGE 100% / BLOCK)
 local function handleDodgeQTE(dodgeQTE)
     if not Toggles.AutoDodge or not Toggles.AutoDodge.Value or not dodgeQTE or not dodgeQTE.Visible then return end
     local inset = dodgeQTE:FindFirstChild("Inset")
@@ -471,18 +472,21 @@ local function handleDodgeQTE(dodgeQTE)
     local indicator = inset:FindFirstChild("Indicator")
     local dodgeZone = inset:FindFirstChild("Dodge")
     local blockZone = inset:FindFirstChild("Block")
-    if not indicator then return end
+    if not indicator or not indicator.Visible then return end
 
     local targetZone = (Toggles.PreferPerfectDodge and Toggles.PreferPerfectDodge.Value and dodgeZone and dodgeZone.Visible) and dodgeZone or blockZone
     if not targetZone then return end
 
-    local indCenter = indicator.AbsolutePosition.X + (indicator.AbsoluteSize.X / 2)
-    local targetMin = targetZone.AbsolutePosition.X
-    local targetMax = targetMin + targetZone.AbsoluteSize.X
+    local indLeft = indicator.AbsolutePosition.X
+    local indRight = indLeft + indicator.AbsoluteSize.X
+    local indCenter = indLeft + (indicator.AbsoluteSize.X / 2)
+    local targetLeft = targetZone.AbsolutePosition.X
+    local targetRight = targetLeft + targetZone.AbsoluteSize.X
 
-    if indCenter >= targetMin and indCenter <= targetMax then
+    -- Collision occurs if indicator overlaps target zone
+    if (indRight >= targetLeft and indLeft <= targetRight) or (indCenter >= targetLeft and indCenter <= targetRight) then
         local now = os.clock()
-        if now - AutoQTE.lastDodgeHit > 0.3 then
+        if now - AutoQTE.lastDodgeHit > 0.25 then
             AutoQTE.lastDodgeHit = now
             local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
             if delayMs > 0 then task.wait(delayMs / 1000) end
@@ -630,51 +634,71 @@ local function handleAxeQTE(axeQTE)
     end
 end
 
--- 6. FIST / CESTUS QTE (DIRECTIONAL ROTATION MATCHING)
+-- 6. FIST / CESTUS QTE (SEQUENTIAL COMBO ARROWS)
 local function handleFistQTE(fistQTE)
     if not Toggles.AutoFist or not Toggles.AutoFist.Value or not fistQTE or not fistQTE.Visible then return end
     local keyHolder = fistQTE:FindFirstChild("KeyHolder") or fistQTE:FindFirstChild("Inset")
     local otherControls = fistQTE:FindFirstChild("OtherControls")
+    local keysFolder = (keyHolder and keyHolder:FindFirstChild("Keys")) or keyHolder
+    if not keysFolder then return end
 
-    if keyHolder then
-        for _, keyImg in ipairs(keyHolder:GetDescendants()) do
-            if keyImg:IsA("GuiObject") and keyImg.Visible and (keyImg.ImageTransparency == nil or keyImg.ImageTransparency < 0.6) then
-                local rot = keyImg.Rotation % 360
-                local now = os.clock()
-                if now - AutoQTE.lastFistHit > 0.12 then
-                    AutoQTE.lastFistHit = now
-                    if rot == 90 or keyImg.Name:find("Up") then
-                        pressKey(Enum.KeyCode.Up)
-                        pressKey(Enum.KeyCode.W)
-                        if otherControls and otherControls:FindFirstChild("Up") then safeClick(otherControls.Up) end
-                    elseif rot == 180 or keyImg.Name:find("Right") then
-                        pressKey(Enum.KeyCode.Right)
-                        pressKey(Enum.KeyCode.D)
-                        if otherControls and otherControls:FindFirstChild("Right") then safeClick(otherControls.Right) end
-                    elseif rot == 270 or keyImg.Name:find("Down") then
-                        pressKey(Enum.KeyCode.Down)
-                        pressKey(Enum.KeyCode.S)
-                        if otherControls and otherControls:FindFirstChild("Down") then safeClick(otherControls.Down) end
-                    elseif rot == 0 or keyImg.Name:find("Left") then
-                        pressKey(Enum.KeyCode.Left)
-                        pressKey(Enum.KeyCode.A)
-                        if otherControls and otherControls:FindFirstChild("Left") then safeClick(otherControls.Left) end
-                    end
-                end
-            end
+    -- Tìm đúng Arrow hiện tại có số thứ tự nhỏ nhất (1_arrow, 2_arrow, ...)
+    local currentArrow = nil
+    local lowestIndex = math.huge
+
+    for _, child in ipairs(keysFolder:GetChildren()) do
+        local num = child.Name:match("^(%d+)")
+        local idx = tonumber(num)
+        if idx and idx < lowestIndex and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.4 then
+            lowestIndex = idx
+            currentArrow = child
+        end
+    end
+
+    if not currentArrow then return end
+
+    local icon = currentArrow:FindFirstChild("Icon") or currentArrow
+    local rot = icon.Rotation % 360
+    local name = currentArrow.Name:lower()
+
+    local now = os.clock()
+    if now - AutoQTE.lastFistHit > 0.08 then
+        AutoQTE.lastFistHit = now
+        local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
+        if delayMs > 0 then task.wait(delayMs / 1000) end
+
+        if rot == 90 or name:find("up") then
+            pressKey(Enum.KeyCode.Up)
+            pressKey(Enum.KeyCode.W)
+            if otherControls and otherControls:FindFirstChild("Up") then safeClick(otherControls.Up) end
+        elseif rot == 180 or name:find("right") then
+            pressKey(Enum.KeyCode.Right)
+            pressKey(Enum.KeyCode.D)
+            if otherControls and otherControls:FindFirstChild("Right") then safeClick(otherControls.Right) end
+        elseif rot == 270 or name:find("down") then
+            pressKey(Enum.KeyCode.Down)
+            pressKey(Enum.KeyCode.S)
+            if otherControls and otherControls:FindFirstChild("Down") then safeClick(otherControls.Down) end
+        elseif rot == 0 or name:find("left") then
+            pressKey(Enum.KeyCode.Left)
+            pressKey(Enum.KeyCode.A)
+            if otherControls and otherControls:FindFirstChild("Left") then safeClick(otherControls.Left) end
         end
     end
 end
 
--- 7. SPEAR QTE
+-- 7. SPEAR QTE (ACTIVE TAP AUTOCLICKER)
 local function handleSpearQTE(spearQTE)
     if not spearQTE or not spearQTE.Visible then return end
     local container = spearQTE:FindFirstChild("Container")
     if container then
         for _, tap in ipairs(container:GetChildren()) do
             if tap:IsA("GuiObject") and tap.Visible then
-                local btn = tap:FindFirstChildWhichIsA("TextButton", true) or tap:FindFirstChildWhichIsA("ImageButton", true)
-                if btn then safeClick(btn) end
+                local btn = tap:FindFirstChild("InputButton") or tap:FindFirstChildWhichIsA("TextButton", true) or tap:FindFirstChildWhichIsA("ImageButton", true)
+                if btn and (btn.Active == nil or btn.Active == true) then
+                    safeClick(btn)
+                    break
+                end
             end
         end
     end
