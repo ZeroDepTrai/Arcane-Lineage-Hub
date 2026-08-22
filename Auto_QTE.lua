@@ -133,19 +133,22 @@ end
 local function handleDaggerQTE(daggerQTE)
     if not Config.AutoDagger or not daggerQTE or not daggerQTE.Visible then return end
     local stopBtn = daggerQTE:FindFirstChild("Stop")
-    local indicator = daggerQTE:FindFirstChild("Indicator", true)
-    if not indicator then return end
+    local activeRing = daggerQTE:FindFirstChild("ActiveRing")
+    if not activeRing then return end
 
-    local indRotation = indicator.Rotation % 360
+    local ringRot = -activeRing.Rotation % 360
+    if ringRot < 0 then ringRot = ringRot + 360 end
 
-    for _, desc in ipairs(daggerQTE:GetDescendants()) do
-        if (desc.Name == "Weakpoint" or desc.Name:find("Attack")) and desc:IsA("GuiObject") and desc.Visible and desc.Parent then
-            local wpRotation = desc.Rotation % 360
-            local diff = math.abs((indRotation - wpRotation + 180) % 360 - 180)
+    for _, wp in ipairs(activeRing:GetChildren()) do
+        if wp.Name == "Weakpoint" and wp:IsA("GuiObject") and wp.ImageTransparency < 0.8 then
+            local wpAngle = wp.Rotation % 360
+            local diff = (ringRot - wpAngle) % 360
+            if diff < 0 then diff = diff + 360 end
+            if diff > 180 then diff = diff - 360 end
 
-            if diff <= 16 then
+            if math.abs(diff) <= 18 then
                 local now = os.clock()
-                if now - AutoQTE.lastDaggerHit > 0.05 then
+                if now - AutoQTE.lastDaggerHit > 0.04 then
                     AutoQTE.lastDaggerHit = now
                     if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
                     if stopBtn then safeClick(stopBtn) end
