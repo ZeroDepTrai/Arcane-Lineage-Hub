@@ -6,10 +6,11 @@
     • [Auto Farm Whitelist]: Fast Menu-Scan (Hops directly from MainMenu if 0 targets),
       Smooth anti-jitter 3-phase Sky-Tween flight (default 1500 Y), Auto-Harvest, Auto-ServerHop,
       Adaptable Multi-Item Discord Webhook Notifications.
-    • [Auto Combat QTE]: Perfect Dodge 100%, Sword (100% single-hit index tracking),
+    • [Auto Combat QTE]: Perfect Dodge 100%, Sword (100% single-hit target tracking in middle-window sweet spot),
       Dagger (100% precision bullseye angle tracking), Hammer (PID Bang-Bang),
       Axe (Threshold Equilibrium), Fist/Cestus (Sequential combos),
       Spear (Active Button Clicker), Chest Lockpicking.
+    • [Spelldraw / Blackjack AI Advisor]: Real-time score reader & optimal probability recommendation (Hit / Stand / Double).
     • [Movement Suite with Keybinds]: Fly Hack (X), NoClip (V), Velocity Speedhack (B),
       CFrame Speed Bypass (N), Infinite Jump Boost (J) with LinoriaLib Keybind Pickers.
     • [Teleport Suite]: Smooth Anti-Jitter Sky-Tween (default 1500 Y) to ALL 35+ Class Trainers,
@@ -510,7 +511,7 @@ function Farmer.stop()
 end
 
 -- =============================================================================
--- AUTO COMBAT QTE ENGINE (WITH BULLETPROOF HIT TRACKING)
+-- AUTO COMBAT QTE ENGINE (EXACT TARGET TRACKING IN SWEET SPOT)
 -- =============================================================================
 local AutoQTE = {
     lastDodgeHit = 0,
@@ -519,7 +520,8 @@ local AutoQTE = {
     isHammerHolding = false,
     lastAxePress = 0,
     lastFistHit = 0,
-    swordHitIndices = {},
+    swordActive = false,
+    currentSwordTarget = 1,
     hitWeakpoints = {},
 }
 
@@ -555,12 +557,14 @@ local function handleDodgeQTE(dodgeQTE)
     end
 end
 
--- 2. SWORD QTE (PERFECT WINDOW STRIKE - 100% SINGLE-HIT INDEX TRACKING)
+-- 2. SWORD QTE (TARGET INDEX STATE MACHINE - SWEET SPOT 35% TO 65% OF WINDOW)
 local function handleSwordQTE(swordQTE)
     if not Toggles.AutoSword or not Toggles.AutoSword.Value or not swordQTE or not swordQTE.Visible then
-        AutoQTE.swordHitIndices = {}
+        AutoQTE.swordActive = false
+        AutoQTE.currentSwordTarget = 1
         return
     end
+
     local inset = swordQTE:FindFirstChild("Inset")
     local stopBtn = swordQTE:FindFirstChild("Stop")
     if not inset or not stopBtn then return end
@@ -568,36 +572,29 @@ local function handleSwordQTE(swordQTE)
     local window = inset:FindFirstChild("Window")
     if not window or not window.Visible then return end
 
-    local currentActiveInd = nil
-    local lowestIndex = math.huge
-
-    for _, child in ipairs(inset:GetChildren()) do
-        local idx = tonumber(child.Name)
-        if idx and not AutoQTE.swordHitIndices[idx] and idx < lowestIndex and child:IsA("GuiObject") and child.Visible then
-            lowestIndex = idx
-            currentActiveInd = child
-        end
+    if not AutoQTE.swordActive then
+        AutoQTE.swordActive = true
+        AutoQTE.currentSwordTarget = 1
     end
 
-    if not currentActiveInd then return end
+    local targetInd = inset:FindFirstChild(tostring(AutoQTE.currentSwordTarget))
+    if not targetInd or not targetInd:IsA("GuiObject") or not targetInd.Visible then
+        return
+    end
 
-    local indLeft = currentActiveInd.AbsolutePosition.X
-    local indWidth = currentActiveInd.AbsoluteSize.X
+    local indLeft = targetInd.AbsolutePosition.X
+    local indWidth = targetInd.AbsoluteSize.X
     local indCenter = indLeft + (indWidth / 2)
 
-    local winMin = window.AbsolutePosition.X
-    local winMax = winMin + window.AbsoluteSize.X
+    local winLeft = window.AbsolutePosition.X
+    local winWidth = window.AbsoluteSize.X
 
-    local isHit = false
-    if GuiCollisionService and GuiCollisionService.isColliding then
-        isHit = GuiCollisionService.isColliding(currentActiveInd, window) and (indCenter >= winMin + 3 and indCenter <= winMax - 3)
-    else
-        isHit = (indCenter >= winMin + 3 and indCenter <= winMax - 3)
-    end
+    -- Sweet spot: Khi tâm indicator nằm trong vùng từ 35% đến 65% của ô Window
+    local sweetSpotMin = winLeft + (winWidth * 0.35)
+    local sweetSpotMax = winLeft + (winWidth * 0.65)
 
-    if isHit then
-        AutoQTE.swordHitIndices[lowestIndex] = true
-        AutoQTE.lastSwordHit = os.clock()
+    if indCenter >= sweetSpotMin and indCenter <= sweetSpotMax then
+        AutoQTE.currentSwordTarget = AutoQTE.currentSwordTarget + 1
         local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
         if delayMs > 0 then task.wait(delayMs / 1000) end
         safeClick(stopBtn)
@@ -790,9 +787,13 @@ local function handleLockpickQTE(lockpickQTE)
 end
 
 RunService.RenderStepped:Connect(function()
-    if not Toggles.MasterQTE or not Toggles.MasterQTE.Value then return end
     local combatGui = PlayerGui and PlayerGui:FindFirstChild("Combat")
-    if not combatGui then return end
+    if not combatGui or not Toggles.MasterQTE or not Toggles.MasterQTE.Value then
+        AutoQTE.swordActive = false
+        AutoQTE.currentSwordTarget = 1
+        AutoQTE.hitWeakpoints = {}
+        return
+    end
 
     local dodgeQTE = combatGui:FindFirstChild("DodgeQTE")
     local swordQTE = combatGui:FindFirstChild("SwordQTE")
@@ -803,12 +804,169 @@ RunService.RenderStepped:Connect(function()
     local lockpickQTE = combatGui:FindFirstChild("LockpickQTE")
 
     if dodgeQTE and dodgeQTE.Visible then handleDodgeQTE(dodgeQTE) end
-    if swordQTE and swordQTE.Visible then handleSwordQTE(swordQTE) end
-    if daggerQTE and daggerQTE.Visible then handleDaggerQTE(daggerQTE) end
+    if swordQTE and swordQTE.Visible then
+        handleSwordQTE(swordQTE)
+    else
+        AutoQTE.swordActive = false
+        AutoQTE.currentSwordTarget = 1
+    end
+
+    if daggerQTE and daggerQTE.Visible then
+        handleDaggerQTE(daggerQTE)
+    else
+        AutoQTE.hitWeakpoints = {}
+    end
+
     if hammerQTE and hammerQTE.Visible then handleHammerQTE(hammerQTE) end
     if axeQTE and axeQTE.Visible then handleAxeQTE(axeQTE) end
     if fistQTE and fistQTE.Visible then handleFistQTE(fistQTE) end
     if lockpickQTE and lockpickQTE.Visible then handleLockpickQTE(lockpickQTE) end
+end)
+
+-- =============================================================================
+-- SPELLDRAW / BLACKJACK AI ADVISOR & LIVE PROBABILITY HELPER
+-- =============================================================================
+local SpelldrawHelper = {
+    active = false,
+    billboard = nil,
+    label = nil,
+}
+
+local function getBlackjackAdvice(playerScore, dealerUpScore)
+    if playerScore > 21 then
+        return "❌ BUST (> 21)", Color3.fromRGB(255, 50, 50)
+    elseif playerScore == 21 then
+        return "🌟 BLACKJACK / STAND (21)", Color3.fromRGB(255, 215, 0)
+    elseif playerScore >= 17 then
+        return "🛑 STAND (Safe Zone)", Color3.fromRGB(80, 255, 80)
+    elseif playerScore <= 11 then
+        return "🟢 HIT (Cannot Bust)", Color3.fromRGB(0, 255, 255)
+    elseif playerScore == 12 then
+        if dealerUpScore >= 4 and dealerUpScore <= 6 then
+            return "🛑 STAND (Dealer Risk)", Color3.fromRGB(100, 255, 100)
+        else
+            return "🟢 HIT (Dealer Strong)", Color3.fromRGB(255, 180, 0)
+        end
+    elseif playerScore >= 13 and playerScore <= 16 then
+        if dealerUpScore >= 2 and dealerUpScore <= 6 then
+            return "🛑 STAND (Dealer Likely Bust)", Color3.fromRGB(80, 255, 80)
+        else
+            return "🟢 HIT (Math Optimal)", Color3.fromRGB(255, 160, 0)
+        end
+    end
+    return "🟢 HIT", Color3.fromRGB(0, 255, 255)
+end
+
+RunService.RenderStepped:Connect(function()
+    if not Toggles.SpelldrawHelper or not Toggles.SpelldrawHelper.Value then
+        if SpelldrawHelper.billboard then
+            SpelldrawHelper.billboard.Enabled = false
+        end
+        return
+    end
+
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local spelldrawFolder = workspace:FindFirstChild("Mechanical") and workspace.Mechanical:FindFirstChild("Interactables") and workspace.Mechanical.Interactables:FindFirstChild("Spelldraw")
+    if not spelldrawFolder then return end
+
+    local nearestTable = nil
+    local shortestDist = 35
+
+    for _, t in ipairs(spelldrawFolder:GetChildren()) do
+        local main = t:FindFirstChild("Table") and t.Table:FindFirstChild("Main")
+        if main then
+            local dist = (hrp.Position - main.Position).Magnitude
+            if dist < shortestDist then
+                shortestDist = dist
+                nearestTable = t
+            end
+        end
+    end
+
+    if not nearestTable then
+        if SpelldrawHelper.billboard then SpelldrawHelper.billboard.Enabled = false end
+        return
+    end
+
+    local plrCountPart = nearestTable:FindFirstChild("Table") and nearestTable.Table:FindFirstChild("PlrCount")
+    local dealerCountPart = nearestTable:FindFirstChild("Table") and nearestTable.Table:FindFirstChild("DealerCount")
+
+    local plrText = plrCountPart and plrCountPart:FindFirstChildWhichIsA("BillboardGui", true) and plrCountPart.BillboardGui:FindFirstChildWhichIsA("TextLabel", true)
+    local dealerText = dealerCountPart and dealerCountPart:FindFirstChildWhichIsA("BillboardGui", true) and dealerCountPart.BillboardGui:FindFirstChildWhichIsA("TextLabel", true)
+
+    local pScore = 0
+    local dScore = 0
+
+    if plrText then
+        local num = plrText.Text:match("(%d+)")
+        pScore = tonumber(num) or 0
+    end
+
+    if dealerText then
+        local num = dealerText.Text:match("(%d+)")
+        dScore = tonumber(num) or 0
+    end
+
+    if pScore > 0 or dScore > 0 then
+        if not SpelldrawHelper.billboard or SpelldrawHelper.billboard.Parent ~= PlayerGui then
+            local bg = Instance.new("BillboardGui")
+            bg.Name = "SpelldrawAdvisor"
+            bg.AlwaysOnTop = true
+            bg.Size = UDim2.new(0, 220, 0, 60)
+            bg.StudsOffset = Vector3.new(0, 4, 0)
+
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, 0, 1, 0)
+            frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+            frame.BackgroundTransparency = 0.2
+            frame.BorderSizePixel = 0
+            frame.Parent = bg
+
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = Color3.fromRGB(0, 255, 180)
+            stroke.Thickness = 1.5
+            stroke.Parent = frame
+
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 8)
+            corner.Parent = frame
+
+            local title = Instance.new("TextLabel")
+            title.Text = "🃏 SPELLDRAW ADVISOR"
+            title.Font = Enum.Font.SourceSansBold
+            title.TextSize = 13
+            title.TextColor3 = Color3.fromRGB(0, 255, 200)
+            title.Size = UDim2.new(1, 0, 0.4, 0)
+            title.BackgroundTransparency = 1
+            title.Parent = frame
+
+            local advice = Instance.new("TextLabel")
+            advice.Name = "AdviceLabel"
+            advice.Font = Enum.Font.SourceSansBold
+            advice.TextSize = 15
+            advice.Size = UDim2.new(1, 0, 0.6, 0)
+            advice.Position = UDim2.new(0, 0, 0.4, 0)
+            advice.BackgroundTransparency = 1
+            advice.Parent = frame
+
+            bg.Parent = PlayerGui
+            SpelldrawHelper.billboard = bg
+            SpelldrawHelper.label = advice
+        end
+
+        local mainPart = nearestTable.Table.Main
+        SpelldrawHelper.billboard.Adornee = mainPart
+        SpelldrawHelper.billboard.Enabled = true
+
+        local adviceText, adviceColor = getBlackjackAdvice(pScore, dScore)
+        SpelldrawHelper.label.Text = string.format("%s (You: %d | Dealer: %d)", adviceText, pScore, dScore)
+        SpelldrawHelper.label.TextColor3 = adviceColor
+    else
+        if SpelldrawHelper.billboard then SpelldrawHelper.billboard.Enabled = false end
+    end
 end)
 
 -- =============================================================================
@@ -1288,10 +1446,11 @@ HopGroup:AddButton({
 })
 
 -- -----------------------------------------------------------------------------
--- TAB 2: AUTO COMBAT QTE
+-- TAB 2: AUTO COMBAT QTE & SPELLDRAW ADVISOR
 -- -----------------------------------------------------------------------------
 local MainQTEGroup = Tabs.AutoQTE:AddLeftGroupbox("General Combat")
 local WeaponGroup = Tabs.AutoQTE:AddRightGroupbox("Weapon Specials")
+local GambleGroup = Tabs.AutoQTE:AddLeftGroupbox("🃏 Spelldraw (Blackjack)")
 
 MainQTEGroup:AddToggle("MasterQTE", {
     Text = "Enable Master Auto QTE",
@@ -1344,6 +1503,12 @@ WeaponGroup:AddToggle("AutoAxe", {
 WeaponGroup:AddToggle("AutoFist", {
     Text = "Auto Fist / Cestus (Arrows)",
     Default = false,
+})
+
+GambleGroup:AddToggle("SpelldrawHelper", {
+    Text = "Spelldraw AI Advisor (Live)",
+    Default = false,
+    Tooltip = "Tự động đọc bài và hiển thị gợi ý xác suất toán học (Hit / Stand / Double)",
 })
 
 -- -----------------------------------------------------------------------------
