@@ -535,10 +535,37 @@ function Farmer.stop()
 end
 
 -- =============================================================================
--- AUTO FARM LEVEL & MOBS (AUTO STRIKE ENGINE)
+-- AUTO FARM LEVEL & WILDERNESS ENCOUNTERS (SMART SKILL & TARGET ENGINE)
 -- =============================================================================
 local LevelFarmer = {
     running = false,
+}
+
+local WildernessZones = {
+    ["Caldera Wilderness (Level 1-15)"] = {
+        Vector3.new(3200, 610, -3950),
+        Vector3.new(3350, 615, -3850),
+        Vector3.new(3100, 605, -4100),
+        Vector3.new(3400, 612, -4000),
+    },
+    ["Deeproot Canopy (Level 15-30)"] = {
+        Vector3.new(6650, 568, -3550),
+        Vector3.new(6800, 572, -3450),
+        Vector3.new(6550, 565, -3650),
+        Vector3.new(6750, 570, -3600),
+    },
+    ["Desert / Amoran Sands (Level 30-45)"] = {
+        Vector3.new(8150, 604, -4250),
+        Vector3.new(8300, 608, -4150),
+        Vector3.new(8050, 602, -4350),
+        Vector3.new(8250, 605, -4400),
+    },
+    ["Mount Thul / Volcano (Level 40-50)"] = {
+        Vector3.new(5120, 608, -5450),
+        Vector3.new(5250, 612, -5380),
+        Vector3.new(5050, 606, -5520),
+        Vector3.new(5180, 610, -5500),
+    }
 }
 
 local function isInCombat()
@@ -565,38 +592,98 @@ local function isInCombat()
     return false
 end
 
-local function executeAutoStrike()
+local function executeCombatTurn()
     local pgui = PlayerGui
     local combatGui = pgui and pgui:FindFirstChild("Combat")
-    if not combatGui then return end
+    if not combatGui or not combatGui.Enabled then return end
 
     local actionBG = combatGui:FindFirstChild("ActionBG")
     if not actionBG or not actionBG.Visible then return end
 
-    -- 1. Click AttackButton if main menu is open
+    local actionChoice = Options.SelectedCombatAction and Options.SelectedCombatAction.Value or "Strike (Basic Attack)"
+    local customSkill = Options.CustomSkillName and Options.CustomSkillName.Value or ""
+    local targetPrio = Options.TargetPriority and Options.TargetPriority.Value or "First Enemy"
+
+    -- 1. Click AttackButton if main menu is currently showing
     local attackBtn = actionBG:FindFirstChild("AttackButton", true)
     if attackBtn and attackBtn.Visible then
         for _, c in ipairs(getconnections(attackBtn.MouseButton1Click)) do c:Fire() end
         for _, c in ipairs(getconnections(attackBtn.Activated)) do c:Fire() end
-        task.wait(0.15)
+        task.wait(0.12)
     end
 
-    -- 2. Click Strike in AttacksPage
-    local strikeBtn = actionBG:FindFirstChild("Strike", true)
-    if strikeBtn and strikeBtn.Visible then
-        for _, c in ipairs(getconnections(strikeBtn.MouseButton1Click)) do c:Fire() end
-        for _, c in ipairs(getconnections(strikeBtn.Activated)) do c:Fire() end
-        task.wait(0.15)
+    -- 2. Select Skill or Strike in AttacksPage
+    local attacksPage = actionBG:FindFirstChild("AttacksPage", true)
+    if attacksPage and attacksPage.Visible then
+        local selectedSkillBtn = nil
+
+        if actionChoice == "Custom Skill Name" and customSkill ~= "" then
+            for _, btn in ipairs(attacksPage:GetDescendants()) do
+                if btn:IsA("TextButton") or btn:IsA("ImageButton") then
+                    local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
+                    if nameLabel and nameLabel.Text:lower():find(customSkill:lower()) then
+                        local cdFrame = btn:FindFirstChild("Cooldown", true) or btn:FindFirstChild("CoolDown", true)
+                        if not (cdFrame and cdFrame.Visible) then
+                            selectedSkillBtn = btn
+                            break
+                        end
+                    end
+                end
+            end
+        elseif actionChoice == "Auto Smart (Best Skill -> Strike)" or actionChoice == "First Available Skill (Fallback Strike)" then
+            for _, btn in ipairs(attacksPage:GetDescendants()) do
+                if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name ~= "Strike" and btn.Name ~= "Template" then
+                    local cdFrame = btn:FindFirstChild("Cooldown", true) or btn:FindFirstChild("CoolDown", true)
+                    if not (cdFrame and cdFrame.Visible) then
+                        selectedSkillBtn = btn
+                        break
+                    end
+                end
+            end
+        end
+
+        -- Fallback to Strike
+        if not selectedSkillBtn then
+            selectedSkillBtn = attacksPage:FindFirstChild("Strike", true)
+        end
+
+        if selectedSkillBtn then
+            for _, c in ipairs(getconnections(selectedSkillBtn.MouseButton1Click)) do c:Fire() end
+            for _, c in ipairs(getconnections(selectedSkillBtn.Activated)) do c:Fire() end
+            task.wait(0.15)
+        end
     end
 
-    -- 3. Click first enemy in Enemies page
+    -- 3. Select Enemy Target in Enemies Frame
     local enemiesFrame = actionBG:FindFirstChild("Enemies", true)
     if enemiesFrame and enemiesFrame.Visible then
-        local firstEnemyBtn = enemiesFrame:FindFirstChildWhichIsA("TextButton", true) or enemiesFrame:FindFirstChildWhichIsA("ImageButton", true)
-        if firstEnemyBtn then
-            for _, c in ipairs(getconnections(firstEnemyBtn.MouseButton1Click)) do c:Fire() end
-            for _, c in ipairs(getconnections(firstEnemyBtn.Activated)) do c:Fire() end
-            task.wait(0.15)
+        local enemyButtons = {}
+        for _, btn in ipairs(enemiesFrame:GetChildren()) do
+            if btn:IsA("GuiButton") and btn.Visible then
+                table.insert(enemyButtons, btn)
+            end
+        end
+        if #enemyButtons == 0 then
+            for _, btn in ipairs(enemiesFrame:GetDescendants()) do
+                if btn:IsA("GuiButton") and btn.Visible then
+                    table.insert(enemyButtons, btn)
+                end
+            end
+        end
+
+        if #enemyButtons > 0 then
+            local chosenEnemy = enemyButtons[1] -- First Enemy default
+            if targetPrio == "Last Enemy" then
+                chosenEnemy = enemyButtons[#enemyButtons]
+            elseif targetPrio == "Random Enemy" then
+                chosenEnemy = enemyButtons[math.random(1, #enemyButtons)]
+            end
+
+            if chosenEnemy then
+                for _, c in ipairs(getconnections(chosenEnemy.MouseButton1Click)) do c:Fire() end
+                for _, c in ipairs(getconnections(chosenEnemy.Activated)) do c:Fire() end
+                task.wait(0.12)
+            end
         end
     end
 
@@ -608,126 +695,49 @@ local function executeAutoStrike()
     end
 end
 
-local function isTargetMob(model, targetMode)
-    if not model or not model:IsA("Model") or not model.Parent then return false end
-    if Players:GetPlayerFromCharacter(model) then return false end
-
-    local hum = model:FindFirstChildOfClass("Humanoid")
-    if not hum or hum.Health <= 0 then return false end
-
-    local n = model.Name:lower()
-    -- Exclude friendly NPCs
-    if n:find("boots") or n:find("inette") or n:find("aberon") or n:find("orkin") or n:find("merchant") or n:find("blacksmith") or n:find("adelma") or n:find("vanio") then
-        return false
-    end
-
-    if targetMode == "All Mobs" then
-        return true
-    elseif targetMode == "Slimes (Caldera)" and n:find("slime") then
-        return true
-    elseif targetMode == "Thieves & Bandits" and (n:find("thief") or n:find("bandit") or n:find("rogue")) then
-        return true
-    elseif targetMode == "Zombie Mushrooms (Deeproot)" and (n:find("mushroom") or n:find("zombie")) then
-        return true
-    elseif targetMode == "Desert Mobs (Desert)" and (n:find("crawler") or n:find("stray") or n:find("sand")) then
-        return true
-    elseif targetMode == "Wolves & Dire Wolves" and n:find("wolf") then
-        return true
-    end
-
-    return false
-end
-
-local function findNearestMob(targetMode, maxRadius)
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return nil end
-
-    local nearestMob = nil
-    local nearestDist = maxRadius or 2500
-
-    local searchContainers = {
-        workspace:FindFirstChild("Living"),
-        workspace:FindFirstChild("NPCs"),
-        workspace
-    }
-
-    for _, container in ipairs(searchContainers) do
-        if container then
-            for _, child in ipairs(container:GetChildren()) do
-                if isTargetMob(child, targetMode) then
-                    local mRoot = child:FindFirstChild("HumanoidRootPart") or child:FindFirstChild("Torso") or child:FindFirstChildWhichIsA("BasePart")
-                    if mRoot then
-                        local dist = (root.Position - mRoot.Position).Magnitude
-                        if dist < nearestDist then
-                            nearestDist = dist
-                            nearestMob = child
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    return nearestMob
-end
-
 function LevelFarmer.runCycle()
     if LevelFarmer.running then return end
     LevelFarmer.running = true
 
     task.spawn(function()
-        print("[AutoLevel] ⚔️ Bắt đầu Auto Farm Level (Auto Strike Engine)...")
+        print("[AutoLevel] ⚔️ Bắt đầu Auto Farm Level (Wilderness Encounter & Skill Engine)...")
+        local waypointIndex = 1
+
         while LevelFarmer.running do
             if isInCombat() then
-                -- In Combat Mode: Execute Strike on Player Turn
-                local autoStrike = not Toggles.AutoStrikeOnly or Toggles.AutoStrikeOnly.Value
-                if autoStrike then
-                    executeAutoStrike()
-                end
-                local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.5
+                -- IN COMBAT: Execute chosen skill/strike & target
+                executeCombatTurn()
+                local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.4
                 task.wait(combatDelay)
             else
-                -- In Overworld Mode: Find and engage mobs
-                local targetMode = Options.LevelMobTarget and Options.LevelMobTarget.Value or "All Mobs"
-                local scanRadius = Options.MobFarmRadius and Options.MobFarmRadius.Value or 2500
-                local targetMob = findNearestMob(targetMode, scanRadius)
+                -- OVERWORLD: Patrol Wilderness zone to trigger Random Encounters
+                local selectedZone = Options.FarmZone and Options.FarmZone.Value or "Caldera Wilderness (Level 1-15)"
+                local waypoints = WildernessZones[selectedZone]
 
-                if targetMob and targetMob.Parent then
-                    local mRoot = targetMob:FindFirstChild("HumanoidRootPart") or targetMob:FindFirstChild("Torso") or targetMob:FindFirstChildWhichIsA("BasePart")
-                    if mRoot then
-                        local targetPos = mRoot.Position
-                        print(string.format("[AutoLevel] 🎯 Tiếp cận quái '%s' tại (%.1f, %.1f, %.1f)...", targetMob.Name, targetPos.X, targetPos.Y, targetPos.Z))
+                if waypoints and #waypoints > 0 then
+                    local targetWp = waypoints[waypointIndex]
+                    local patrolSpeed = Options.PatrolSpeed and Options.PatrolSpeed.Value or 45
 
-                        -- Fly smoothly to mob
-                        flyTo(targetPos + Vector3.new(0, 3, 0), 160)
+                    -- Walk / Move toward waypoint on ground
+                    local char = LocalPlayer.Character
+                    local hum = char and char:FindFirstChildOfClass("Humanoid")
+                    local root = char and char:FindFirstChild("HumanoidRootPart")
 
-                        -- Touch / Initiate combat
-                        local char = LocalPlayer.Character
-                        local root = char and char:FindFirstChild("HumanoidRootPart")
-                        if root and (root.Position - targetPos).Magnitude < 10 then
-                            local prompt = targetMob:FindFirstChildWhichIsA("ProximityPrompt", true)
-                            if prompt and prompt.Enabled then
-                                fireproximityprompt(prompt)
-                            end
-                            local cd = targetMob:FindFirstChildWhichIsA("ClickDetector", true)
-                            if cd then
-                                fireclickdetector(cd)
-                            end
-                        end
-
-                        -- Wait for combat to initialize
-                        local waitTicks = 0
-                        while LevelFarmer.running and not isInCombat() and waitTicks < 15 do
+                    if hum and root then
+                        hum:MoveTo(targetWp)
+                        local moveStart = tick()
+                        while LevelFarmer.running and not isInCombat() and (root.Position - targetWp).Magnitude > 8 and (tick() - moveStart < 8) do
                             task.wait(0.2)
-                            waitTicks = waitTicks + 1
                         end
+                        waypointIndex = (waypointIndex % #waypoints) + 1
+                    else
+                        task.wait(1)
                     end
                 else
-                    task.wait(1.5)
+                    task.wait(1)
                 end
             end
-            task.wait(0.2)
+            task.wait(0.15)
         end
         print("[AutoLevel] ⏹️ Đã dừng Auto Farm Level.")
     end)
@@ -1794,50 +1804,73 @@ MineGroup:AddButton({
 LevelGroup:AddToggle("AutoFarmLevel", {
     Text = "Enable Auto Farm Level",
     Default = false,
-    Tooltip = "Tự động tìm quái -> Bay tới vào trận -> Tự động dùng đòn đánh cơ bản (Strike) -> Nhận Exp & Vàng",
+    Tooltip = "Tự động tuần tra vùng hoang dã (Wilderness) để trigger Random Encounters -> Tự dùng Skill/Strike -> Tự chọn mục tiêu",
     Callback = function(Value)
         if Value then LevelFarmer.runCycle() else LevelFarmer.stop() end
     end
 })
 
-LevelGroup:AddDropdown("LevelMobTarget", {
+LevelGroup:AddDropdown("FarmZone", {
     Values = {
-        "All Mobs",
-        "Slimes (Caldera)",
-        "Thieves & Bandits",
-        "Zombie Mushrooms (Deeproot)",
-        "Desert Mobs (Desert)",
-        "Wolves & Dire Wolves"
+        "Caldera Wilderness (Level 1-15)",
+        "Deeproot Canopy (Level 15-30)",
+        "Desert / Amoran Sands (Level 30-45)",
+        "Mount Thul / Volcano (Level 40-50)"
     },
     Default = 1,
     Multi = false,
-    Text = "Target Mob Category",
+    Text = "Wilderness Farm Zone",
 })
 
-LevelGroup:AddToggle("AutoStrikeOnly", {
-    Text = "Auto Use Strike (Basic Attack)",
-    Default = true,
-    Tooltip = "Tự động chọn và thi triển đòn đánh cơ bản Strike mỗi khi tới lượt của bạn",
+LevelGroup:AddDropdown("SelectedCombatAction", {
+    Values = {
+        "Strike (Basic Attack)",
+        "Auto Smart (Best Skill -> Strike)",
+        "First Available Skill (Fallback Strike)",
+        "Custom Skill Name"
+    },
+    Default = 1,
+    Multi = false,
+    Text = "Combat Attack / Skill Action",
 })
 
-LevelGroup:AddSlider("MobFarmRadius", {
-    Text = "Mob Scan Radius (Studs)",
-    Default = 2500,
-    Min = 300,
-    Max = 10000,
+LevelGroup:AddInput("CustomSkillName", {
+    Default = "",
+    Numeric = false,
+    Finished = false,
+    Text = "Custom Skill Name",
+    Placeholder = "Ví dụ: Poison Fan, Slash, Fireball...",
+})
+
+LevelGroup:AddDropdown("TargetPriority", {
+    Values = {
+        "First Enemy",
+        "Last Enemy",
+        "Random Enemy"
+    },
+    Default = 1,
+    Multi = false,
+    Text = "Enemy Target Priority",
+})
+
+LevelGroup:AddSlider("PatrolSpeed", {
+    Text = "Patrol Movement Speed",
+    Default = 45,
+    Min = 20,
+    Max = 120,
     Rounding = 0,
 })
 
 LevelGroup:AddSlider("CombatDelay", {
     Text = "Turn Action Delay (s)",
-    Default = 0.5,
+    Default = 0.4,
     Min = 0.1,
     Max = 2.0,
     Rounding = 1,
 })
 
 LevelGroup:AddButton({
-    Text = "⚔️ Hunt Target Mobs Now",
+    Text = "⚔️ Start Wilderness Farm Now",
     Func = function() LevelFarmer.runCycle() end,
 })
 
