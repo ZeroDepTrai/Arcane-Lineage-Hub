@@ -491,7 +491,7 @@ local function handleDodgeQTE(dodgeQTE)
     end
 end
 
--- 2. SWORD QTE (PERFECT WINDOW STRIKE - ALL SEQUENTIAL INDICATORS)
+-- 2. SWORD QTE (PERFECT WINDOW STRIKE - SEQUENTIAL TARGETING)
 local function handleSwordQTE(swordQTE)
     if not Toggles.AutoSword or not Toggles.AutoSword.Value or not swordQTE or not swordQTE.Visible then return end
     local inset = swordQTE:FindFirstChild("Inset")
@@ -499,29 +499,35 @@ local function handleSwordQTE(swordQTE)
     if not inset or not stopBtn then return end
 
     local window = inset:FindFirstChild("Window")
-    if not window then return end
+    if not window or not window.Visible then return end
 
+    -- Tìm đúng Indicator hiện tại mà game đang chờ (chỉ số nhỏ nhất chưa bị dừng)
+    local currentActiveInd = nil
+    local lowestIndex = math.huge
+
+    for _, child in ipairs(inset:GetChildren()) do
+        local idx = tonumber(child.Name)
+        if idx and idx < lowestIndex and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.6 then
+            lowestIndex = idx
+            currentActiveInd = child
+        end
+    end
+
+    if not currentActiveInd then return end
+
+    local indCenter = currentActiveInd.AbsolutePosition.X + (currentActiveInd.AbsoluteSize.X / 2)
     local winMin = window.AbsolutePosition.X
     local winMax = winMin + window.AbsoluteSize.X
 
-    -- Quét các Indicator được clone (đặt tên là "1", "2", "3", ...)
-    for _, child in ipairs(inset:GetChildren()) do
-        if tonumber(child.Name) and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.5 then
-            local indMin = child.AbsolutePosition.X
-            local indMax = indMin + child.AbsoluteSize.X
-            local indCenter = indMin + (child.AbsoluteSize.X / 2)
-
-            if indCenter >= (winMin + 2) and indCenter <= (winMax - 2) then
-                local now = os.clock()
-                if now - AutoQTE.lastSwordHit > 0.08 then
-                    AutoQTE.lastSwordHit = now
-                    local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
-                    if delayMs > 0 then task.wait(delayMs / 1000) end
-                    safeClick(stopBtn)
-                    pressKey(Enum.KeyCode.Space)
-                    break
-                end
-            end
+    -- Chỉ kích hoạt khi chính con trỏ hiện tại này lọt vào trong ô Window
+    if indCenter >= (winMin + 4) and indCenter <= (winMax - 4) then
+        local now = os.clock()
+        if now - AutoQTE.lastSwordHit > 0.15 then
+            AutoQTE.lastSwordHit = now
+            local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
+            if delayMs > 0 then task.wait(delayMs / 1000) end
+            safeClick(stopBtn)
+            pressKey(Enum.KeyCode.Space)
         end
     end
 end
