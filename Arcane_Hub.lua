@@ -2169,6 +2169,25 @@ ESPGroup:AddSlider("ESPMaxDistance", {
     Rounding = 0,
 })
 
+ChestESPGroup:AddToggle("ChestESP", {
+    Text = "Enable Chest ESP",
+    Default = true,
+    Tooltip = "Hiển thị vị trí rương kho báu trên toàn bản đồ",
+})
+
+ChestESPGroup:AddToggle("ChestESPShowDist", {
+    Text = "Show Distance [..m]",
+    Default = true,
+})
+
+ChestESPGroup:AddSlider("ChestESPMaxDist", {
+    Text = "Max Distance (Studs)",
+    Default = 10000,
+    Min = 500,
+    Max = 25000,
+    Rounding = 0,
+})
+
 FilterGroup:AddDropdown("ESPFilterMode", {
     Values = { "All", "CrylightOnly", "Whitelist" },
     Default = 1,
