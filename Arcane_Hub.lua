@@ -755,20 +755,32 @@ end
 -- =============================================================================
 local function isChestObject(instance)
     if not instance or not instance.Parent then return false end
+    if not (instance:IsA("Model") or instance:IsA("BasePart")) then return false end
+
     local n = instance.Name:lower()
-    if n:find("chestplate") or n:find("headmain") or n:find("torso") or (instance.Parent and (instance.Parent.Name:lower():find("pup") or instance.Parent.Name:lower():find("darkbeast") or instance.Parent.Name:lower():find("yar'thul"))) then
+    -- Exclude characters, mobs, body parts, animations
+    if n:find("chestplate") or n:find("head") or n:find("torso") or n:find("arm") or n:find("leg") or n:find("pose") or n:find("bone") then
         return false
     end
-    if n == "chest" or n:find("treasure") or n:find("lockbox") or n:find("woodchest") or n:find("ironchest") or n:find("goldchest") or n:find("lockedchest") or n:find("crate") or n:find("vault") then
+    local parentName = instance.Parent and instance.Parent.Name:lower() or ""
+    if parentName:find("living") or parentName:find("npc") or parentName:find("pup") or parentName:find("darkbeast") or parentName:find("yar'thul") or parentName:find("character") then
+        return false
+    end
+
+    -- Strict name matches
+    if n == "chest" or n == "lockedchest" or n == "treasurechest" or n == "woodchest" or n == "ironchest" or n == "goldchest" or n == "lockbox" or n == "chestmodel" then
         return true
     end
-    if instance:FindFirstChildWhichIsA("ProximityPrompt", true) then
-        local prompt = instance:FindFirstChildWhichIsA("ProximityPrompt", true)
+
+    -- Check for chest-specific ProximityPrompt
+    local prompt = instance:FindFirstChildWhichIsA("ProximityPrompt")
+    if prompt then
         local txt = (prompt.ActionText .. " " .. prompt.ObjectText):lower()
-        if txt:find("chest") or txt:find("lockpick") or txt:find("unlock") or txt:find("open") or txt:find("loot") then
+        if txt:find("chest") or txt:find("lockpick") or txt:find("unlock") then
             return true
         end
     end
+
     return false
 end
 
@@ -778,8 +790,10 @@ local ChestFarmer = {
 
 local function findChests()
     local chests = {}
+    local seen = {}
     for _, desc in ipairs(workspace:GetDescendants()) do
-        if isChestObject(desc) and desc:IsA("Model") or desc:IsA("BasePart") then
+        if isChestObject(desc) and (desc:IsA("Model") or desc:IsA("BasePart")) and not seen[desc] then
+            seen[desc] = true
             table.insert(chests, desc)
         end
     end
