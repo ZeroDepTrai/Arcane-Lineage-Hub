@@ -161,31 +161,48 @@ local function handleDaggerQTE(daggerQTE)
 end
 
 -- 4. XỬ LÝ HAMMER QTE (BÚA)
+-- 4. HAMMER QTE (HOLD/RELEASE SPACE PID CONTROLLER)
 local function handleHammerQTE(hammerQTE)
-    if not Config.AutoHammer or not hammerQTE or not hammerQTE.Visible then return end
+    if not Config.AutoHammer or not hammerQTE or not hammerQTE.Visible then
+        if AutoQTE.isHammerHolding then
+            AutoQTE.isHammerHolding = false
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+        end
+        return
+    end
+
     local gauge = hammerQTE:FindFirstChild("Gauge")
-    local hintBtn = hammerQTE:FindFirstChild("Hint")
     if not gauge then return end
 
     local fill = gauge:FindFirstChild("Fill")
-    local window = gauge:FindFirstChild("Window")
-    if not fill or not window then return end
+    local activeZone = gauge:FindFirstChildWhichIsA("Frame", true)
+    for _, child in ipairs(gauge:GetChildren()) do
+        if child.Name == "Zone" or child.Name:find("Zone") or child.Name == "Window" then
+            activeZone = child
+            break
+        end
+    end
+    if not fill or not activeZone then return end
 
-    local fillRight = fill.AbsolutePosition.X + fill.AbsoluteSize.X
-    local winMin = window.AbsolutePosition.X
-    local winMax = winMin + window.AbsoluteSize.X
+    local fillPos = fill.AbsolutePosition.X + fill.AbsoluteSize.X
+    local zoneMin = activeZone.AbsolutePosition.X
+    local zoneMax = zoneMin + activeZone.AbsoluteSize.X
+    local zoneCenter = (zoneMin + zoneMax) / 2
 
-    if fillRight >= winMin and fillRight <= winMax then
-        local now = os.clock()
-        if now - AutoQTE.lastHammerHit > 0.25 then
-            AutoQTE.lastHammerHit = now
-            if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
-            if hintBtn then safeClick(hintBtn) else pressKey(Enum.KeyCode.Space) end
+    if fillPos < zoneCenter then
+        if not AutoQTE.isHammerHolding then
+            AutoQTE.isHammerHolding = true
+            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+        end
+    else
+        if AutoQTE.isHammerHolding then
+            AutoQTE.isHammerHolding = false
+            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
         end
     end
 end
 
--- 5. XỬ LÝ AXE QTE (RÌU)
+-- 5. AXE QTE (THRESHOLD EQUILIBRIUM TAPPER)
 local function handleAxeQTE(axeQTE)
     if not Config.AutoAxe or not axeQTE or not axeQTE.Visible then return end
     local gauge = axeQTE:FindFirstChild("Gauge")
@@ -198,40 +215,48 @@ local function handleAxeQTE(axeQTE)
 
     local fillRight = fill.AbsolutePosition.X + fill.AbsoluteSize.X
     local targetMin = threshold.AbsolutePosition.X
+    local targetMax = targetMin + threshold.AbsoluteSize.X
+    local targetCenter = (targetMin + targetMax) / 2
 
-    if fillRight < targetMin + (threshold.AbsoluteSize.X * 0.7) then
+    if fillRight < targetCenter then
         local now = os.clock()
-        if now - AutoQTE.lastAxePress > 0.06 then
+        if now - AutoQTE.lastAxePress > 0.05 then
             AutoQTE.lastAxePress = now
-            if spaceHint then safeClick(spaceHint) else pressKey(Enum.KeyCode.Space) end
+            if spaceHint then safeClick(spaceHint) end
+            pressKey(Enum.KeyCode.Space)
         end
     end
 end
 
--- 6. XỬ LÝ FIST QTE (NẮM ĐẤM / CESTUS)
+-- 6. FIST / CESTUS QTE (DIRECTIONAL ROTATION MATCHING)
 local function handleFistQTE(fistQTE)
     if not Config.AutoFist or not fistQTE or not fistQTE.Visible then return end
-    local keyHolder = fistQTE:FindFirstChild("KeyHolder")
+    local keyHolder = fistQTE:FindFirstChild("KeyHolder") or fistQTE:FindFirstChild("Inset")
     local otherControls = fistQTE:FindFirstChild("OtherControls")
 
     if keyHolder then
         for _, keyImg in ipairs(keyHolder:GetDescendants()) do
-            if keyImg:IsA("ImageLabel") and keyImg.Visible and keyImg.Image:find("Arrow") then
+            if keyImg:IsA("GuiObject") and keyImg.Visible and (keyImg.ImageTransparency == nil or keyImg.ImageTransparency < 0.6) then
+                local rot = keyImg.Rotation % 360
                 local now = os.clock()
-                if now - AutoQTE.lastFistHit > 0.15 then
+                if now - AutoQTE.lastFistHit > 0.12 then
                     AutoQTE.lastFistHit = now
-                    if keyImg.Rotation == 0 or keyImg.Name:find("Up") then
+                    if rot == 90 or keyImg.Name:find("Up") then
                         pressKey(Enum.KeyCode.Up)
+                        pressKey(Enum.KeyCode.W)
                         if otherControls and otherControls:FindFirstChild("Up") then safeClick(otherControls.Up) end
-                    elseif keyImg.Rotation == 180 or keyImg.Name:find("Down") then
-                        pressKey(Enum.KeyCode.Down)
-                        if otherControls and otherControls:FindFirstChild("Down") then safeClick(otherControls.Down) end
-                    elseif keyImg.Rotation == 270 or keyImg.Name:find("Left") then
-                        pressKey(Enum.KeyCode.Left)
-                        if otherControls and otherControls:FindFirstChild("Left") then safeClick(otherControls.Left) end
-                    elseif keyImg.Rotation == 90 or keyImg.Name:find("Right") then
+                    elseif rot == 180 or keyImg.Name:find("Right") then
                         pressKey(Enum.KeyCode.Right)
+                        pressKey(Enum.KeyCode.D)
                         if otherControls and otherControls:FindFirstChild("Right") then safeClick(otherControls.Right) end
+                    elseif rot == 270 or keyImg.Name:find("Down") then
+                        pressKey(Enum.KeyCode.Down)
+                        pressKey(Enum.KeyCode.S)
+                        if otherControls and otherControls:FindFirstChild("Down") then safeClick(otherControls.Down) end
+                    elseif rot == 0 or keyImg.Name:find("Left") then
+                        pressKey(Enum.KeyCode.Left)
+                        pressKey(Enum.KeyCode.A)
+                        if otherControls and otherControls:FindFirstChild("Left") then safeClick(otherControls.Left) end
                     end
                 end
             end
@@ -239,7 +264,7 @@ local function handleFistQTE(fistQTE)
     end
 end
 
--- 7. XỬ LÝ LOCKPICK QTE (MỞ KHÓA RƯƠNG)
+-- 7. LOCKPICK QTE (CHEST UNLOCKER)
 local function handleLockpickQTE(lockpickQTE)
     if not Config.AutoLockpick or not lockpickQTE or not lockpickQTE.Visible then return end
     local stopBtn = lockpickQTE:FindFirstChild("Stop", true) or lockpickQTE:FindFirstChildWhichIsA("TextButton", true)
@@ -253,6 +278,7 @@ local function handleLockpickQTE(lockpickQTE)
 
         if indCenter >= tMin and indCenter <= tMax then
             safeClick(stopBtn)
+            pressKey(Enum.KeyCode.Space)
         end
     end
 end
