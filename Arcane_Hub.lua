@@ -535,7 +535,7 @@ function Farmer.stop()
 end
 
 -- =============================================================================
--- AUTO FARM LEVEL & COMBAT HELPER (ROCK-SOLID AUTO ATTACK & SKILL ENGINE)
+-- AUTO FARM LEVEL & COMBAT HELPER (PERFECTED AUTO ATTACK, SKILL & TARGET ENGINE)
 -- =============================================================================
 local LevelFarmer = {
     running = false,
@@ -546,14 +546,24 @@ local function safeClickButton(btn)
     local clicked = false
     pcall(function()
         for _, c in ipairs(getconnections(btn.MouseButton1Click)) do
-            c:Fire()
-            clicked = true
+            if c.Function then
+                c.Function()
+                clicked = true
+            elseif c.Fire then
+                c:Fire()
+                clicked = true
+            end
         end
     end)
     pcall(function()
         for _, c in ipairs(getconnections(btn.MouseButton1Down)) do
-            c:Fire()
-            clicked = true
+            if c.Function then
+                c.Function()
+                clicked = true
+            elseif c.Fire then
+                c:Fire()
+                clicked = true
+            end
         end
     end)
     return clicked
@@ -584,7 +594,6 @@ local function isPlayerTurn()
     local actionBG = combatGui:FindFirstChild("ActionBG")
     if not actionBG then return false end
 
-    -- ActionBG is pulled onscreen when it's your turn
     if actionBG.Position.X.Scale < 0.95 then
         return true
     end
@@ -619,20 +628,24 @@ local function executeCombatTurn()
         local atkBtn = ctxPage:FindFirstChild("AttackButton")
         if atkBtn then
             safeClickButton(atkBtn)
-            task.wait(0.15)
+            task.wait(0.2)
         end
     end
 
-    -- 2. Select Skill or Strike in AttacksPage
+    -- 2. Select Skill or Strike in AttacksPage.Attack.ScrollingFrame
     local atkPage = actionBG:FindFirstChild("AttacksPage")
-    if atkPage then
+    local attackFrame = atkPage and atkPage:FindFirstChild("Attack")
+    local scrollFrame = attackFrame and attackFrame:FindFirstChild("ScrollingFrame")
+
+    if scrollFrame then
         local selectedSkillBtn = nil
 
         if actionChoice == "Custom Skill Name" and customSkill ~= "" then
-            for _, btn in ipairs(atkPage:GetDescendants()) do
+            for _, btn in ipairs(scrollFrame:GetChildren()) do
                 if btn:IsA("GuiButton") and btn.Name ~= "Return" then
                     local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
-                    if nameLabel and nameLabel.Text:lower():find(customSkill:lower()) then
+                    local textToMatch = nameLabel and nameLabel.Text or btn.Name
+                    if textToMatch:lower():find(customSkill:lower()) then
                         local cdFrame = btn:FindFirstChild("Cooldown", true) or btn:FindFirstChild("CoolDown", true)
                         if not (cdFrame and cdFrame.Visible) then
                             selectedSkillBtn = btn
@@ -642,7 +655,7 @@ local function executeCombatTurn()
                 end
             end
         elseif actionChoice == "Auto Smart (Best Skill -> Strike)" or actionChoice == "First Available Skill (Fallback Strike)" then
-            for _, btn in ipairs(atkPage:GetDescendants()) do
+            for _, btn in ipairs(scrollFrame:GetChildren()) do
                 if btn:IsA("GuiButton") and btn.Name ~= "Strike" and btn.Name ~= "Template" and btn.Name ~= "Return" then
                     local cdFrame = btn:FindFirstChild("Cooldown", true) or btn:FindFirstChild("CoolDown", true)
                     if not (cdFrame and cdFrame.Visible) then
@@ -655,22 +668,31 @@ local function executeCombatTurn()
 
         -- Fallback to Strike
         if not selectedSkillBtn then
-            selectedSkillBtn = atkPage:FindFirstChild("Strike", true)
+            selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChildWhichIsA("GuiButton")
         end
 
         if selectedSkillBtn then
             safeClickButton(selectedSkillBtn)
-            task.wait(0.18)
+            task.wait(0.2)
         end
     end
 
-    -- 3. Select Target Enemy in AttacksPage.Enemies
-    local enemiesFrame = (atkPage and atkPage:FindFirstChild("Enemies")) or actionBG:FindFirstChild("Enemies", true)
-    if enemiesFrame then
+    -- 3. Select Target Enemy in AttacksPage.Enemies.ScrollingFrame
+    local enemiesFrame = atkPage and atkPage:FindFirstChild("Enemies")
+    local enemiesScroll = enemiesFrame and (enemiesFrame:FindFirstChild("ScrollingFrame") or enemiesFrame)
+
+    if enemiesScroll then
         local enemyButtons = {}
-        for _, btn in ipairs(enemiesFrame:GetDescendants()) do
+        for _, btn in ipairs(enemiesScroll:GetChildren()) do
             if btn:IsA("GuiButton") and btn.Visible and btn.Name ~= "Return" then
                 table.insert(enemyButtons, btn)
+            end
+        end
+        if #enemyButtons == 0 then
+            for _, btn in ipairs(enemiesScroll:GetDescendants()) do
+                if btn:IsA("GuiButton") and btn.Visible and btn.Name ~= "Return" then
+                    table.insert(enemyButtons, btn)
+                end
             end
         end
 
@@ -689,7 +711,7 @@ local function executeCombatTurn()
         end
     end
 
-    -- 4. Click Go confirmation if present
+    -- 4. Click Go confirmation button if visible
     local goBtn = combatGui:FindFirstChild("Go")
     if goBtn and goBtn.Visible then
         safeClickButton(goBtn)
