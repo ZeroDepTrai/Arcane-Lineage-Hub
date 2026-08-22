@@ -535,24 +535,34 @@ function Farmer.stop()
 end
 
 -- =============================================================================
--- AUTO FARM LEVEL & WILDERNESS ENCOUNTERS (SMART SKILL & TARGET ENGINE)
+-- AUTO FARM LEVEL & COMBAT HELPER (ROCK-SOLID AUTO ATTACK & SKILL ENGINE)
 -- =============================================================================
 local LevelFarmer = {
     running = false,
 }
 
+local function safeClickButton(btn)
+    if not btn or not btn:IsA("GuiButton") then return false end
+    local clicked = false
+    pcall(function()
+        for _, c in ipairs(getconnections(btn.MouseButton1Click)) do
+            c:Fire()
+            clicked = true
+        end
+    end)
+    pcall(function()
+        for _, c in ipairs(getconnections(btn.MouseButton1Down)) do
+            c:Fire()
+            clicked = true
+        end
+    end)
+    return clicked
+end
 
 local function isInCombat()
     local pgui = PlayerGui
     local combatGui = pgui and pgui:FindFirstChild("Combat")
     if combatGui and combatGui.Enabled then
-        local actionBG = combatGui:FindFirstChild("ActionBG")
-        if actionBG and (actionBG.Visible or combatGui:FindFirstChild("Go")) then
-            return true
-        end
-        if combatGui:FindFirstChild("DodgeQTE") and combatGui.DodgeQTE.Visible then
-            return true
-        end
         return true
     end
     local fFolder = workspace:FindFirstChild("Fights")
@@ -566,34 +576,61 @@ local function isInCombat()
     return false
 end
 
+local function isPlayerTurn()
+    local pgui = PlayerGui
+    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    if not combatGui or not combatGui.Enabled then return false end
+
+    local actionBG = combatGui:FindFirstChild("ActionBG")
+    if not actionBG then return false end
+
+    -- ActionBG is pulled onscreen when it's your turn
+    if actionBG.Position.X.Scale < 0.95 then
+        return true
+    end
+
+    local ctx = actionBG:FindFirstChild("ContextPage")
+    if ctx and ctx.Visible then return true end
+
+    local atk = actionBG:FindFirstChild("AttacksPage")
+    if atk and atk.Visible then return true end
+
+    local goBtn = combatGui:FindFirstChild("Go")
+    if goBtn and goBtn.Visible then return true end
+
+    return false
+end
+
 local function executeCombatTurn()
     local pgui = PlayerGui
     local combatGui = pgui and pgui:FindFirstChild("Combat")
     if not combatGui or not combatGui.Enabled then return end
 
     local actionBG = combatGui:FindFirstChild("ActionBG")
-    if not actionBG or not actionBG.Visible then return end
+    if not actionBG then return end
 
     local actionChoice = Options.SelectedCombatAction and Options.SelectedCombatAction.Value or "Strike (Basic Attack)"
     local customSkill = Options.CustomSkillName and Options.CustomSkillName.Value or ""
     local targetPrio = Options.TargetPriority and Options.TargetPriority.Value or "First Enemy"
 
-    -- 1. Click AttackButton if main menu is currently showing
-    local attackBtn = actionBG:FindFirstChild("AttackButton", true)
-    if attackBtn and attackBtn.Visible then
-        for _, c in ipairs(getconnections(attackBtn.MouseButton1Click)) do c:Fire() end
-        for _, c in ipairs(getconnections(attackBtn.Activated)) do c:Fire() end
-        task.wait(0.12)
+    -- 1. Click ContextPage AttackButton if visible
+    local ctxPage = actionBG:FindFirstChild("ContextPage")
+    if ctxPage and ctxPage.Visible then
+        local atkBtn = ctxPage:FindFirstChild("AttackButton")
+        if atkBtn then
+            safeClickButton(atkBtn)
+            task.wait(0.15)
+        end
     end
 
     -- 2. Select Skill or Strike in AttacksPage
-    local attacksPage = actionBG:FindFirstChild("AttacksPage", true)
-    if attacksPage and attacksPage.Visible then
+    local atkPage = actionBG:FindFirstChild("AttacksPage")
+    if atkPage then
         local selectedSkillBtn = nil
 
         if actionChoice == "Custom Skill Name" and customSkill ~= "" then
-            for _, btn in ipairs(attacksPage:GetDescendants()) do
-                if btn:IsA("TextButton") or btn:IsA("ImageButton") then
+            for _, btn in ipairs(atkPage:GetDescendants()) do
+                if btn:IsA("GuiButton") and btn.Name ~= "Return" then
                     local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
                     if nameLabel and nameLabel.Text:lower():find(customSkill:lower()) then
                         local cdFrame = btn:FindFirstChild("Cooldown", true) or btn:FindFirstChild("CoolDown", true)
@@ -605,8 +642,8 @@ local function executeCombatTurn()
                 end
             end
         elseif actionChoice == "Auto Smart (Best Skill -> Strike)" or actionChoice == "First Available Skill (Fallback Strike)" then
-            for _, btn in ipairs(attacksPage:GetDescendants()) do
-                if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name ~= "Strike" and btn.Name ~= "Template" then
+            for _, btn in ipairs(atkPage:GetDescendants()) do
+                if btn:IsA("GuiButton") and btn.Name ~= "Strike" and btn.Name ~= "Template" and btn.Name ~= "Return" then
                     local cdFrame = btn:FindFirstChild("Cooldown", true) or btn:FindFirstChild("CoolDown", true)
                     if not (cdFrame and cdFrame.Visible) then
                         selectedSkillBtn = btn
@@ -618,35 +655,27 @@ local function executeCombatTurn()
 
         -- Fallback to Strike
         if not selectedSkillBtn then
-            selectedSkillBtn = attacksPage:FindFirstChild("Strike", true)
+            selectedSkillBtn = atkPage:FindFirstChild("Strike", true)
         end
 
         if selectedSkillBtn then
-            for _, c in ipairs(getconnections(selectedSkillBtn.MouseButton1Click)) do c:Fire() end
-            for _, c in ipairs(getconnections(selectedSkillBtn.Activated)) do c:Fire() end
-            task.wait(0.15)
+            safeClickButton(selectedSkillBtn)
+            task.wait(0.18)
         end
     end
 
-    -- 3. Select Enemy Target in Enemies Frame
-    local enemiesFrame = actionBG:FindFirstChild("Enemies", true)
-    if enemiesFrame and enemiesFrame.Visible then
+    -- 3. Select Target Enemy in AttacksPage.Enemies
+    local enemiesFrame = (atkPage and atkPage:FindFirstChild("Enemies")) or actionBG:FindFirstChild("Enemies", true)
+    if enemiesFrame then
         local enemyButtons = {}
-        for _, btn in ipairs(enemiesFrame:GetChildren()) do
-            if btn:IsA("GuiButton") and btn.Visible then
+        for _, btn in ipairs(enemiesFrame:GetDescendants()) do
+            if btn:IsA("GuiButton") and btn.Visible and btn.Name ~= "Return" then
                 table.insert(enemyButtons, btn)
-            end
-        end
-        if #enemyButtons == 0 then
-            for _, btn in ipairs(enemiesFrame:GetDescendants()) do
-                if btn:IsA("GuiButton") and btn.Visible then
-                    table.insert(enemyButtons, btn)
-                end
             end
         end
 
         if #enemyButtons > 0 then
-            local chosenEnemy = enemyButtons[1] -- First Enemy default
+            local chosenEnemy = enemyButtons[1]
             if targetPrio == "Last Enemy" then
                 chosenEnemy = enemyButtons[#enemyButtons]
             elseif targetPrio == "Random Enemy" then
@@ -654,18 +683,16 @@ local function executeCombatTurn()
             end
 
             if chosenEnemy then
-                for _, c in ipairs(getconnections(chosenEnemy.MouseButton1Click)) do c:Fire() end
-                for _, c in ipairs(getconnections(chosenEnemy.Activated)) do c:Fire() end
-                task.wait(0.12)
+                safeClickButton(chosenEnemy)
+                task.wait(0.15)
             end
         end
     end
 
-    -- 4. Click Go button if visible
-    local goBtn = combatGui:FindFirstChild("Go", true)
+    -- 4. Click Go confirmation if present
+    local goBtn = combatGui:FindFirstChild("Go")
     if goBtn and goBtn.Visible then
-        for _, c in ipairs(getconnections(goBtn.MouseButton1Click)) do c:Fire() end
-        for _, c in ipairs(getconnections(goBtn.Activated)) do c:Fire() end
+        safeClickButton(goBtn)
     end
 end
 
@@ -674,20 +701,24 @@ function LevelFarmer.runCycle()
     LevelFarmer.running = true
 
     task.spawn(function()
-        print("[AutoLevel] ⚔️ Bắt đầu Auto Combat Helper (Đứng im chờ trận đấu)...")
+        print("[AutoCombat] ⚔️ Bật Auto Combat Helper (Tự động tung chiêu & chọn mục tiêu)...")
 
         while LevelFarmer.running do
             if isInCombat() then
-                -- IN COMBAT: Execute chosen skill/strike & target
-                executeCombatTurn()
-                local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.4
-                task.wait(combatDelay)
+                if isPlayerTurn() then
+                    executeCombatTurn()
+                    local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.4
+                    task.wait(combatDelay)
+                else
+                    task.wait(0.2)
+                end
             else
-                -- OVERWORLD: Stand still in place, waiting for encounters
+                -- Stand still in overworld
                 task.wait(0.3)
             end
+            task.wait(0.1)
         end
-        print("[AutoLevel] ⏹️ Đã dừng Auto Combat Helper.")
+        print("[AutoCombat] ⏹️ Đã dừng Auto Combat Helper.")
     end)
 end
 
