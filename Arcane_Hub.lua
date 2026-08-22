@@ -11,7 +11,9 @@
       Dagger (100% dynamic arc-size weakpoint precision tracking), Hammer (PID Bang-Bang),
       Axe (Threshold Equilibrium), Fist/Cestus (Sequential combos),
       Spear (Active Button Clicker), Chest Lockpicking.
-    • [Spelldraw / Blackjack AI Advisor]: Real-time score reader & optimal probability recommendation (Hit / Stand / Double).
+    • [Spelldraw / Blackjack AI Advisor 2.0]: Crystal-clear Screen HUD + 3D Table Billboard,
+      Real-time Math Probabilities (Player Bust Risk % vs Dealer Bust Risk %),
+      Definitive Action Badges (🟢 RÚT TIẾP vs 🛑 DỪNG LẠI), and Vietnamese Tactical Reasons.
     • [Movement Suite with Keybinds]: Fly Hack (X), NoClip (V), Velocity Speedhack (B),
       CFrame Speed Bypass (N), Infinite Jump Boost (J) with LinoriaLib Keybind Pickers.
     • [Teleport Suite]: Smooth Anti-Jitter Sky-Tween (default 1500 Y) to ALL 35+ Class Trainers,
@@ -622,7 +624,6 @@ local function handleSwordQTE(swordQTE)
     local indWidth = candidate.AbsoluteSize.X
     local indCenter = indLeft + (indWidth / 2)
 
-    -- Vùng an toàn 100% trúng: Khi tâm indicator lọt vào khoảng 40% đến 70% bên trong ô Window
     local sweetSpotMin = winLeft + (winWidth * 0.40)
     local sweetSpotMax = winLeft + (winWidth * 0.70)
 
@@ -865,44 +866,259 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- =============================================================================
--- SPELLDRAW / BLACKJACK AI ADVISOR & LIVE PROBABILITY HELPER
+-- SPELLDRAW / BLACKJACK AI ADVISOR 2.0 (CRYSTAL CLEAR HUD & DETAILED MATH)
 -- =============================================================================
 local SpelldrawHelper = {
     active = false,
+    screenGui = nil,
     billboard = nil,
-    label = nil,
+    uiRefs = {},
 }
 
-local function getBlackjackAdvice(playerScore, dealerUpScore)
+local BustChances = {
+    [12] = "31%", [13] = "38%", [14] = "46%",
+    [15] = "54%", [16] = "62%", [17] = "69%",
+    [18] = "77%", [19] = "85%", [20] = "92%", [21] = "100%"
+}
+
+local DealerBustChances = {
+    [2] = "35%", [3] = "37%", [4] = "40%",
+    [5] = "42%", [6] = "42% (Yếu nhất)",
+    [7] = "26%", [8] = "24%", [9] = "23%",
+    [10] = "21%", [11] = "17%"
+}
+
+local function analyzeBlackjackHand(playerScore, dealerUpScore)
     if playerScore > 21 then
-        return "❌ BUST (> 21)", Color3.fromRGB(255, 50, 50)
+        return {
+            badge = "❌ ĐÃ BỊ QUẮC (BUST > 21)",
+            badgeColor = Color3.fromRGB(255, 60, 60),
+            action = "KẾT THÚC VÁN",
+            risk = "100%",
+            dealerRisk = "---",
+            reason = "Điểm của bạn đã vượt quá 21 điểm."
+        }
     elseif playerScore == 21 then
-        return "🌟 BLACKJACK / STAND (21)", Color3.fromRGB(255, 215, 0)
+        return {
+            badge = "🌟 21 ĐIỂM / BLACKJACK (DỪNG)",
+            badgeColor = Color3.fromRGB(255, 215, 0),
+            action = "🛑 DỪNG LẠI (STAND)",
+            risk = "100% (Không được rút)",
+            dealerRisk = dealerUpScore > 0 and (DealerBustChances[dealerUpScore] or "25%") or "---",
+            reason = "Đã đạt điểm tuyệt đối 21! Hãy dừng lại và chờ nhận thưởng."
+        }
     elseif playerScore >= 17 then
-        return "🛑 STAND (Safe Zone)", Color3.fromRGB(80, 255, 80)
+        return {
+            badge = "🛑 KHUYẾN NGHỊ: DỪNG LẠI (STAND)",
+            badgeColor = Color3.fromRGB(80, 255, 120),
+            action = "🛑 BẤM DỪNG (STAND)",
+            risk = BustChances[playerScore] or "70%+",
+            dealerRisk = dealerUpScore > 0 and (DealerBustChances[dealerUpScore] or "25%") or "---",
+            reason = string.format("Điểm an toàn (%d). Nguy cơ quắc nếu rút thêm là %s. Tuyệt đối KHÔNG rút!", playerScore, BustChances[playerScore] or "rất cao")
+        }
     elseif playerScore <= 11 then
-        return "🟢 HIT (Cannot Bust)", Color3.fromRGB(0, 255, 255)
+        return {
+            badge = "🟢 KHUYẾN NGHỊ: RÚT THÊM (HIT)",
+            badgeColor = Color3.fromRGB(0, 255, 255),
+            action = "🟢 BẤM RÚT (HIT)",
+            risk = "0% (Tuyệt đối an toàn)",
+            dealerRisk = dealerUpScore > 0 and (DealerBustChances[dealerUpScore] or "25%") or "---",
+            reason = string.format("Bạn chỉ có %d điểm. Dù rút lá to nhất (10/J/Q/K) bạn cũng không thể bị quắc. Hãy RÚT NGAY!", playerScore)
+        }
     elseif playerScore == 12 then
         if dealerUpScore >= 4 and dealerUpScore <= 6 then
-            return "🛑 STAND (Dealer Risk)", Color3.fromRGB(100, 255, 100)
+            return {
+                badge = "🛑 KHUYẾN NGHỊ: DỪNG LẠI (STAND)",
+                badgeColor = Color3.fromRGB(255, 200, 50),
+                action = "🛑 BẤM DỪNG (STAND)",
+                risk = "31%",
+                dealerRisk = DealerBustChances[dealerUpScore] or "42%",
+                reason = string.format("Nhà cái ngửa lá %d (vùng bài yếu, tỷ lệ tự quắc là %s). Hãy DỪNG lại chờ nhà cái tự quắc!", dealerUpScore, DealerBustChances[dealerUpScore] or "42%")
+            }
         else
-            return "🟢 HIT (Dealer Strong)", Color3.fromRGB(255, 180, 0)
+            return {
+                badge = "🟢 KHUYẾN NGHỊ: RÚT THÊM (HIT)",
+                badgeColor = Color3.fromRGB(255, 160, 0),
+                action = "🟢 BẤM RÚT (HIT)",
+                risk = "31%",
+                dealerRisk = dealerUpScore > 0 and (DealerBustChances[dealerUpScore] or "25%") or "---",
+                reason = string.format("Nhà cái ngửa lá %d (bài mạnh). Điểm 12 của bạn không đủ để thắng, nên RÚT THÊM.", dealerUpScore)
+            }
         end
     elseif playerScore >= 13 and playerScore <= 16 then
         if dealerUpScore >= 2 and dealerUpScore <= 6 then
-            return "🛑 STAND (Dealer Likely Bust)", Color3.fromRGB(80, 255, 80)
+            return {
+                badge = "🛑 KHUYẾN NGHỊ: DỪNG LẠI (STAND)",
+                badgeColor = Color3.fromRGB(80, 255, 120),
+                action = "🛑 BẤM DỪNG (STAND)",
+                risk = BustChances[playerScore] or "50%",
+                dealerRisk = DealerBustChances[dealerUpScore] or "40%",
+                reason = string.format("Bạn có nguy cơ quắc %s nếu rút! Nhà cái đang có bài yếu (lá %d), hãy DỪNG để chờ nhà cái tự quắc.", BustChances[playerScore] or "50%", dealerUpScore)
+            }
         else
-            return "🟢 HIT (Math Optimal)", Color3.fromRGB(255, 160, 0)
+            return {
+                badge = "🟢 KHUYẾN NGHỊ: RÚT THÊM (HIT)",
+                badgeColor = Color3.fromRGB(255, 140, 0),
+                action = "🟢 BẤM RÚT (HIT)",
+                risk = BustChances[playerScore] or "50%",
+                dealerRisk = dealerUpScore > 0 and (DealerBustChances[dealerUpScore] or "23%") or "---",
+                reason = string.format("Nhà cái ngửa lá %d (khả năng đạt 17-20 rất cao). Điểm %d của bạn nếu đứng yên chắc chắn thua, buộc phải RÚT!", dealerUpScore, playerScore)
+            }
         end
     end
-    return "🟢 HIT", Color3.fromRGB(0, 255, 255)
+
+    return {
+        badge = "🟢 BẤM RÚT (HIT)",
+        badgeColor = Color3.fromRGB(0, 255, 255),
+        action = "🟢 BẤM RÚT (HIT)",
+        risk = "Thấp",
+        dealerRisk = "---",
+        reason = "Chiến thuật toán học khuyến nghị nên rút bài."
+    }
+end
+
+local function initSpelldrawUI()
+    if SpelldrawHelper.screenGui and SpelldrawHelper.screenGui.Parent == PlayerGui then return end
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "Arcane_SpelldrawAdvisor"
+    sg.ResetOnSpawn = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local mainCard = Instance.new("Frame")
+    mainCard.Name = "MainCard"
+    mainCard.Size = UDim2.new(0, 360, 0, 220)
+    mainCard.Position = UDim2.new(1, -380, 0.5, -110)
+    mainCard.BackgroundColor3 = Color3.fromRGB(18, 20, 26)
+    mainCard.BorderSizePixel = 0
+    mainCard.Parent = sg
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 12)
+    corner.Parent = mainCard
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Name = "CardStroke"
+    stroke.Color = Color3.fromRGB(0, 255, 180)
+    stroke.Thickness = 2
+    stroke.Parent = mainCard
+
+    -- Header Title
+    local title = Instance.new("TextLabel")
+    title.Text = "🃏 TRỢ LÝ TOÁN HỌC SPELLEDRAW (BLACKJACK)"
+    title.Font = Enum.Font.SourceSansBold
+    title.TextSize = 14
+    title.TextColor3 = Color3.fromRGB(0, 255, 200)
+    title.Size = UDim2.new(1, -20, 0, 24)
+    title.Position = UDim2.new(0, 10, 0, 8)
+    title.BackgroundTransparency = 1
+    title.TextXAlignment = Enum.TextXAlignment.Center
+    title.Parent = mainCard
+
+    -- Scores Holder
+    local scoreHolder = Instance.new("Frame")
+    scoreHolder.Size = UDim2.new(1, -20, 0, 48)
+    scoreHolder.Position = UDim2.new(0, 10, 0, 36)
+    scoreHolder.BackgroundColor3 = Color3.fromRGB(26, 29, 38)
+    scoreHolder.BorderSizePixel = 0
+    scoreHolder.Parent = mainCard
+
+    local scoreCorner = Instance.new("UICorner")
+    scoreCorner.CornerRadius = UDim.new(0, 8)
+    scoreCorner.Parent = scoreHolder
+
+    local plrScoreLabel = Instance.new("TextLabel")
+    plrScoreLabel.Text = "👤 ĐIỂM BẠN: --"
+    plrScoreLabel.Font = Enum.Font.SourceSansBold
+    plrScoreLabel.TextSize = 16
+    plrScoreLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    plrScoreLabel.Size = UDim2.new(0.5, 0, 1, 0)
+    plrScoreLabel.BackgroundTransparency = 1
+    plrScoreLabel.Parent = scoreHolder
+
+    local dealerScoreLabel = Instance.new("TextLabel")
+    dealerScoreLabel.Text = "🎩 NHÀ CÁI: --"
+    dealerScoreLabel.Font = Enum.Font.SourceSansBold
+    dealerScoreLabel.TextSize = 16
+    dealerScoreLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
+    dealerScoreLabel.Size = UDim2.new(0.5, 0, 1, 0)
+    dealerScoreLabel.Position = UDim2.new(0.5, 0, 0, 0)
+    dealerScoreLabel.BackgroundTransparency = 1
+    dealerScoreLabel.Parent = scoreHolder
+
+    -- Hero Action Button Badge
+    local heroBadge = Instance.new("Frame")
+    heroBadge.Name = "HeroBadge"
+    heroBadge.Size = UDim2.new(1, -20, 0, 42)
+    heroBadge.Position = UDim2.new(0, 10, 0, 90)
+    heroBadge.BackgroundColor3 = Color3.fromRGB(35, 40, 52)
+    heroBadge.BorderSizePixel = 0
+    heroBadge.Parent = mainCard
+
+    local heroCorner = Instance.new("UICorner")
+    heroCorner.CornerRadius = UDim.new(0, 8)
+    heroCorner.Parent = heroBadge
+
+    local heroStroke = Instance.new("UIStroke")
+    heroStroke.Name = "HeroStroke"
+    heroStroke.Color = Color3.fromRGB(0, 255, 180)
+    heroStroke.Thickness = 2
+    heroStroke.Parent = heroBadge
+
+    local heroLabel = Instance.new("TextLabel")
+    heroLabel.Name = "HeroLabel"
+    heroLabel.Text = "ĐANG ĐỌC BÀI..."
+    heroLabel.Font = Enum.Font.SourceSansBold
+    heroLabel.TextSize = 18
+    heroLabel.TextColor3 = Color3.fromRGB(0, 255, 180)
+    heroLabel.Size = UDim2.new(1, 0, 1, 0)
+    heroLabel.BackgroundTransparency = 1
+    heroLabel.Parent = heroBadge
+
+    -- Analytics Text
+    local analyticsLabel = Instance.new("TextLabel")
+    analyticsLabel.Text = "💥 Nguy cơ quắc: --% | 🎲 Nhà cái tự quắc: --%"
+    analyticsLabel.Font = Enum.Font.SourceSansSemibold
+    analyticsLabel.TextSize = 13
+    analyticsLabel.TextColor3 = Color3.fromRGB(200, 210, 230)
+    analyticsLabel.Size = UDim2.new(1, -20, 0, 20)
+    analyticsLabel.Position = UDim2.new(0, 10, 0, 138)
+    analyticsLabel.BackgroundTransparency = 1
+    analyticsLabel.Parent = mainCard
+
+    -- Tactical Reason Text
+    local reasonLabel = Instance.new("TextLabel")
+    reasonLabel.Text = "💡 Hãy ngồi vào bàn Spelldraw để nhận gợi ý chiến thuật."
+    reasonLabel.Font = Enum.Font.SourceSansItalic
+    reasonLabel.TextSize = 13
+    reasonLabel.TextColor3 = Color3.fromRGB(160, 220, 255)
+    reasonLabel.Size = UDim2.new(1, -20, 0, 50)
+    reasonLabel.Position = UDim2.new(0, 10, 0, 160)
+    reasonLabel.BackgroundTransparency = 1
+    reasonLabel.TextWrapped = true
+    reasonLabel.TextYAlignment = Enum.TextYAlignment.Top
+    reasonLabel.Parent = mainCard
+
+    sg.Parent = PlayerGui
+
+    SpelldrawHelper.screenGui = sg
+    SpelldrawHelper.uiRefs = {
+        mainCard = mainCard,
+        cardStroke = stroke,
+        plrScore = plrScoreLabel,
+        dealerScore = dealerScoreLabel,
+        heroBadge = heroBadge,
+        heroStroke = heroStroke,
+        heroLabel = heroLabel,
+        analytics = analyticsLabel,
+        reason = reasonLabel
+    }
 end
 
 RunService.RenderStepped:Connect(function()
     if not Toggles.SpelldrawHelper or not Toggles.SpelldrawHelper.Value then
-        if SpelldrawHelper.billboard then
-            SpelldrawHelper.billboard.Enabled = false
-        end
+        if SpelldrawHelper.screenGui then SpelldrawHelper.screenGui.Enabled = false end
+        if SpelldrawHelper.billboard then SpelldrawHelper.billboard.Enabled = false end
         return
     end
 
@@ -928,6 +1144,7 @@ RunService.RenderStepped:Connect(function()
     end
 
     if not nearestTable then
+        if SpelldrawHelper.screenGui then SpelldrawHelper.screenGui.Enabled = false end
         if SpelldrawHelper.billboard then SpelldrawHelper.billboard.Enabled = false end
         return
     end
@@ -952,60 +1169,84 @@ RunService.RenderStepped:Connect(function()
     end
 
     if pScore > 0 or dScore > 0 then
+        initSpelldrawUI()
+        local data = analyzeBlackjackHand(pScore, dScore)
+
+        SpelldrawHelper.screenGui.Enabled = true
+        local refs = SpelldrawHelper.uiRefs
+        if refs then
+            refs.plrScore.Text = string.format("👤 ĐIỂM BẠN: %d", pScore)
+            refs.dealerScore.Text = string.format("🎩 NHÀ CÁI: %s", dScore > 0 and tostring(dScore) or "--")
+            refs.heroLabel.Text = data.action
+            refs.heroLabel.TextColor3 = data.badgeColor
+            refs.heroStroke.Color = data.badgeColor
+            refs.cardStroke.Color = data.badgeColor
+            refs.analytics.Text = string.format("💥 Nguy cơ quắc: %s | 🎲 Nhà cái tự quắc: %s", data.risk, data.dealerRisk)
+            refs.reason.Text = "💡 " .. data.reason
+        end
+
+        -- Update 3D Table Billboard
         if not SpelldrawHelper.billboard or SpelldrawHelper.billboard.Parent ~= PlayerGui then
             local bg = Instance.new("BillboardGui")
-            bg.Name = "SpelldrawAdvisor"
+            bg.Name = "SpelldrawTableAdvisor"
             bg.AlwaysOnTop = true
-            bg.Size = UDim2.new(0, 220, 0, 60)
+            bg.Size = UDim2.new(0, 240, 0, 60)
             bg.StudsOffset = Vector3.new(0, 4, 0)
 
             local frame = Instance.new("Frame")
             frame.Size = UDim2.new(1, 0, 1, 0)
-            frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-            frame.BackgroundTransparency = 0.2
+            frame.BackgroundColor3 = Color3.fromRGB(15, 18, 24)
+            frame.BackgroundTransparency = 0.15
             frame.BorderSizePixel = 0
             frame.Parent = bg
 
-            local stroke = Instance.new("UIStroke")
-            stroke.Color = Color3.fromRGB(0, 255, 180)
-            stroke.Thickness = 1.5
-            stroke.Parent = frame
+            local bCorner = Instance.new("UICorner")
+            bCorner.CornerRadius = UDim.new(0, 8)
+            bCorner.Parent = frame
 
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0, 8)
-            corner.Parent = frame
+            local bStroke = Instance.new("UIStroke")
+            bStroke.Name = "BStroke"
+            bStroke.Thickness = 2
+            bStroke.Parent = frame
 
-            local title = Instance.new("TextLabel")
-            title.Text = "🃏 SPELLDRAW ADVISOR"
-            title.Font = Enum.Font.SourceSansBold
-            title.TextSize = 13
-            title.TextColor3 = Color3.fromRGB(0, 255, 200)
-            title.Size = UDim2.new(1, 0, 0.4, 0)
-            title.BackgroundTransparency = 1
-            title.Parent = frame
+            local bTitle = Instance.new("TextLabel")
+            bTitle.Text = "🃏 SPELLEDRAW ADVISOR"
+            bTitle.Font = Enum.Font.SourceSansBold
+            bTitle.TextSize = 13
+            bTitle.TextColor3 = Color3.fromRGB(0, 255, 200)
+            bTitle.Size = UDim2.new(1, 0, 0.4, 0)
+            bTitle.BackgroundTransparency = 1
+            bTitle.Parent = frame
 
-            local advice = Instance.new("TextLabel")
-            advice.Name = "AdviceLabel"
-            advice.Font = Enum.Font.SourceSansBold
-            advice.TextSize = 15
-            advice.Size = UDim2.new(1, 0, 0.6, 0)
-            advice.Position = UDim2.new(0, 0, 0.4, 0)
-            advice.BackgroundTransparency = 1
-            advice.Parent = frame
+            local bAction = Instance.new("TextLabel")
+            bAction.Name = "BAction"
+            bAction.Font = Enum.Font.SourceSansBold
+            bAction.TextSize = 15
+            bAction.Size = UDim2.new(1, 0, 0.6, 0)
+            bAction.Position = UDim2.new(0, 0, 0.4, 0)
+            bAction.BackgroundTransparency = 1
+            bAction.Parent = frame
 
             bg.Parent = PlayerGui
             SpelldrawHelper.billboard = bg
-            SpelldrawHelper.label = advice
         end
 
         local mainPart = nearestTable.Table.Main
         SpelldrawHelper.billboard.Adornee = mainPart
         SpelldrawHelper.billboard.Enabled = true
 
-        local adviceText, adviceColor = getBlackjackAdvice(pScore, dScore)
-        SpelldrawHelper.label.Text = string.format("%s (You: %d | Dealer: %d)", adviceText, pScore, dScore)
-        SpelldrawHelper.label.TextColor3 = adviceColor
+        local f = SpelldrawHelper.billboard:FindFirstChildOfClass("Frame")
+        if f then
+            local actLabel = f:FindFirstChild("BAction")
+            local bStrk = f:FindFirstChild("BStroke")
+            if actLabel then
+                actLabel.Text = string.format("%s (Bạn: %d | Cái: %d)", data.action, pScore, dScore)
+                actLabel.TextColor3 = data.badgeColor
+            end
+            if bStrk then bStrk.Color = data.badgeColor end
+        end
     else
+        if SpelldrawHelper.screenGui then SpelldrawHelper.screenGui.Enabled = false end
         if SpelldrawHelper.billboard then SpelldrawHelper.billboard.Enabled = false end
     end
 end)
@@ -1490,11 +1731,11 @@ HopGroup:AddButton({
 })
 
 -- -----------------------------------------------------------------------------
--- TAB 2: AUTO COMBAT QTE & SPELLDRAW ADVISOR
+-- TAB 2: AUTO COMBAT QTE & SPELLDRAW ADVISOR 2.0
 -- -----------------------------------------------------------------------------
 local MainQTEGroup = Tabs.AutoQTE:AddLeftGroupbox("General Combat")
 local WeaponGroup = Tabs.AutoQTE:AddRightGroupbox("Weapon Specials")
-local GambleGroup = Tabs.AutoQTE:AddLeftGroupbox("🃏 Spelldraw (Blackjack)")
+local GambleGroup = Tabs.AutoQTE:AddLeftGroupbox("🃏 Spelldraw (Blackjack AI)")
 
 MainQTEGroup:AddToggle("MasterQTE", {
     Text = "Enable Master Auto QTE",
@@ -1550,9 +1791,9 @@ WeaponGroup:AddToggle("AutoFist", {
 })
 
 GambleGroup:AddToggle("SpelldrawHelper", {
-    Text = "Spelldraw AI Advisor (Live)",
+    Text = "Spelldraw AI Advisor (HUD 2.0)",
     Default = false,
-    Tooltip = "Tự động đọc bài và hiển thị gợi ý xác suất toán học (Hit / Stand / Double)",
+    Tooltip = "Bảng nổi thông minh hiển thị hành động rõ ràng (Rút / Dừng), % Quắc và lời khuyên chiến thuật",
 })
 
 -- -----------------------------------------------------------------------------
