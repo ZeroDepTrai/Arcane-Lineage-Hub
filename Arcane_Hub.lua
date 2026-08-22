@@ -6,7 +6,7 @@
     • [Auto Farm Whitelist]: Fast Menu-Scan (Hops directly from MainMenu if 0 targets),
       Smooth anti-jitter 3-phase Sky-Tween flight (default 1500 Y), Auto-Harvest, Auto-ServerHop,
       Adaptable Multi-Item Discord Webhook Notifications.
-    • [Auto Combat QTE]: Perfect Dodge 100%, Sword (100% single-hit target tracking in middle-window sweet spot),
+    • [Auto Combat QTE]: Perfect Dodge 100%, Sword (100% instance-tracked, transparency-filtered sweet-spot precision),
       Dagger (100% dynamic arc-size weakpoint precision tracking), Hammer (PID Bang-Bang),
       Axe (Threshold Equilibrium), Fist/Cestus (Sequential combos),
       Spear (Active Button Clicker), Chest Lockpicking.
@@ -511,7 +511,7 @@ function Farmer.stop()
 end
 
 -- =============================================================================
--- AUTO COMBAT QTE ENGINE (DYNAMIC WEAKPOINT & SWEET SPOT STATE MACHINES)
+-- AUTO COMBAT QTE ENGINE (INSTANCE-TRACKED SWEET SPOT & DYNAMIC TOLERANCE)
 -- =============================================================================
 local DaggerArcSizes = { 20, 25, 30, 35, 40, 45, 55, 65, 75, 85, 95, 105 }
 
@@ -522,8 +522,7 @@ local AutoQTE = {
     isHammerHolding = false,
     lastAxePress = 0,
     lastFistHit = 0,
-    swordActive = false,
-    currentSwordTarget = 1,
+    swordHitTable = {},
     hitWeakpoints = {},
 }
 
@@ -559,11 +558,10 @@ local function handleDodgeQTE(dodgeQTE)
     end
 end
 
--- 2. SWORD QTE (TARGET INDEX STATE MACHINE - SWEET SPOT 35% TO 65% OF WINDOW)
+-- 2. SWORD QTE (INSTANCE-TRACKED, TRANSPARENCY-FILTERED SWEET SPOT ENGINE)
 local function handleSwordQTE(swordQTE)
     if not Toggles.AutoSword or not Toggles.AutoSword.Value or not swordQTE or not swordQTE.Visible then
-        AutoQTE.swordActive = false
-        AutoQTE.currentSwordTarget = 1
+        AutoQTE.swordHitTable = {}
         return
     end
 
@@ -574,32 +572,40 @@ local function handleSwordQTE(swordQTE)
     local window = inset:FindFirstChild("Window")
     if not window or not window.Visible then return end
 
-    if not AutoQTE.swordActive then
-        AutoQTE.swordActive = true
-        AutoQTE.currentSwordTarget = 1
-    end
-
-    local targetInd = inset:FindFirstChild(tostring(AutoQTE.currentSwordTarget))
-    if not targetInd or not targetInd:IsA("GuiObject") or not targetInd.Visible then
-        return
-    end
-
-    local indLeft = targetInd.AbsolutePosition.X
-    local indWidth = targetInd.AbsoluteSize.X
-    local indCenter = indLeft + (indWidth / 2)
-
     local winLeft = window.AbsolutePosition.X
     local winWidth = window.AbsoluteSize.X
+    local winRight = winLeft + winWidth
 
-    -- Sweet spot: Khi tâm indicator nằm trong khoảng từ 35% đến 65% của ô Window
+    -- Tìm indicator nhỏ nhất chưa từng được bấm và đang di chuyển (chưa bị làm mờ)
+    local candidate = nil
+    local lowestIdx = math.huge
+
+    for _, child in ipairs(inset:GetChildren()) do
+        local idx = tonumber(child.Name)
+        if idx and not AutoQTE.swordHitTable[child] and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.5 then
+            if idx < lowestIdx then
+                lowestIdx = idx
+                candidate = child
+            end
+        end
+    end
+
+    if not candidate then return end
+
+    local indLeft = candidate.AbsolutePosition.X
+    local indWidth = candidate.AbsoluteSize.X
+    local indCenter = indLeft + (indWidth / 2)
+
+    -- Vùng an toàn 100% trúng: Khi tâm indicator lọt vào khoảng 35% đến 75% bên trong ô Window
     local sweetSpotMin = winLeft + (winWidth * 0.35)
-    local sweetSpotMax = winLeft + (winWidth * 0.65)
+    local sweetSpotMax = winRight - (winWidth * 0.20)
 
     if indCenter >= sweetSpotMin and indCenter <= sweetSpotMax then
-        AutoQTE.currentSwordTarget = AutoQTE.currentSwordTarget + 1
+        AutoQTE.swordHitTable[candidate] = true
         local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
         if delayMs > 0 then task.wait(delayMs / 1000) end
         safeClick(stopBtn)
+        pressKey(Enum.KeyCode.Space)
     end
 end
 
@@ -800,8 +806,7 @@ end
 RunService.RenderStepped:Connect(function()
     local combatGui = PlayerGui and PlayerGui:FindFirstChild("Combat")
     if not combatGui or not Toggles.MasterQTE or not Toggles.MasterQTE.Value then
-        AutoQTE.swordActive = false
-        AutoQTE.currentSwordTarget = 1
+        AutoQTE.swordHitTable = {}
         AutoQTE.hitWeakpoints = {}
         return
     end
@@ -818,8 +823,7 @@ RunService.RenderStepped:Connect(function()
     if swordQTE and swordQTE.Visible then
         handleSwordQTE(swordQTE)
     else
-        AutoQTE.swordActive = false
-        AutoQTE.currentSwordTarget = 1
+        AutoQTE.swordHitTable = {}
     end
 
     if daggerQTE and daggerQTE.Visible then
