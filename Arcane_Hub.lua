@@ -4,22 +4,21 @@
     ========================================================================================
     Features:
     • [Auto Farm Whitelist]: Fast Menu-Scan (Hops directly from MainMenu if 0 targets),
-      Sky-Tween 3-phase flight (avoids mobs & combat), Auto-Harvest, Auto-ServerHop (resets after 20 hops),
+      Smooth anti-jitter 3-phase Sky-Tween flight (default 1500 Y), Auto-Harvest, Auto-ServerHop,
       Adaptable Multi-Item Discord Webhook Notifications.
-    • [Auto Combat QTE]: Perfect Dodge 100%, Sword (no double-tap), Dagger (all weakpoints),
+    • [Auto Combat QTE]: Perfect Dodge 100%, Sword (no double-tap bug), Dagger (all weakpoints),
       Hammer (PID Bang-Bang), Axe (Threshold Equilibrium), Fist/Cestus (Sequential combos),
       Spear (Active Button Clicker), Chest Lockpicking.
-    • [Movement Suite]: Fly Hack (BodyVelocity + WASD/Space/Shift), NoClip, Velocity Speedhack,
-      CFrame Speed Bypass, Infinite Jump Boost.
-    • [Teleport Suite]: Smooth 3-Phase Sky-Tween to 26+ key locations (Towns, Blacksmiths, Doctors,
-      Bankers, Merchants, Class Trainers) with configurable Flight Altitude and Speed.
+    • [Movement Suite with Keybinds]: Fly Hack (X), NoClip (V), Velocity Speedhack (B),
+      CFrame Speed Bypass (N), Infinite Jump Boost (J) with LinoriaLib Keybind Pickers.
+    • [Teleport Suite]: Smooth Anti-Jitter Sky-Tween (default 1500 Y) to ALL 35+ Class Trainers,
+      Towns, NPCs, and Landmarks with full cancel support and height/speed sliders.
     • [Ingredient ESP]: Custom BillboardGui OOP Engine with Distance, Persistent Mode, Whitelist filter.
     • [FPS Booster & Optimization]: Remove Fog, Atmosphere, Shadows, Foliage, Materials, Instant Clean RAM.
     • [Config & Theme System]: SaveManager & ThemeManager (Full save/load configurations).
     ========================================================================================
 --]]
 
--- ĐỢI GAME VÀ ASSETS TẢI HOÀN TẤT TRƯỚC KHI CHẠY (CHỐNG LỖI EXECUTE SỚM)
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
@@ -28,7 +27,6 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 15)
 
--- Dọn dẹp phiên bản cũ nếu đang chạy
 if shared.ArcaneHub then
     pcall(function() shared.ArcaneHub.Unload() end)
     shared.ArcaneHub = nil
@@ -47,7 +45,6 @@ pcall(function()
     GuiCollisionService = require(game.ReplicatedStorage:WaitForChild("GuiCollisionService", 5))
 end)
 
--- Hàm HTTP request đa năng của các Executor
 local HttpRequest = (syn and syn.request) or (http and http.request) or http_request or request
 
 -- =============================================================================
@@ -286,49 +283,85 @@ local function handleAutoStart()
 end
 
 -- =============================================================================
--- AUTO FARM INGREDIENTS (MULTI-ITEM SCAN + SKY TWEEN)
+-- SMOOTH SKY-TWEEN WITH ANTI-JITTER BODYVELOCITY & NOCLIP
 -- =============================================================================
-local Farmer = {
-    running = false,
+local FlightController = {
+    active = false,
+    tweenBV = nil,
     noclipConn = nil,
     currentTween = nil,
 }
 
-local function enableNoClip()
-    if Farmer.noclipConn then return end
-    Farmer.noclipConn = RunService.Stepped:Connect(function()
-        local char = LocalPlayer.Character
-        if char then
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = false end
-            end
-            local root = char:FindFirstChild("HumanoidRootPart")
-            if root then
-                root.AssemblyLinearVelocity = Vector3.zero
-                root.AssemblyAngularVelocity = Vector3.zero
-            end
-        end
-    end)
-end
+local function enableFlightState()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not root then return end
 
-local function disableNoClip()
-    if Farmer.noclipConn then
-        Farmer.noclipConn:Disconnect()
-        Farmer.noclipConn = nil
+    if not FlightController.tweenBV or FlightController.tweenBV.Parent ~= root then
+        if FlightController.tweenBV then FlightController.tweenBV:Destroy() end
+        local bv = Instance.new("BodyVelocity")
+        bv.Name = "ArcaneTweenBodyVelocity"
+        bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+        bv.Velocity = Vector3.zero
+        bv.Parent = root
+        FlightController.tweenBV = bv
+    end
+
+    if hum then
+        hum.PlatformStand = true
+        hum.AutoRotate = false
+    end
+
+    if not FlightController.noclipConn then
+        FlightController.noclipConn = RunService.Stepped:Connect(function()
+            local c = LocalPlayer.Character
+            if c then
+                for _, part in ipairs(c:GetDescendants()) do
+                    if part:IsA("BasePart") then part.CanCollide = false end
+                end
+                local r = c:FindFirstChild("HumanoidRootPart")
+                if r then
+                    r.AssemblyLinearVelocity = Vector3.zero
+                    r.AssemblyAngularVelocity = Vector3.zero
+                end
+            end
+        end)
     end
 end
 
-local function tweenTo(targetCFrame, speed)
+local function disableFlightState()
+    if FlightController.tweenBV then
+        FlightController.tweenBV:Destroy()
+        FlightController.tweenBV = nil
+    end
+
+    if FlightController.noclipConn then
+        FlightController.noclipConn:Disconnect()
+        FlightController.noclipConn = nil
+    end
+
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.PlatformStand = false
+        hum.AutoRotate = true
+    end
+end
+
+local function smoothTweenTo(targetCFrame, speed, cancelCheckFn)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return false end
+
+    enableFlightState()
 
     local distance = (root.Position - targetCFrame.Position).Magnitude
     local duration = math.max(0.1, distance / speed)
 
     local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
     local tween = TweenService:Create(root, tweenInfo, { CFrame = targetCFrame })
-    Farmer.currentTween = tween
+    FlightController.currentTween = tween
     tween:Play()
 
     local completed = false
@@ -338,37 +371,51 @@ local function tweenTo(targetCFrame, speed)
         if conn then conn:Disconnect() end
     end)
 
-    while not completed and (Farmer.running or (Teleporter and Teleporter.active)) do task.wait() end
-    Farmer.currentTween = nil
+    while not completed do
+        if cancelCheckFn and not cancelCheckFn() then
+            tween:Cancel()
+            FlightController.currentTween = nil
+            disableFlightState()
+            return false
+        end
+        task.wait()
+    end
+
+    FlightController.currentTween = nil
     return completed
 end
+
+-- =============================================================================
+-- AUTO FARM INGREDIENTS (MULTI-ITEM SCAN + SKY TWEEN 1500 Y)
+-- =============================================================================
+local Farmer = {
+    running = false,
+}
 
 local function flyToItem(targetPosition)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return false end
 
-    enableNoClip()
-
-    local skyHeight = Options.SkyHeight and Options.SkyHeight.Value or 950
-    local ascendSpeed = Options.AscendSpeed and Options.AscendSpeed.Value or 120
-    local cruiseSpeed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 110
-    local descendSpeed = Options.DescendSpeed and Options.DescendSpeed.Value or 120
+    local skyHeight = Options.SkyHeight and Options.SkyHeight.Value or 1500
+    local ascendSpeed = Options.AscendSpeed and Options.AscendSpeed.Value or 150
+    local cruiseSpeed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 180
+    local descendSpeed = Options.DescendSpeed and Options.DescendSpeed.Value or 150
 
     local currentPos = root.Position
-    local skyY = math.max(skyHeight, currentPos.Y + 100)
+    local skyY = math.max(skyHeight, currentPos.Y + 200, targetPosition.Y + 200)
 
-    -- Phase 1: Bay thẳng đứng lên trời cao
-    tweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), ascendSpeed)
-    if not Farmer.running then return false end
+    -- Phase 1: Bay thẳng đứng lên trời cao 1500 Y
+    local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), ascendSpeed, function() return Farmer.running end)
+    if not s1 or not Farmer.running then return false end
 
     -- Phase 2: Bay ngang trên không trung tới ngay trên đầu nguyên liệu
-    tweenTo(CFrame.new(targetPosition.X, skyY, targetPosition.Z), cruiseSpeed)
-    if not Farmer.running then return false end
+    local s2 = smoothTweenTo(CFrame.new(targetPosition.X, skyY, targetPosition.Z), cruiseSpeed, function() return Farmer.running end)
+    if not s2 or not Farmer.running then return false end
 
     -- Phase 3: Hạ cánh thẳng đứng xuống cách nguyên liệu 3.5 studs
-    tweenTo(CFrame.new(targetPosition.X, targetPosition.Y + 3.5, targetPosition.Z), descendSpeed)
-    return true
+    local s3 = smoothTweenTo(CFrame.new(targetPosition.X, targetPosition.Y + 3.5, targetPosition.Z), descendSpeed, function() return Farmer.running end)
+    return s3
 end
 
 local function harvestItem(model)
@@ -394,7 +441,6 @@ function Farmer.runCycle()
 
         local selectedMap = (Options.FarmItemsWhitelist and Options.FarmItemsWhitelist.Value) or { ["Crylight"] = true }
 
-        -- Quét danh sách nguyên liệu theo cấu hình
         local harvestList = {}
         for _, desc in ipairs(workspace:GetDescendants()) do
             if desc.Parent and selectedMap[desc.Name] and not isBlacklistedCrylight(desc) then
@@ -404,7 +450,6 @@ function Farmer.runCycle()
 
         print(string.format("[AutoFarm] 📊 Kết quả kiểm tra tại Menu: Tìm thấy %d nguyên liệu hợp lệ.", #harvestList))
 
-        -- NẾU CÓ NGUYÊN LIỆU: TIẾN HÀNH VÀO GAME VÀ LỤM
         if #harvestList > 0 then
             print("[AutoFarm] ✨ Phát hiện nguyên liệu mục tiêu! Đang tự động bấm Play để vào game thu hoạch...")
             handleAutoStart()
@@ -426,7 +471,7 @@ function Farmer.runCycle()
                             totalHarvested = totalHarvested + 1
                             harvestedCounts[itemName] = (harvestedCounts[itemName] or 0) + 1
                         end
-                        task.wait(0.5)
+                        task.wait(0.4)
                     end
                 end
             end
@@ -434,10 +479,10 @@ function Farmer.runCycle()
             -- Bay ngược lên trời an toàn sau khi nhặt xong
             local char = LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
-            if root then
-                local skyHeight = Options.SkyHeight and Options.SkyHeight.Value or 950
-                local ascendSpeed = Options.AscendSpeed and Options.AscendSpeed.Value or 120
-                tweenTo(CFrame.new(root.Position.X, skyHeight, root.Position.Z), ascendSpeed)
+            if root and Farmer.running then
+                local skyHeight = Options.SkyHeight and Options.SkyHeight.Value or 1500
+                local ascendSpeed = Options.AscendSpeed and Options.AscendSpeed.Value or 150
+                smoothTweenTo(CFrame.new(root.Position.X, skyHeight, root.Position.Z), ascendSpeed, function() return Farmer.running end)
             end
 
             if totalHarvested > 0 and Toggles.NotifyOnHarvest and Toggles.NotifyOnHarvest.Value then
@@ -447,7 +492,7 @@ function Farmer.runCycle()
             print("[AutoFarm] ❌ Server không có nguyên liệu mục tiêu! Đang Server Hop ngay từ Main Menu...")
         end
 
-        disableNoClip()
+        disableFlightState()
 
         if Toggles.AutoServerHop and Toggles.AutoServerHop.Value and Farmer.running then
             task.wait(1)
@@ -458,11 +503,11 @@ end
 
 function Farmer.stop()
     Farmer.running = false
-    if Farmer.currentTween then
-        Farmer.currentTween:Cancel()
-        Farmer.currentTween = nil
+    if FlightController.currentTween then
+        FlightController.currentTween:Cancel()
+        FlightController.currentTween = nil
     end
-    disableNoClip()
+    disableFlightState()
     print("[AutoFarm] Đã dừng Auto Farm.")
 end
 
@@ -478,7 +523,6 @@ local AutoQTE = {
     lastFistHit = 0,
 }
 
--- 1. DODGE QTE (PERFECT DODGE 100% / BLOCK)
 local function handleDodgeQTE(dodgeQTE)
     if not Toggles.AutoDodge or not Toggles.AutoDodge.Value or not dodgeQTE or not dodgeQTE.Visible then return end
     local inset = dodgeQTE:FindFirstChild("Inset")
@@ -510,7 +554,6 @@ local function handleDodgeQTE(dodgeQTE)
     end
 end
 
--- 2. SWORD QTE (PERFECT WINDOW STRIKE - SEQUENTIAL TARGETING NO DOUBLE-TAP)
 local function handleSwordQTE(swordQTE)
     if not Toggles.AutoSword or not Toggles.AutoSword.Value or not swordQTE or not swordQTE.Visible then return end
     local inset = swordQTE:FindFirstChild("Inset")
@@ -555,7 +598,6 @@ local function handleSwordQTE(swordQTE)
     end
 end
 
--- 3. DAGGER QTE (ALL WEAKPOINTS)
 local function handleDaggerQTE(daggerQTE)
     if not Toggles.AutoDagger or not Toggles.AutoDagger.Value or not daggerQTE or not daggerQTE.Visible then return end
     local stopBtn = daggerQTE:FindFirstChild("Stop")
@@ -586,7 +628,6 @@ local function handleDaggerQTE(daggerQTE)
     end
 end
 
--- 4. HAMMER QTE (HOLD/RELEASE SPACE PID CONTROLLER)
 local function handleHammerQTE(hammerQTE)
     if not Toggles.AutoHammer or not Toggles.AutoHammer.Value or not hammerQTE or not hammerQTE.Visible then
         if AutoQTE.isHammerHolding then
@@ -627,7 +668,6 @@ local function handleHammerQTE(hammerQTE)
     end
 end
 
--- 5. AXE QTE (THRESHOLD EQUILIBRIUM TAPPER)
 local function handleAxeQTE(axeQTE)
     if not Toggles.AutoAxe or not Toggles.AutoAxe.Value or not axeQTE or not axeQTE.Visible then return end
     local gauge = axeQTE:FindFirstChild("Gauge")
@@ -653,7 +693,6 @@ local function handleAxeQTE(axeQTE)
     end
 end
 
--- 6. FIST / CESTUS QTE (SEQUENTIAL COMBO ARROWS)
 local function handleFistQTE(fistQTE)
     if not Toggles.AutoFist or not Toggles.AutoFist.Value or not fistQTE or not fistQTE.Visible then return end
     local keyHolder = fistQTE:FindFirstChild("KeyHolder") or fistQTE:FindFirstChild("Inset")
@@ -705,7 +744,6 @@ local function handleFistQTE(fistQTE)
     end
 end
 
--- 7. SPEAR QTE (ACTIVE TAP AUTOCLICKER)
 local function handleSpearQTE(spearQTE)
     if not spearQTE or not spearQTE.Visible then return end
     local container = spearQTE:FindFirstChild("Container")
@@ -722,7 +760,6 @@ local function handleSpearQTE(spearQTE)
     end
 end
 
--- 8. LOCKPICK QTE (CHEST UNLOCKER)
 local function handleLockpickQTE(lockpickQTE)
     if not Toggles.AutoLockpick or not Toggles.AutoLockpick.Value or not lockpickQTE or not lockpickQTE.Visible then return end
     local stopBtn = lockpickQTE:FindFirstChild("Stop", true) or lockpickQTE:FindFirstChildWhichIsA("TextButton", true)
@@ -770,7 +807,7 @@ local Movement = {
 }
 
 RunService.Stepped:Connect(function()
-    if Toggles.NoClip and Toggles.NoClip.Value then
+    if Toggles.NoClip and Toggles.NoClip.Value and not FlightController.active then
         local char = LocalPlayer.Character
         if char then
             for _, part in ipairs(char:GetDescendants()) do
@@ -788,7 +825,7 @@ RunService.RenderStepped:Connect(function()
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     local cam = workspace.CurrentCamera
 
-    if Toggles.Fly and Toggles.Fly.Value and hrp and hum and cam then
+    if Toggles.Fly and Toggles.Fly.Value and hrp and hum and cam and not FlightController.active then
         if not Movement.flyBodyVelocity or Movement.flyBodyVelocity.Parent ~= hrp then
             if Movement.flyBodyVelocity then Movement.flyBodyVelocity:Destroy() end
             local bv = Instance.new("BodyVelocity")
@@ -805,8 +842,8 @@ RunService.RenderStepped:Connect(function()
         if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec + Vector3.new(-1, 0, 0) end
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + Vector3.new(1, 0, 0) end
 
-        local flySpeed = Options.FlySpeed and Options.FlySpeed.Value or 100
-        local flyUpSpeed = Options.FlyUpSpeed and Options.FlyUpSpeed.Value or 60
+        local flySpeed = Options.FlySpeed and Options.FlySpeed.Value or 120
+        local flyUpSpeed = Options.FlyUpSpeed and Options.FlyUpSpeed.Value or 80
 
         local worldVelocity = Vector3.zero
         if moveVec.Magnitude > 0 then
@@ -823,7 +860,7 @@ RunService.RenderStepped:Connect(function()
 
         Movement.flyBodyVelocity.Velocity = Vector3.new(worldVelocity.X, worldVelocity.Y + verticalSpeed, worldVelocity.Z)
     else
-        if Movement.flyBodyVelocity then
+        if Movement.flyBodyVelocity and not FlightController.active then
             Movement.flyBodyVelocity:Destroy()
             Movement.flyBodyVelocity = nil
         end
@@ -834,11 +871,10 @@ RunService.Heartbeat:Connect(function(dt)
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum then return end
+    if not hrp or not hum or FlightController.active then return end
 
     if Toggles.Fly and Toggles.Fly.Value then return end
 
-    -- Speedhack (LinearVelocity)
     if Toggles.Speedhack and Toggles.Speedhack.Value then
         local moveDir = hum.MoveDirection
         local speed = Options.SpeedhackSpeed and Options.SpeedhackSpeed.Value or 50
@@ -847,7 +883,6 @@ RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    -- CFrame Speed (Bypass)
     if Toggles.CFrameSpeed and Toggles.CFrameSpeed.Value then
         local moveDir = hum.MoveDirection
         local mult = Options.CFrameSpeedMult and Options.CFrameSpeedMult.Value or 30
@@ -856,7 +891,6 @@ RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    -- Infinite Jump
     if Toggles.InfiniteJump and Toggles.InfiniteJump.Value then
         if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
             local boost = Options.InfiniteJumpBoost and Options.InfiniteJumpBoost.Value or 50
@@ -866,40 +900,58 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 -- =============================================================================
--- TELEPORT SUITE (26+ LOCATIONS & 3-PHASE SKY TWEEN)
+-- TELEPORT SUITE (ALL 35+ CLASS TRAINERS, TOWNS, MERCHANTS, AND LANDMARKS)
 -- =============================================================================
 local KeyLocations = {
-    -- Towns & Hubs
-    ["Westwood Heart"] = Vector3.new(8421.9, 822.5, -5864.5),
-    ["Caldera Town"] = Vector3.new(5035.6, 658.1, -4407.9),
-    ["Deeproot Town"] = Vector3.new(2079.6, 382.7, -2903.1),
-    ["Desert Oasis"] = Vector3.new(10810.7, 1576.1, -3449.6),
-    ["Soulmaster (Purgatory)"] = Vector3.new(-44.9, 574.8, -5467.4),
-    ["Astraea Riddle (Peak)"] = Vector3.new(-177.6, 2767.7, -2868.4),
+    -- Towns & Major Hubs
+    ["🏛️ Westwood Heart"] = Vector3.new(8421.9, 822.5, -5864.5),
+    ["🌋 Caldera Town"] = Vector3.new(5035.6, 658.1, -4407.9),
+    ["🌲 Deeproot Town"] = Vector3.new(2790.2, 620.0, -3850.0),
+    ["🏜️ Desert Oasis"] = Vector3.new(10810.7, 1576.1, -3449.6),
+    ["⛰️ Astraea Peak (Light Place)"] = Vector3.new(-177.6, 2767.7, -2868.4),
+    ["🌑 Dark Place Gate"] = Vector3.new(7876.1, 1321.0, 9077.4),
+    ["🌌 Void Rift"] = Vector3.new(987.7, 22.5, 609.6),
+    ["🏠 Memori's House"] = Vector3.new(11799.2, 1103.0, -1738.1),
+
+    -- Base Class Trainers
+    ["⚔️ Trainer: Thorin (Warrior)"] = Vector3.new(4253.1, 653.8, -3369.2),
+    ["🔮 Trainer: June (Mage / Elementalist)"] = Vector3.new(4903.8, 624.7, -4423.1),
+    ["🗡️ Trainer: Dusk (Thief / Rogue)"] = Vector3.new(5451.4, 660.9, -4309.0),
+    ["🥊 Trainer: Luther (Martial Artist / Fist)"] = Vector3.new(3496.5, 632.8, -3983.3),
+    ["🛡️ Trainer: Geron (Slayer / Fighter)"] = Vector3.new(4448.3, 652.1, -3359.3),
+
+    -- Super & Ultra Class Trainers
+    ["✨ Trainer: Arandor (Paladin)"] = Vector3.new(5840.1, 727.0, -4790.1),
+    ["⚡ Trainer: Orin (Berserker)"] = Vector3.new(8043.9, 822.6, -5599.3),
+    ["🥷 Trainer: Diiz (Assassin)"] = Vector3.new(8066.4, 831.2, -5648.9),
+    ["🕊️ Trainer: Prelate Fyran (Cleric / Saint)"] = Vector3.new(8459.8, 822.4, -5885.1),
+    ["💀 Trainer: Ryzar Infelio (Necromancer)"] = Vector3.new(2134.9, 382.7, -2922.0),
+    ["🔥 Trainer: Thuriaz (Chaos / Hexer)"] = Vector3.new(2151.2, 519.8, -3394.1),
+    ["🌟 Trainer: Seraphon (Saint Peak)"] = Vector3.new(13.9, 4741.6, -2113.1),
+    ["🪞 Trainer: Thanasius"] = Vector3.new(7680.4, 576.2, -2656.3),
+    ["🏺 Trainer: Staarun & Aderyn"] = Vector3.new(789.8, 238.0, 2120.8),
+    ["🦅 Trainer: Nevithas (Astraea)"] = Vector3.new(71.9, 2765.7, -3266.4),
+    ["👑 Trainer: Kether (Dark Realm)"] = Vector3.new(7821.2, 1279.8, 8480.1),
+    ["🏹 Trainer: Inette"] = Vector3.new(6699.0, 568.2, -3461.3),
+    ["🌿 Trainer: Fernain"] = Vector3.new(2296.1, 663.3, -4392.7),
+    ["🍃 Trainer: Aberon"] = Vector3.new(2800.0, 610.7, -4018.2),
+    ["🛡️ Trainer: Lagolt"] = Vector3.new(4651.7, 718.7, -5574.9),
+    ["🐉 Trainer: Leoran"] = Vector3.new(4995.5, 754.4, -6194.1),
+    ["⚔️ Trainer: Relan"] = Vector3.new(5322.2, 749.4, -6324.2),
+    ["💎 Trainer: Ardentis"] = Vector3.new(474.5, 581.5, -4816.9),
+    ["💀 Trainer: Bone Man"] = Vector3.new(1397.0, 610.3, -4097.6),
 
     -- Town Merchants & Services
-    ["Blacksmith (Westwood)"] = Vector3.new(8465.8, 821.8, -5589.8),
-    ["Blacksmith (Caldera)"] = Vector3.new(4921.8, 657.9, -4162.3),
-    ["Blacksmith (Deeproot)"] = Vector3.new(2079.6, 382.7, -2903.1),
-    ["Doctor (Westwood)"] = Vector3.new(8079.1, 822.4, -5478.8),
-    ["Doctor (Caldera)"] = Vector3.new(5035.6, 658.1, -4407.9),
-    ["Doctor (Deeproot)"] = Vector3.new(2084.0, 382.7, -2946.7),
-    ["Banker (Westwood)"] = Vector3.new(8470.3, 823.6, -5824.3),
-    ["Banker (Caldera)"] = Vector3.new(5184.7, 657.7, -4266.2),
-    ["Merchant (Westwood)"] = Vector3.new(8473.8, 823.6, -5906.5),
-    ["Merchant (Caldera)"] = Vector3.new(5132.9, 658.0, -4124.2),
-
-    -- Class & Skill Trainers
-    ["Trainer: Thorin (Berserker)"] = Vector3.new(4253.1, 653.8, -3369.2),
-    ["Trainer: June (Elementalist)"] = Vector3.new(4903.8, 624.7, -4423.1),
-    ["Trainer: Arandor (Paladin)"] = Vector3.new(5840.1, 727.0, -4790.1),
-    ["Trainer: Dusk (Rogue)"] = Vector3.new(5451.4, 660.9, -4309.0),
-    ["Trainer: Orin (Slayer)"] = Vector3.new(8043.9, 822.6, -5599.3),
-    ["Trainer: Diiz (Thief)"] = Vector3.new(8066.4, 831.2, -5648.9),
-    ["Trainer: Prelate Fyran (Cleric)"] = Vector3.new(8459.8, 822.4, -5885.1),
-    ["Trainer: Ryzar Infelio (Necro)"] = Vector3.new(2134.9, 382.7, -2922.0),
-    ["Trainer: Geron (Warrior)"] = Vector3.new(4448.3, 652.1, -3359.3),
-    ["Trainer: Luther (Martial)"] = Vector3.new(3496.5, 632.8, -3983.3),
+    ["⚒️ Blacksmith (Westwood)"] = Vector3.new(8465.8, 821.8, -5589.8),
+    ["⚒️ Blacksmith (Caldera)"] = Vector3.new(4921.8, 657.9, -4162.3),
+    ["⚒️ Blacksmith (Deeproot)"] = Vector3.new(2786.1, 620.0, -3840.0),
+    ["💊 Doctor (Westwood)"] = Vector3.new(8079.1, 822.4, -5478.8),
+    ["💊 Doctor (Caldera)"] = Vector3.new(5035.6, 658.1, -4407.9),
+    ["💊 Doctor (Deeproot)"] = Vector3.new(2790.2, 615.7, -3837.2),
+    ["💰 Banker (Westwood)"] = Vector3.new(8470.3, 823.6, -5824.3),
+    ["💰 Banker (Caldera)"] = Vector3.new(5184.7, 657.7, -4266.2),
+    ["🛒 Merchant (Westwood)"] = Vector3.new(8473.8, 823.6, -5906.5),
+    ["🛒 Merchant (Caldera)"] = Vector3.new(5132.9, 658.0, -4124.2),
 }
 
 local Teleporter = {
@@ -908,7 +960,7 @@ local Teleporter = {
 
 local function teleportToLocation(targetPos)
     if Teleporter.active then
-        Library:Notify("Teleport is already running!", 3)
+        Library:Notify("Teleport is already running! Click Cancel first.", 3)
         return
     end
     Teleporter.active = true
@@ -921,39 +973,48 @@ local function teleportToLocation(targetPos)
             return
         end
 
-        enableNoClip()
-        Library:Notify("🚀 Starting Sky-Tween Teleport...", 3)
+        local height = Options.TeleportHeight and Options.TeleportHeight.Value or 1500
+        local speed = Options.TeleportSpeed and Options.TeleportSpeed.Value or 200
 
-        local height = Options.TeleportHeight and Options.TeleportHeight.Value or 250
-        local speed = Options.TeleportSpeed and Options.TeleportSpeed.Value or 180
+        Library:Notify(string.format("🚀 Starting Sky-Tween (Alt: %d, Spd: %d)...", height, speed), 3)
 
         local currentPos = root.Position
-        local skyY = math.max(currentPos.Y + height, targetPos.Y + height)
+        local skyY = math.max(height, currentPos.Y + 200, targetPos.Y + 200)
 
-        -- Phase 1: Ascend
-        tweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), speed)
-        if not Teleporter.active then disableNoClip() return end
+        -- Phase 1: Bay vút lên độ cao đã chỉnh (mặc định 1500 Y)
+        local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), speed, function() return Teleporter.active end)
+        if not s1 or not Teleporter.active then
+            disableFlightState()
+            Teleporter.active = false
+            return
+        end
 
-        -- Phase 2: Cruise
-        tweenTo(CFrame.new(targetPos.X, skyY, targetPos.Z), speed)
-        if not Teleporter.active then disableNoClip() return end
+        -- Phase 2: Bay ngang trên không trung tới ngay trên đầu mục tiêu
+        local s2 = smoothTweenTo(CFrame.new(targetPos.X, skyY, targetPos.Z), speed, function() return Teleporter.active end)
+        if not s2 or not Teleporter.active then
+            disableFlightState()
+            Teleporter.active = false
+            return
+        end
 
-        -- Phase 3: Descend safely
-        tweenTo(CFrame.new(targetPos.X, targetPos.Y + 4, targetPos.Z), speed)
+        -- Phase 3: Hạ cánh an toàn xuống mặt đất
+        local s3 = smoothTweenTo(CFrame.new(targetPos.X, targetPos.Y + 4, targetPos.Z), speed, function() return Teleporter.active end)
 
-        disableNoClip()
+        disableFlightState()
         Teleporter.active = false
-        Library:Notify("✅ Arrived at destination!", 3)
+        if s3 then
+            Library:Notify("✅ Arrived safely at destination!", 3)
+        end
     end)
 end
 
 local function cancelTeleport()
     Teleporter.active = false
-    if Farmer.currentTween then
-        Farmer.currentTween:Cancel()
-        Farmer.currentTween = nil
+    if FlightController.currentTween then
+        FlightController.currentTween:Cancel()
+        FlightController.currentTween = nil
     end
-    disableNoClip()
+    disableFlightState()
     Library:Notify("Teleport cancelled.", 3)
 end
 
@@ -1128,33 +1189,33 @@ FarmGroup:AddToggle("BlacklistDesert", {
 
 FarmGroup:AddSlider("SkyHeight", {
     Text = "Sky Flight Altitude (Y)",
-    Default = 950,
+    Default = 1500,
     Min = 500,
-    Max = 1500,
+    Max = 3000,
     Rounding = 0,
 })
 
 FarmGroup:AddSlider("AscendSpeed", {
     Text = "Ascend Speed (Studs/s)",
-    Default = 120,
+    Default = 150,
     Min = 50,
-    Max = 250,
+    Max = 300,
     Rounding = 0,
 })
 
 FarmGroup:AddSlider("CruiseSpeed", {
     Text = "Cruise Speed (Studs/s)",
-    Default = 110,
+    Default = 180,
     Min = 50,
-    Max = 250,
+    Max = 350,
     Rounding = 0,
 })
 
 FarmGroup:AddSlider("DescendSpeed", {
     Text = "Descend Speed (Studs/s)",
-    Default = 120,
+    Default = 150,
     Min = 50,
-    Max = 250,
+    Max = 300,
     Rounding = 0,
 })
 
@@ -1267,7 +1328,7 @@ WeaponGroup:AddToggle("AutoFist", {
 })
 
 -- -----------------------------------------------------------------------------
--- TAB 3: MOVEMENT CONTROLLER
+-- TAB 3: MOVEMENT CONTROLLER (WITH FULL KEYBIND PICKERS)
 -- -----------------------------------------------------------------------------
 local FlyGroup = Tabs.Movement:AddLeftGroupbox("✈️ Flight & NoClip")
 local SpeedGroup = Tabs.Movement:AddRightGroupbox("⚡ Speed & Jump")
@@ -1276,32 +1337,50 @@ FlyGroup:AddToggle("Fly", {
     Text = "Enable Fly Hack",
     Default = false,
     Tooltip = "Bay tự do theo hướng Camera (W/A/S/D + Space / Shift)",
+}):AddKeyPicker("FlyKeybind", {
+    Default = "X",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Fly Keybind",
+    NoUI = false,
 })
 
 FlyGroup:AddSlider("FlySpeed", {
     Text = "Flight Horizontal Speed",
-    Default = 100,
+    Default = 120,
     Min = 20,
-    Max = 300,
+    Max = 350,
     Rounding = 0,
 })
 
 FlyGroup:AddSlider("FlyUpSpeed", {
     Text = "Flight Vertical Speed",
-    Default = 60,
+    Default = 80,
     Min = 10,
-    Max = 200,
+    Max = 250,
     Rounding = 0,
 })
 
 FlyGroup:AddToggle("NoClip", {
     Text = "Enable NoClip (Walk Through Walls)",
     Default = false,
+}):AddKeyPicker("NoClipKeybind", {
+    Default = "V",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "NoClip Keybind",
+    NoUI = false,
 })
 
 SpeedGroup:AddToggle("Speedhack", {
     Text = "Speedhack (Linear Velocity)",
     Default = false,
+}):AddKeyPicker("SpeedhackKeybind", {
+    Default = "B",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Speedhack Keybind",
+    NoUI = false,
 })
 
 SpeedGroup:AddSlider("SpeedhackSpeed", {
@@ -1315,6 +1394,12 @@ SpeedGroup:AddSlider("SpeedhackSpeed", {
 SpeedGroup:AddToggle("CFrameSpeed", {
     Text = "CFrame Speed (Direct Bypass)",
     Default = false,
+}):AddKeyPicker("CFrameSpeedKeybind", {
+    Default = "N",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "CFrame Speed Keybind",
+    NoUI = false,
 })
 
 SpeedGroup:AddSlider("CFrameSpeedMult", {
@@ -1328,6 +1413,12 @@ SpeedGroup:AddSlider("CFrameSpeedMult", {
 SpeedGroup:AddToggle("InfiniteJump", {
     Text = "Infinite Jump (Hold Space)",
     Default = false,
+}):AddKeyPicker("InfJumpKeybind", {
+    Default = "J",
+    SyncToggleState = true,
+    Mode = "Toggle",
+    Text = "Infinite Jump Keybind",
+    NoUI = false,
 })
 
 SpeedGroup:AddSlider("InfiniteJumpBoost", {
@@ -1339,7 +1430,7 @@ SpeedGroup:AddSlider("InfiniteJumpBoost", {
 })
 
 -- -----------------------------------------------------------------------------
--- TAB 4: TELEPORT SUITE
+-- TAB 4: TELEPORT SUITE (ALL TRAINERS, TOWNS, MERCHANTS, LANDMARKS)
 -- -----------------------------------------------------------------------------
 local TeleportGroup = Tabs.Teleport:AddLeftGroupbox("🌐 Sky-Tween Teleport")
 local QuickWarpGroup = Tabs.Teleport:AddRightGroupbox("📍 Quick Warps")
@@ -1352,22 +1443,22 @@ TeleportGroup:AddDropdown("SelectedTeleportLoc", {
     Values = locationNames,
     Default = 1,
     Multi = false,
-    Text = "Destination",
+    Text = "Select Destination",
 })
 
 TeleportGroup:AddSlider("TeleportHeight", {
     Text = "Flight Altitude / Height (Y)",
-    Default = 250,
-    Min = 50,
-    Max = 600,
+    Default = 1500,
+    Min = 500,
+    Max = 3000,
     Rounding = 0,
 })
 
 TeleportGroup:AddSlider("TeleportSpeed", {
     Text = "Flight Speed (Studs/s)",
-    Default = 180,
+    Default = 200,
     Min = 50,
-    Max = 400,
+    Max = 500,
     Rounding = 0,
 })
 
@@ -1389,12 +1480,12 @@ TeleportGroup:AddButton({
     Func = cancelTeleport
 })
 
-QuickWarpGroup:AddButton("🏛️ Westwood Heart", function() teleportToLocation(KeyLocations["Westwood Heart"]) end)
-QuickWarpGroup:AddButton("🌋 Caldera Town", function() teleportToLocation(KeyLocations["Caldera Town"]) end)
-QuickWarpGroup:AddButton("🌲 Deeproot Town", function() teleportToLocation(KeyLocations["Deeproot Town"]) end)
-QuickWarpGroup:AddButton("🏜️ Desert Oasis", function() teleportToLocation(KeyLocations["Desert Oasis"]) end)
-QuickWarpGroup:AddButton("👻 Soulmaster (Purgatory)", function() teleportToLocation(KeyLocations["Soulmaster (Purgatory)"]) end)
-QuickWarpGroup:AddButton("⛰️ Astraea Riddle (Peak)", function() teleportToLocation(KeyLocations["Astraea Riddle (Peak)"]) end)
+QuickWarpGroup:AddButton("🏛️ Westwood Heart", function() teleportToLocation(KeyLocations["🏛️ Westwood Heart"]) end)
+QuickWarpGroup:AddButton("🌋 Caldera Town", function() teleportToLocation(KeyLocations["🌋 Caldera Town"]) end)
+QuickWarpGroup:AddButton("🌲 Deeproot Town", function() teleportToLocation(KeyLocations["🌲 Deeproot Town"]) end)
+QuickWarpGroup:AddButton("🏜️ Desert Oasis", function() teleportToLocation(KeyLocations["🏜️ Desert Oasis"]) end)
+QuickWarpGroup:AddButton("⛰️ Astraea Peak", function() teleportToLocation(KeyLocations["⛰️ Astraea Peak (Light Place)"]) end)
+QuickWarpGroup:AddButton("🌑 Dark Place Gate", function() teleportToLocation(KeyLocations["🌑 Dark Place Gate"]) end)
 
 -- -----------------------------------------------------------------------------
 -- TAB 5: VISUALS & FPS BOOSTER
@@ -1587,7 +1678,7 @@ ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 
 SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({ "MenuKeybind" })
+SaveManager:SetIgnoreIndexes({ "MenuKeybind", "FlyKeybind", "NoClipKeybind", "SpeedhackKeybind", "CFrameSpeedKeybind", "InfJumpKeybind" })
 
 ThemeManager:SetFolder("ArcaneHub")
 SaveManager:SetFolder("ArcaneHub/Configs")
