@@ -11,9 +11,6 @@
       Dagger (100% dynamic arc-size weakpoint precision tracking), Hammer (PID Bang-Bang),
       Axe (Threshold Equilibrium), Fist/Cestus (Sequential combos),
       Spear (Active Button Clicker), Chest Lockpicking.
-    • [Spelldraw / Blackjack AI Advisor 2.0]: Crystal-clear Screen HUD + 3D Table Billboard,
-      Real-time Math Probabilities (Player Bust Risk % vs Dealer Bust Risk %),
-      Definitive Action Badges (🟢 RÚT TIẾP vs 🛑 DỪNG LẠI), and Vietnamese Tactical Reasons.
     • [Movement Suite with Keybinds]: Fly Hack (X), NoClip (V), Velocity Speedhack (B),
       CFrame Speed Bypass (N), Infinite Jump Boost (J) with LinoriaLib Keybind Pickers.
     • [Teleport Suite]: Smooth Anti-Jitter Sky-Tween (default 1500 Y) to ALL 35+ Class Trainers,
@@ -538,9 +535,240 @@ function Farmer.stop()
 end
 
 -- =============================================================================
+-- AUTO MINE ORES (FERRUS, AESTIC, LANEUS + AUTO BUY PICKAXE)
+-- =============================================================================
+local Miner = {
+    running = false,
+}
+
+local function hasPickaxe()
+    local char = LocalPlayer.Character
+    if char then
+        if char:FindFirstChild("Pickaxe") then return true end
+        for _, t in ipairs(char:GetChildren()) do
+            if t:IsA("Tool") and t.Name:lower():find("pick") then return true end
+        end
+    end
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if bp then
+        if bp:FindFirstChild("Pickaxe") or (bp:FindFirstChild("Tools") and bp.Tools:FindFirstChild("Pickaxe")) then
+            return true
+        end
+        for _, t in ipairs(bp:GetChildren()) do
+            if t.Name:lower():find("pick") then return true end
+        end
+        local toolsFolder = bp:FindFirstChild("Tools")
+        if toolsFolder then
+            for _, t in ipairs(toolsFolder:GetChildren()) do
+                if t.Name:lower():find("pick") then return true end
+            end
+        end
+    end
+    local invGui = PlayerGui and PlayerGui:FindFirstChild("Inventory")
+    local toolsFrame = invGui and invGui:FindFirstChild("Tools", true)
+    if toolsFrame then
+        for _, desc in ipairs(toolsFrame:GetDescendants()) do
+            if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text:lower():find("pickaxe") then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function equipPickaxe()
+    local char = LocalPlayer.Character
+    if not char then return false end
+    if char:FindFirstChild("Pickaxe") then return true end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if bp and hum then
+        local pick = bp:FindFirstChild("Pickaxe") or bp:FindFirstChildWhichIsA("Tool")
+        if pick and pick:IsA("Tool") then
+            hum:EquipTool(pick)
+            task.wait(0.3)
+            return true
+        end
+    end
+    return false
+end
+
+local function buyPickaxe()
+    print("[AutoMine] 🛒 Không tìm thấy Pickaxe! Đang bay tới Caldera Blacksmith để mua Pickaxe (50 Gold)...")
+    Library:Notify("No Pickaxe found! Flying to Caldera to buy Pickaxe (50g)...", 4)
+    local pickaxePos = Vector3.new(4907.0, 656.7, -4154.0)
+    local flew = smoothTweenTo(CFrame.new(pickaxePos.X, pickaxePos.Y + 3, pickaxePos.Z), Options.CruiseSpeed and Options.CruiseSpeed.Value or 180, function() return Miner.running end)
+    if not flew or not Miner.running then return false end
+
+    task.wait(0.5)
+    local pickaxeModel = workspace:FindFirstChild("Mechanical") and workspace.Mechanical:FindFirstChild("Buyables") and workspace.Mechanical.Buyables:FindFirstChild("Pickaxe")
+    if not pickaxeModel then
+        pickaxeModel = workspace:FindFirstChild("Pickaxe", true)
+    end
+
+    if pickaxeModel then
+        for _, desc in ipairs(pickaxeModel:GetDescendants()) do
+            if desc:IsA("ProximityPrompt") and fireproximityprompt then
+                fireproximityprompt(desc)
+            elseif desc:IsA("ClickDetector") and fireclickdetector then
+                fireclickdetector(desc)
+            end
+        end
+        task.wait(1)
+        Library:Notify("✅ Pickaxe interaction dispatched!", 3)
+        return true
+    end
+    return false
+end
+
+local function mineOreNode(oreModel)
+    if not oreModel or not oreModel.Parent then return false end
+    local startTime = os.clock()
+    local timeout = Options.MineTimeout and Options.MineTimeout.Value or 12
+    equipPickaxe()
+
+    while oreModel and oreModel.Parent and (os.clock() - startTime < timeout) and Miner.running do
+        -- 1. Trigger ProximityPrompt / ClickDetector if present
+        for _, desc in ipairs(oreModel:GetDescendants()) do
+            if desc:IsA("ClickDetector") and fireclickdetector then
+                fireclickdetector(desc)
+            elseif desc:IsA("ProximityPrompt") and fireproximityprompt then
+                fireproximityprompt(desc)
+            end
+        end
+
+        -- 2. Activate tool and simulate hit
+        local char = LocalPlayer.Character
+        local tool = char and (char:FindFirstChild("Pickaxe") or char:FindFirstChildWhichIsA("Tool"))
+        if tool and tool:IsA("Tool") then
+            tool:Activate()
+        end
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+        task.wait(0.05)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+
+        task.wait(0.35)
+    end
+    return (oreModel.Parent == nil)
+end
+
+function Miner.runCycle()
+    if Miner.running then return end
+    Miner.running = true
+
+    task.spawn(function()
+        print("[AutoMine] ⛏️ [BƯỚC 1]: Kiểm tra trang bị Pickaxe...")
+        handleAutoStart()
+
+        if not hasPickaxe() then
+            if Toggles.AutoBuyPickaxe and Toggles.AutoBuyPickaxe.Value then
+                local bought = buyPickaxe()
+                if not bought and not hasPickaxe() then
+                    Library:Notify("⚠️ Failed to acquire Pickaxe! Cannot mine ores.", 4)
+                    Miner.stop()
+                    return
+                end
+            else
+                Library:Notify("⚠️ Pickaxe required to mine! Please buy one or enable Auto Buy.", 4)
+                Miner.stop()
+                return
+            end
+        end
+
+        print("[AutoMine] 🔍 [BƯỚC 2]: Đang quét mỏ quặng trên bản đồ...")
+        local selectedOres = (Options.MineOresWhitelist and Options.MineOresWhitelist.Value) or { ["Ferrus"] = true, ["Aestic"] = true, ["Laneus"] = true }
+
+        local oreList = {}
+        local oresFolder = workspace:FindFirstChild("Ores")
+        if oresFolder then
+            for _, ore in ipairs(oresFolder:GetChildren()) do
+                if selectedOres[ore.Name] then
+                    table.insert(oreList, { instance = ore, name = ore.Name })
+                end
+            end
+        end
+
+        if #oreList == 0 then
+            for _, desc in ipairs(workspace:GetDescendants()) do
+                if desc:IsA("Model") and selectedOres[desc.Name] and desc.Parent ~= workspace.Ores then
+                    table.insert(oreList, { instance = desc, name = desc.Name })
+                end
+            end
+        end
+
+        print(string.format("[AutoMine] 📊 Tìm thấy %d mỏ quặng hợp lệ.", #oreList))
+
+        if #oreList > 0 then
+            local minedCount = 0
+            for i, oreData in ipairs(oreList) do
+                if not Miner.running then break end
+                local ore = oreData.instance
+                local oreName = oreData.name
+                if ore and ore.Parent then
+                    local targetPos = ore:GetPivot().Position
+                    print(string.format("[AutoMine] 🎯 [%d/%d] Đang bay tới mỏ %s tại (%.1f, %.1f, %.1f)...", i, #oreList, oreName, targetPos.X, targetPos.Y, targetPos.Z))
+
+                    local flew = flyToItem(targetPos)
+                    if flew and ore and ore.Parent then
+                        local done = mineOreNode(ore)
+                        if done then
+                            minedCount = minedCount + 1
+                            print(string.format("[AutoMine] ✅ Đã đào xong mỏ %s!", oreName))
+                        end
+                        task.wait(0.5)
+                    end
+                end
+            end
+
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if root and Miner.running then
+                local skyHeight = Options.SkyHeight and Options.SkyHeight.Value or 1500
+                local ascendSpeed = Options.AscendSpeed and Options.AscendSpeed.Value or 150
+                smoothTweenTo(CFrame.new(root.Position.X, skyHeight, root.Position.Z), ascendSpeed, function() return Miner.running end)
+            end
+        else
+            print("[AutoMine] ❌ Server không có quặng mục tiêu!")
+        end
+
+        disableFlightState()
+
+        if Toggles.AutoServerHop and Toggles.AutoServerHop.Value and Miner.running then
+            task.wait(1)
+            ServerHopper.hop()
+        end
+    end)
+end
+
+function Miner.stop()
+    Miner.running = false
+    if FlightController.currentTween then
+        FlightController.currentTween:Cancel()
+        FlightController.currentTween = nil
+    end
+    disableFlightState()
+    print("[AutoMine] Đã dừng Auto Mine.")
+end
+
+-- =============================================================================
 -- AUTO COMBAT QTE ENGINE (SINGLE-CLICK, 0.25S DEBOUNCED SWEET SPOT ENGINE)
 -- =============================================================================
 local DaggerArcSizes = { 20, 25, 30, 35, 40, 45, 55, 65, 75, 85, 95, 105 }
+
+local function isQTEActive(qteName)
+    if Toggles.MasterQTE and not Toggles.MasterQTE.Value then return false end
+    local qteMap = Options.EnabledQTEList and Options.EnabledQTEList.Value
+    if qteMap then
+        if qteName == "Dodge" then return qteMap["Auto Dodge / Block"] == true end
+        if qteName == "Sword" then return qteMap["Sword (Window Strike)"] == true end
+        if qteName == "Dagger" then return qteMap["Dagger (Weakpoints)"] == true end
+        if qteName == "Hammer" then return qteMap["Hammer (Power Bar)"] == true end
+        if qteName == "Axe" then return qteMap["Axe (Equilibrium)"] == true end
+        if qteName == "Fist" then return qteMap["Fist / Cestus (Combos)"] == true end
+        if qteName == "Lockpick" then return qteMap["Chest Lockpick"] == true end
+    end
+    return true
+end
 
 local AutoQTE = {
     lastDodgeHit = 0,
@@ -555,7 +783,7 @@ local AutoQTE = {
 
 -- 1. DODGE QTE (PERFECT DODGE 100% / BLOCK)
 local function handleDodgeQTE(dodgeQTE)
-    if not Toggles.AutoDodge or not Toggles.AutoDodge.Value or not dodgeQTE or not dodgeQTE.Visible then return end
+    if not isQTEActive("Dodge") or not dodgeQTE or not dodgeQTE.Visible then return end
     local inset = dodgeQTE:FindFirstChild("Inset")
     local stopBtn = dodgeQTE:FindFirstChild("Stop")
     if not inset or not stopBtn then return end
@@ -587,7 +815,7 @@ end
 
 -- 2. SWORD QTE (SINGLE-CLICK, 0.25S DEBOUNCED SWEET SPOT ENGINE)
 local function handleSwordQTE(swordQTE)
-    if not Toggles.AutoSword or not Toggles.AutoSword.Value or not swordQTE or not swordQTE.Visible then
+    if not isQTEActive("Sword") or not swordQTE or not swordQTE.Visible then
         AutoQTE.swordHitTable = {}
         return
     end
@@ -638,7 +866,7 @@ end
 
 -- 3. DAGGER QTE (DYNAMIC ARC-SIZE WEAKPOINT PRECISION TRACKING)
 local function handleDaggerQTE(daggerQTE)
-    if not Toggles.AutoDagger or not Toggles.AutoDagger.Value or not daggerQTE or not daggerQTE.Visible then
+    if not isQTEActive("Dagger") or not daggerQTE or not daggerQTE.Visible then
         AutoQTE.hitWeakpoints = {}
         return
     end
@@ -678,7 +906,7 @@ end
 
 -- 4. HAMMER QTE (HOLD/RELEASE SPACE PID CONTROLLER)
 local function handleHammerQTE(hammerQTE)
-    if not Toggles.AutoHammer or not Toggles.AutoHammer.Value or not hammerQTE or not hammerQTE.Visible then
+    if not isQTEActive("Hammer") or not hammerQTE or not hammerQTE.Visible then
         if AutoQTE.isHammerHolding then
             AutoQTE.isHammerHolding = false
             VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
@@ -719,7 +947,7 @@ end
 
 -- 5. AXE QTE (THRESHOLD EQUILIBRIUM TAPPER)
 local function handleAxeQTE(axeQTE)
-    if not Toggles.AutoAxe or not Toggles.AutoAxe.Value or not axeQTE or not axeQTE.Visible then return end
+    if not isQTEActive("Axe") or not axeQTE or not axeQTE.Visible then return end
     local gauge = axeQTE:FindFirstChild("Gauge")
     local spaceHint = axeQTE:FindFirstChild("SpaceHint")
     if not gauge then return end
@@ -745,7 +973,7 @@ end
 
 -- 6. FIST / CESTUS QTE (SEQUENTIAL COMBO ARROWS)
 local function handleFistQTE(fistQTE)
-    if not Toggles.AutoFist or not Toggles.AutoFist.Value or not fistQTE or not fistQTE.Visible then return end
+    if not isQTEActive("Fist") or not fistQTE or not fistQTE.Visible then return end
     local keyHolder = fistQTE:FindFirstChild("KeyHolder") or fistQTE:FindFirstChild("Inset")
     local otherControls = fistQTE:FindFirstChild("OtherControls")
     local keysFolder = (keyHolder and keyHolder:FindFirstChild("Keys")) or keyHolder
@@ -814,7 +1042,7 @@ end
 
 -- 8. LOCKPICK QTE (CHEST UNLOCKER)
 local function handleLockpickQTE(lockpickQTE)
-    if not Toggles.AutoLockpick or not Toggles.AutoLockpick.Value or not lockpickQTE or not lockpickQTE.Visible then return end
+    if not isQTEActive("Lockpick") or not lockpickQTE or not lockpickQTE.Visible then return end
     local stopBtn = lockpickQTE:FindFirstChild("Stop", true) or lockpickQTE:FindFirstChildWhichIsA("TextButton", true)
     local indicator = lockpickQTE:FindFirstChild("Indicator", true)
     local target = lockpickQTE:FindFirstChild("Zone", true) or lockpickQTE:FindFirstChild("Window", true) or lockpickQTE:FindFirstChild("Target", true)
@@ -865,391 +1093,6 @@ RunService.RenderStepped:Connect(function()
     if lockpickQTE and lockpickQTE.Visible then handleLockpickQTE(lockpickQTE) end
 end)
 
--- =============================================================================
--- SPELLDRAW / BLACKJACK AI ADVISOR 2.0 (CRYSTAL CLEAR HUD & DETAILED MATH)
--- =============================================================================
-local SpelldrawHelper = {
-    active = false,
-    screenGui = nil,
-    billboard = nil,
-    uiRefs = {},
-}
-
-local BustChances = {
-    [12] = "31%", [13] = "38%", [14] = "46%",
-    [15] = "54%", [16] = "62%", [17] = "69%",
-    [18] = "77%", [19] = "85%", [20] = "92%", [21] = "100%"
-}
-
-local DealerBustChances = {
-    [2] = "35%", [3] = "37%", [4] = "40%",
-    [5] = "42%", [6] = "42% (Yếu nhất)",
-    [7] = "26%", [8] = "24%", [9] = "23%",
-    [10] = "21%", [11] = "17%"
-}
-
-local function analyzeBlackjackHand(playerScore, dealerUpScore)
-    if playerScore > 21 then
-        return {
-            badge = "❌ ĐÃ BỊ QUẮC (BUST > 21)",
-            badgeColor = Color3.fromRGB(255, 60, 60),
-            action = "KẾT THÚC VÁN",
-            risk = "100%",
-            dealerRisk = "---",
-            reason = "Điểm của bạn đã vượt quá 21 điểm."
-        }
-    elseif playerScore == 21 then
-        return {
-            badge = "🌟 21 ĐIỂM / BLACKJACK (DỪNG)",
-            badgeColor = Color3.fromRGB(255, 215, 0),
-            action = "🛑 DỪNG LẠI (STAND)",
-            risk = "100% (Không được rút)",
-            dealerRisk = dealerUpScore > 0 and (DealerBustChances[dealerUpScore] or "25%") or "---",
-            reason = "Đã đạt điểm tuyệt đối 21! Hãy dừng lại và chờ nhận thưởng."
-        }
-    elseif playerScore >= 17 then
-        return {
-            badge = "🛑 KHUYẾN NGHỊ: DỪNG LẠI (STAND)",
-            badgeColor = Color3.fromRGB(80, 255, 120),
-            action = "🛑 BẤM DỪNG (STAND)",
-            risk = BustChances[playerScore] or "70%+",
-            dealerRisk = dealerUpScore > 0 and (DealerBustChances[dealerUpScore] or "25%") or "---",
-            reason = string.format("Điểm an toàn (%d). Nguy cơ quắc nếu rút thêm là %s. Tuyệt đối KHÔNG rút!", playerScore, BustChances[playerScore] or "rất cao")
-        }
-    elseif playerScore <= 11 then
-        return {
-            badge = "🟢 KHUYẾN NGHỊ: RÚT THÊM (HIT)",
-            badgeColor = Color3.fromRGB(0, 255, 255),
-            action = "🟢 BẤM RÚT (HIT)",
-            risk = "0% (Tuyệt đối an toàn)",
-            dealerRisk = dealerUpScore > 0 and (DealerBustChances[dealerUpScore] or "25%") or "---",
-            reason = string.format("Bạn chỉ có %d điểm. Dù rút lá to nhất (10/J/Q/K) bạn cũng không thể bị quắc. Hãy RÚT NGAY!", playerScore)
-        }
-    elseif playerScore == 12 then
-        if dealerUpScore >= 4 and dealerUpScore <= 6 then
-            return {
-                badge = "🛑 KHUYẾN NGHỊ: DỪNG LẠI (STAND)",
-                badgeColor = Color3.fromRGB(255, 200, 50),
-                action = "🛑 BẤM DỪNG (STAND)",
-                risk = "31%",
-                dealerRisk = DealerBustChances[dealerUpScore] or "42%",
-                reason = string.format("Nhà cái ngửa lá %d (vùng bài yếu, tỷ lệ tự quắc là %s). Hãy DỪNG lại chờ nhà cái tự quắc!", dealerUpScore, DealerBustChances[dealerUpScore] or "42%")
-            }
-        else
-            return {
-                badge = "🟢 KHUYẾN NGHỊ: RÚT THÊM (HIT)",
-                badgeColor = Color3.fromRGB(255, 160, 0),
-                action = "🟢 BẤM RÚT (HIT)",
-                risk = "31%",
-                dealerRisk = dealerUpScore > 0 and (DealerBustChances[dealerUpScore] or "25%") or "---",
-                reason = string.format("Nhà cái ngửa lá %d (bài mạnh). Điểm 12 của bạn không đủ để thắng, nên RÚT THÊM.", dealerUpScore)
-            }
-        end
-    elseif playerScore >= 13 and playerScore <= 16 then
-        if dealerUpScore >= 2 and dealerUpScore <= 6 then
-            return {
-                badge = "🛑 KHUYẾN NGHỊ: DỪNG LẠI (STAND)",
-                badgeColor = Color3.fromRGB(80, 255, 120),
-                action = "🛑 BẤM DỪNG (STAND)",
-                risk = BustChances[playerScore] or "50%",
-                dealerRisk = DealerBustChances[dealerUpScore] or "40%",
-                reason = string.format("Bạn có nguy cơ quắc %s nếu rút! Nhà cái đang có bài yếu (lá %d), hãy DỪNG để chờ nhà cái tự quắc.", BustChances[playerScore] or "50%", dealerUpScore)
-            }
-        else
-            return {
-                badge = "🟢 KHUYẾN NGHỊ: RÚT THÊM (HIT)",
-                badgeColor = Color3.fromRGB(255, 140, 0),
-                action = "🟢 BẤM RÚT (HIT)",
-                risk = BustChances[playerScore] or "50%",
-                dealerRisk = dealerUpScore > 0 and (DealerBustChances[dealerUpScore] or "23%") or "---",
-                reason = string.format("Nhà cái ngửa lá %d (khả năng đạt 17-20 rất cao). Điểm %d của bạn nếu đứng yên chắc chắn thua, buộc phải RÚT!", dealerUpScore, playerScore)
-            }
-        end
-    end
-
-    return {
-        badge = "🟢 BẤM RÚT (HIT)",
-        badgeColor = Color3.fromRGB(0, 255, 255),
-        action = "🟢 BẤM RÚT (HIT)",
-        risk = "Thấp",
-        dealerRisk = "---",
-        reason = "Chiến thuật toán học khuyến nghị nên rút bài."
-    }
-end
-
-local function initSpelldrawUI()
-    if SpelldrawHelper.screenGui and SpelldrawHelper.screenGui.Parent == PlayerGui then return end
-
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "Arcane_SpelldrawAdvisor"
-    sg.ResetOnSpawn = false
-    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-    local mainCard = Instance.new("Frame")
-    mainCard.Name = "MainCard"
-    mainCard.Size = UDim2.new(0, 360, 0, 220)
-    mainCard.Position = UDim2.new(1, -380, 0.5, -110)
-    mainCard.BackgroundColor3 = Color3.fromRGB(18, 20, 26)
-    mainCard.BorderSizePixel = 0
-    mainCard.Parent = sg
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 12)
-    corner.Parent = mainCard
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Name = "CardStroke"
-    stroke.Color = Color3.fromRGB(0, 255, 180)
-    stroke.Thickness = 2
-    stroke.Parent = mainCard
-
-    -- Header Title
-    local title = Instance.new("TextLabel")
-    title.Text = "🃏 TRỢ LÝ TOÁN HỌC SPELLEDRAW (BLACKJACK)"
-    title.Font = Enum.Font.SourceSansBold
-    title.TextSize = 14
-    title.TextColor3 = Color3.fromRGB(0, 255, 200)
-    title.Size = UDim2.new(1, -20, 0, 24)
-    title.Position = UDim2.new(0, 10, 0, 8)
-    title.BackgroundTransparency = 1
-    title.TextXAlignment = Enum.TextXAlignment.Center
-    title.Parent = mainCard
-
-    -- Scores Holder
-    local scoreHolder = Instance.new("Frame")
-    scoreHolder.Size = UDim2.new(1, -20, 0, 48)
-    scoreHolder.Position = UDim2.new(0, 10, 0, 36)
-    scoreHolder.BackgroundColor3 = Color3.fromRGB(26, 29, 38)
-    scoreHolder.BorderSizePixel = 0
-    scoreHolder.Parent = mainCard
-
-    local scoreCorner = Instance.new("UICorner")
-    scoreCorner.CornerRadius = UDim.new(0, 8)
-    scoreCorner.Parent = scoreHolder
-
-    local plrScoreLabel = Instance.new("TextLabel")
-    plrScoreLabel.Text = "👤 ĐIỂM BẠN: --"
-    plrScoreLabel.Font = Enum.Font.SourceSansBold
-    plrScoreLabel.TextSize = 16
-    plrScoreLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    plrScoreLabel.Size = UDim2.new(0.5, 0, 1, 0)
-    plrScoreLabel.BackgroundTransparency = 1
-    plrScoreLabel.Parent = scoreHolder
-
-    local dealerScoreLabel = Instance.new("TextLabel")
-    dealerScoreLabel.Text = "🎩 NHÀ CÁI: --"
-    dealerScoreLabel.Font = Enum.Font.SourceSansBold
-    dealerScoreLabel.TextSize = 16
-    dealerScoreLabel.TextColor3 = Color3.fromRGB(255, 200, 100)
-    dealerScoreLabel.Size = UDim2.new(0.5, 0, 1, 0)
-    dealerScoreLabel.Position = UDim2.new(0.5, 0, 0, 0)
-    dealerScoreLabel.BackgroundTransparency = 1
-    dealerScoreLabel.Parent = scoreHolder
-
-    -- Hero Action Button Badge
-    local heroBadge = Instance.new("Frame")
-    heroBadge.Name = "HeroBadge"
-    heroBadge.Size = UDim2.new(1, -20, 0, 42)
-    heroBadge.Position = UDim2.new(0, 10, 0, 90)
-    heroBadge.BackgroundColor3 = Color3.fromRGB(35, 40, 52)
-    heroBadge.BorderSizePixel = 0
-    heroBadge.Parent = mainCard
-
-    local heroCorner = Instance.new("UICorner")
-    heroCorner.CornerRadius = UDim.new(0, 8)
-    heroCorner.Parent = heroBadge
-
-    local heroStroke = Instance.new("UIStroke")
-    heroStroke.Name = "HeroStroke"
-    heroStroke.Color = Color3.fromRGB(0, 255, 180)
-    heroStroke.Thickness = 2
-    heroStroke.Parent = heroBadge
-
-    local heroLabel = Instance.new("TextLabel")
-    heroLabel.Name = "HeroLabel"
-    heroLabel.Text = "ĐANG ĐỌC BÀI..."
-    heroLabel.Font = Enum.Font.SourceSansBold
-    heroLabel.TextSize = 18
-    heroLabel.TextColor3 = Color3.fromRGB(0, 255, 180)
-    heroLabel.Size = UDim2.new(1, 0, 1, 0)
-    heroLabel.BackgroundTransparency = 1
-    heroLabel.Parent = heroBadge
-
-    -- Analytics Text
-    local analyticsLabel = Instance.new("TextLabel")
-    analyticsLabel.Text = "💥 Nguy cơ quắc: --% | 🎲 Nhà cái tự quắc: --%"
-    analyticsLabel.Font = Enum.Font.SourceSansSemibold
-    analyticsLabel.TextSize = 13
-    analyticsLabel.TextColor3 = Color3.fromRGB(200, 210, 230)
-    analyticsLabel.Size = UDim2.new(1, -20, 0, 20)
-    analyticsLabel.Position = UDim2.new(0, 10, 0, 138)
-    analyticsLabel.BackgroundTransparency = 1
-    analyticsLabel.Parent = mainCard
-
-    -- Tactical Reason Text
-    local reasonLabel = Instance.new("TextLabel")
-    reasonLabel.Text = "💡 Hãy ngồi vào bàn Spelldraw để nhận gợi ý chiến thuật."
-    reasonLabel.Font = Enum.Font.SourceSansItalic
-    reasonLabel.TextSize = 13
-    reasonLabel.TextColor3 = Color3.fromRGB(160, 220, 255)
-    reasonLabel.Size = UDim2.new(1, -20, 0, 50)
-    reasonLabel.Position = UDim2.new(0, 10, 0, 160)
-    reasonLabel.BackgroundTransparency = 1
-    reasonLabel.TextWrapped = true
-    reasonLabel.TextYAlignment = Enum.TextYAlignment.Top
-    reasonLabel.Parent = mainCard
-
-    sg.Parent = PlayerGui
-
-    SpelldrawHelper.screenGui = sg
-    SpelldrawHelper.uiRefs = {
-        mainCard = mainCard,
-        cardStroke = stroke,
-        plrScore = plrScoreLabel,
-        dealerScore = dealerScoreLabel,
-        heroBadge = heroBadge,
-        heroStroke = heroStroke,
-        heroLabel = heroLabel,
-        analytics = analyticsLabel,
-        reason = reasonLabel
-    }
-end
-
-RunService.RenderStepped:Connect(function()
-    if not Toggles.SpelldrawHelper or not Toggles.SpelldrawHelper.Value then
-        if SpelldrawHelper.screenGui then SpelldrawHelper.screenGui.Enabled = false end
-        if SpelldrawHelper.billboard then SpelldrawHelper.billboard.Enabled = false end
-        return
-    end
-
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    local spelldrawFolder = workspace:FindFirstChild("Mechanical") and workspace.Mechanical:FindFirstChild("Interactables") and workspace.Mechanical.Interactables:FindFirstChild("Spelldraw")
-    if not spelldrawFolder then return end
-
-    local nearestTable = nil
-    local shortestDist = 35
-
-    for _, t in ipairs(spelldrawFolder:GetChildren()) do
-        local main = t:FindFirstChild("Table") and t.Table:FindFirstChild("Main")
-        if main then
-            local dist = (hrp.Position - main.Position).Magnitude
-            if dist < shortestDist then
-                shortestDist = dist
-                nearestTable = t
-            end
-        end
-    end
-
-    if not nearestTable then
-        if SpelldrawHelper.screenGui then SpelldrawHelper.screenGui.Enabled = false end
-        if SpelldrawHelper.billboard then SpelldrawHelper.billboard.Enabled = false end
-        return
-    end
-
-    local plrCountPart = nearestTable:FindFirstChild("Table") and nearestTable.Table:FindFirstChild("PlrCount")
-    local dealerCountPart = nearestTable:FindFirstChild("Table") and nearestTable.Table:FindFirstChild("DealerCount")
-
-    local plrText = plrCountPart and plrCountPart:FindFirstChildWhichIsA("BillboardGui", true) and plrCountPart.BillboardGui:FindFirstChildWhichIsA("TextLabel", true)
-    local dealerText = dealerCountPart and dealerCountPart:FindFirstChildWhichIsA("BillboardGui", true) and dealerCountPart.BillboardGui:FindFirstChildWhichIsA("TextLabel", true)
-
-    local pScore = 0
-    local dScore = 0
-
-    if plrText then
-        local num = plrText.Text:match("(%d+)")
-        pScore = tonumber(num) or 0
-    end
-
-    if dealerText then
-        local num = dealerText.Text:match("(%d+)")
-        dScore = tonumber(num) or 0
-    end
-
-    if pScore > 0 or dScore > 0 then
-        initSpelldrawUI()
-        local data = analyzeBlackjackHand(pScore, dScore)
-
-        SpelldrawHelper.screenGui.Enabled = true
-        local refs = SpelldrawHelper.uiRefs
-        if refs then
-            refs.plrScore.Text = string.format("👤 ĐIỂM BẠN: %d", pScore)
-            refs.dealerScore.Text = string.format("🎩 NHÀ CÁI: %s", dScore > 0 and tostring(dScore) or "--")
-            refs.heroLabel.Text = data.action
-            refs.heroLabel.TextColor3 = data.badgeColor
-            refs.heroStroke.Color = data.badgeColor
-            refs.cardStroke.Color = data.badgeColor
-            refs.analytics.Text = string.format("💥 Nguy cơ quắc: %s | 🎲 Nhà cái tự quắc: %s", data.risk, data.dealerRisk)
-            refs.reason.Text = "💡 " .. data.reason
-        end
-
-        -- Update 3D Table Billboard
-        if not SpelldrawHelper.billboard or SpelldrawHelper.billboard.Parent ~= PlayerGui then
-            local bg = Instance.new("BillboardGui")
-            bg.Name = "SpelldrawTableAdvisor"
-            bg.AlwaysOnTop = true
-            bg.Size = UDim2.new(0, 240, 0, 60)
-            bg.StudsOffset = Vector3.new(0, 4, 0)
-
-            local frame = Instance.new("Frame")
-            frame.Size = UDim2.new(1, 0, 1, 0)
-            frame.BackgroundColor3 = Color3.fromRGB(15, 18, 24)
-            frame.BackgroundTransparency = 0.15
-            frame.BorderSizePixel = 0
-            frame.Parent = bg
-
-            local bCorner = Instance.new("UICorner")
-            bCorner.CornerRadius = UDim.new(0, 8)
-            bCorner.Parent = frame
-
-            local bStroke = Instance.new("UIStroke")
-            bStroke.Name = "BStroke"
-            bStroke.Thickness = 2
-            bStroke.Parent = frame
-
-            local bTitle = Instance.new("TextLabel")
-            bTitle.Text = "🃏 SPELLEDRAW ADVISOR"
-            bTitle.Font = Enum.Font.SourceSansBold
-            bTitle.TextSize = 13
-            bTitle.TextColor3 = Color3.fromRGB(0, 255, 200)
-            bTitle.Size = UDim2.new(1, 0, 0.4, 0)
-            bTitle.BackgroundTransparency = 1
-            bTitle.Parent = frame
-
-            local bAction = Instance.new("TextLabel")
-            bAction.Name = "BAction"
-            bAction.Font = Enum.Font.SourceSansBold
-            bAction.TextSize = 15
-            bAction.Size = UDim2.new(1, 0, 0.6, 0)
-            bAction.Position = UDim2.new(0, 0, 0.4, 0)
-            bAction.BackgroundTransparency = 1
-            bAction.Parent = frame
-
-            bg.Parent = PlayerGui
-            SpelldrawHelper.billboard = bg
-        end
-
-        local mainPart = nearestTable.Table.Main
-        SpelldrawHelper.billboard.Adornee = mainPart
-        SpelldrawHelper.billboard.Enabled = true
-
-        local f = SpelldrawHelper.billboard:FindFirstChildOfClass("Frame")
-        if f then
-            local actLabel = f:FindFirstChild("BAction")
-            local bStrk = f:FindFirstChild("BStroke")
-            if actLabel then
-                actLabel.Text = string.format("%s (Bạn: %d | Cái: %d)", data.action, pScore, dScore)
-                actLabel.TextColor3 = data.badgeColor
-            end
-            if bStrk then bStrk.Color = data.badgeColor end
-        end
-    else
-        if SpelldrawHelper.screenGui then SpelldrawHelper.screenGui.Enabled = false end
-        if SpelldrawHelper.billboard then SpelldrawHelper.billboard.Enabled = false end
-    end
-end)
 
 -- =============================================================================
 -- MOVEMENT CONTROLLER (FLY, NOCLIP, SPEEDHACK, CFRAME SPEED, INFINITE JUMP)
@@ -1355,10 +1198,10 @@ end)
 -- TELEPORT SUITE (ALL 35+ CLASS TRAINERS, TOWNS, MERCHANTS, AND LANDMARKS)
 -- =============================================================================
 local KeyLocations = {
-    -- Towns & Major Hubs
+    -- 🏛️ Towns & Major Hubs
     ["🏛️ Westwood Heart"] = Vector3.new(8327.3, 825.1, -5557.4),
     ["🌋 Caldera Town"] = Vector3.new(5091.2, 662.6, -4293.1),
-    ["🏜️ Desert"] = Vector3.new(2815.3, 634.6, -3924.6),
+    ["🏜️ Desert (Waving Sands)"] = Vector3.new(2815.3, 634.6, -3924.6),
     ["⚔️ Sanctuary of Blades"] = Vector3.new(2086.0, 386.8, -2978.3),
     ["⛪ Church (Heavens Point)"] = Vector3.new(831.6, 3436.9, -5602.3),
     ["🏛️ Forgotten Sanctum (Endgame)"] = Vector3.new(10831.2, 1581.7, -3463.6),
@@ -1366,47 +1209,60 @@ local KeyLocations = {
     ["🌌 Void Rift"] = Vector3.new(991.0, 41.4, 615.6),
     ["🏠 Memori's House"] = Vector3.new(11851.5, 1064.9, -1776.8),
     ["❄️ Icerift Approach"] = Vector3.new(5328.2, 742.7, -6530.2),
-    ["🌋 Volcano"] = Vector3.new(98.9, 577.0, -4115.9),
+    ["🌋 Volcano (Mount Thul)"] = Vector3.new(98.9, 577.0, -4115.9),
 
-    -- Base Class Trainers
-    ["⚔️ Trainer: Thorin (Warrior - Sword)"] = Vector3.new(4253.1, 653.8, -3369.2),
-    ["🔮 Trainer: June (Wizard - Magic / Staff)"] = Vector3.new(4903.8, 624.7, -4423.1),
-    ["🗡️ Trainer: Dusk (Thief - Dagger)"] = Vector3.new(5451.4, 660.9, -4309.0),
-    ["🥊 Trainer: Luther (Martial Artist - Fist)"] = Vector3.new(3496.5, 632.8, -3983.3),
-    ["🛡️ Trainer: Geron (Slayer - Spear / Greatsword)"] = Vector3.new(4448.3, 652.1, -3359.3),
-    ["🪓 Trainer: Cantia (Marauder - Axe)"] = Vector3.new(2845.8, 624.1, -3222.9),
+    -- ⚔️ Base Class Trainers (7)
+    ["⚔️ Base: Ysa (Warrior - Sword)"] = Vector3.new(5100.6, 658.2, -4072.0),
+    ["🔮 Base: Arandor (Wizard - Magic / Staff)"] = Vector3.new(5840.1, 727.0, -4790.1),
+    ["🗡️ Base: Boots (Thief - Dagger)"] = Vector3.new(4945.6, 658.6, -4121.4),
+    ["🥊 Base: Doran (Martial Artist - Fist / Cestus)"] = Vector3.new(5627.8, 703.8, -4336.9),
+    ["🛡️ Base: Tivek (Slayer - Spear)"] = Vector3.new(4473.3, 650.1, -5730.3),
+    ["🪓 Base: Geron (Marauder - Axe)"] = Vector3.new(4448.3, 652.1, -3359.3),
+    ["🛡️ Base: Lagolt (Sentry - Greatsword)"] = Vector3.new(4651.7, 718.7, -5574.9),
 
-    -- Super Class Trainers
-    ["✨ Trainer: Arandor (Paladin)"] = Vector3.new(5840.1, 727.0, -4790.1),
-    ["⚡ Trainer: Orin (Berserker)"] = Vector3.new(8043.9, 822.6, -5599.3),
-    ["🥷 Trainer: Diiz (Assassin)"] = Vector3.new(8066.4, 831.2, -5648.9),
-    ["🕊️ Trainer: Prelate Fyran (Cleric / Saint)"] = Vector3.new(8459.8, 822.4, -5885.1),
-    ["💀 Trainer: Ryzar Infelio (Necromancer)"] = Vector3.new(2134.9, 382.7, -2922.0),
-    ["🔥 Trainer: Thuriaz (Hexer / Chaos)"] = Vector3.new(2151.2, 519.8, -3394.1),
-    ["🥋 Trainer: Lagolt (Monk)"] = Vector3.new(4651.7, 718.7, -5574.9),
-    ["🏹 Trainer: Inette (Ranger)"] = Vector3.new(6699.0, 568.2, -3461.3),
-    ["🔱 Trainer: Fernain (Impaler)"] = Vector3.new(2296.1, 663.3, -4392.7),
-    ["🌪️ Trainer: Aberon (Elementalist)"] = Vector3.new(2800.0, 610.7, -4018.2),
-    ["🥊 Trainer: Leoran (Brawler)"] = Vector3.new(4995.5, 754.4, -6194.1),
-    ["🌑 Trainer: Relan (Dark Wraith)"] = Vector3.new(5322.2, 749.4, -6324.2),
-    ["🚩 Trainer: Landrum (Lancer)"] = Vector3.new(2473.2, 624.7, -3540.3),
-    ["⚔️ Trainer: Mael (Blade Dancer)"] = Vector3.new(414.1, 2858.0, -3020.1),
-    ["⚖️ Trainer: Thanasius (Arbiter)"] = Vector3.new(7680.4, 576.2, -2656.3),
-    ["🌟 Trainer: Seraphon (Saint Peak)"] = Vector3.new(13.9, 4741.6, -2113.1),
+    -- 🌟 Super Class Trainers (18)
+    ["✨ Super: Dernon (Paladin - Warrior)"] = Vector3.new(2813.0, 615.7, -3866.6),
+    ["⚔️ Super: Leoran (Blade Dancer - Warrior)"] = Vector3.new(4995.5, 754.4, -6194.1),
+    ["⚡ Super: Kayrein (Berserker - Warrior)"] = Vector3.new(11342.1, 1500.1, -3656.7),
+    ["🌪️ Super: Landrum (Elementalist - Wizard)"] = Vector3.new(2473.2, 624.7, -3540.3),
+    ["🔥 Super: Ophelia (Hexer - Wizard)"] = Vector3.new(4661.7, 651.7, -5236.5),
+    ["💀 Super: Ulys (Necromancer - Wizard)"] = Vector3.new(10847.3, 1589.0, -4091.8),
+    ["🏹 Super: Orkin (Ranger - Thief)"] = Vector3.new(8546.3, 822.7, -5544.1),
+    ["🗡️ Super: Aberon (Rogue - Thief)"] = Vector3.new(2800.0, 610.7, -4018.2),
+    ["🥷 Super: Inette (Assassin - Thief)"] = Vector3.new(6699.0, 568.2, -3461.3),
+    ["🥋 Super: Luther (Monk - Martial Artist)"] = Vector3.new(3496.5, 632.8, -3983.3),
+    ["🥊 Super: Gren (Brawler - Martial Artist)"] = Vector3.new(5170.9, 660.5, -4996.0),
+    ["🌑 Super: Momma Darkbeast (Darkwraith - Martial Artist)"] = Vector3.new(8122.6, 581.8, -2138.1),
+    ["🕊️ Super: Fernain (Saint - Slayer)"] = Vector3.new(2296.1, 663.3, -4392.7),
+    ["🚩 Super: Relan (Lancer - Slayer)"] = Vector3.new(5322.2, 749.4, -6324.2),
+    ["🔱 Super: Orin (Impaler - Slayer)"] = Vector3.new(8043.9, 822.6, -5599.3),
+    ["🦁 Super: Ardentis (Lionheart - Sentry/Marauder)"] = Vector3.new(474.5, 581.5, -4816.9),
+    ["🏰 Super: Nevithas (Citadel - Sentry/Marauder)"] = Vector3.new(71.9, 2765.7, -3266.4),
+    ["⚖️ Super: Kether (Arbiter - Sentry/Marauder)"] = Vector3.new(7821.2, 1279.8, 8480.1),
 
-    -- Ultra / Mastery / Soul Masters
-    ["❄️ Trainer: Ardentis (Cryomancer / Ice Mastery)"] = Vector3.new(474.5, 581.5, -4816.9),
-    ["👑 Trainer: Kether (Dark Realm Guardian)"] = Vector3.new(7821.2, 1279.8, 8480.1),
-    ["🦅 Trainer: Nevithas (Astraea Light Guardian)"] = Vector3.new(71.9, 2765.7, -3266.4),
-    ["🏺 Trainer: Staarun & Aderyn (Spirit Mastery)"] = Vector3.new(789.8, 238.0, 2120.8),
-    ["🔮 Trainer: The Soulmaster (Soul Awakening)"] = Vector3.new(-44.9, 574.8, -5467.4),
-    ["✨ Trainer: Aretim (True Soul / Resonance)"] = Vector3.new(789.8, 238.0, 2120.8),
-    ["💀 Trainer: Bone Man (Necromancy Quest)"] = Vector3.new(1397.0, 610.3, -4097.6),
+    -- 📜 Sub Class Trainers (5)
+    ["🎶 Sub: Cantia (Bard)"] = Vector3.new(2845.8, 624.1, -3222.9),
+    ["🐾 Sub: Thorin (Beastmaster)"] = Vector3.new(4253.1, 653.8, -3369.2),
+    ["🧪 Sub: Selia (Alchemist)"] = Vector3.new(8116.2, 822.5, -5456.4),
+    ["⚒️ Sub: Adelma (Blacksmith Subclass)"] = Vector3.new(-425.4, 2712.7, -3388.1),
+    ["⛏️ Sub: Vanio (Miner)"] = Vector3.new(7572.0, 593.2, -2674.0),
 
-    -- Town Merchants & Services
+    -- 🌟 Deities, Enchants & Quests (10)
+    ["💰 Deity: Lodyssa (God of Wealth / Midas)"] = Vector3.new(5213.0, 660.0, -4347.7),
+    ["💀 Quest: Dead King (Reaper Enchant)"] = Vector3.new(2623.8, 556.4, -4660.0),
+    ["🩸 Quest: Jyphar (Cursed Enchant)"] = Vector3.new(7246.1, 619.2, -4672.5),
+    ["🌌 Quest: El'heith (Astra)"] = Vector3.new(10883.0, 1573.4, -3489.5),
+    ["🔮 Master: The Soulmaster (Soul Awakening)"] = Vector3.new(-44.9, 574.8, -5467.4),
+    ["🏺 Spirit: Staarun & Aderyn (Spirit Domain)"] = Vector3.new(789.3, 233.0, 2053.5),
+    ["💀 Quest: Bone Man (Necromancy)"] = Vector3.new(1397.0, 610.3, -4097.6),
+    ["🌟 Peak: Seraphon (Heavens Point)"] = Vector3.new(13.9, 4741.6, -2113.1),
+    ["🔥 Chaos: Thuriaz (Chaos Path)"] = Vector3.new(2151.2, 519.8, -3394.1),
+    ["🕊️ Order: Prelate Fyran (Order Path)"] = Vector3.new(8459.8, 822.4, -5885.1),
+
+    -- ⚒️ Town Merchants & Services
     ["⚒️ Blacksmith (Westwood)"] = Vector3.new(8465.8, 821.8, -5589.8),
     ["⚒️ Blacksmith (Caldera)"] = Vector3.new(4921.8, 657.9, -4162.3),
-    ["⚒️ Blacksmith (Desert)"] = Vector3.new(2786.1, 620.0, -3840.0),
+    ["⚒️ Blacksmith (Sanctuary)"] = Vector3.new(2079.6, 382.7, -2903.1),
     ["💊 Doctor (Westwood)"] = Vector3.new(8079.1, 822.4, -5478.8),
     ["💊 Doctor (Caldera)"] = Vector3.new(5035.6, 658.1, -4407.9),
     ["💊 Doctor (Desert)"] = Vector3.new(2790.2, 615.7, -3837.2),
@@ -1414,6 +1270,9 @@ local KeyLocations = {
     ["💰 Banker (Caldera)"] = Vector3.new(5184.7, 657.7, -4266.2),
     ["🛒 Merchant (Westwood)"] = Vector3.new(8473.8, 823.6, -5906.5),
     ["🛒 Merchant (Caldera)"] = Vector3.new(5132.9, 658.0, -4124.2),
+    ["🌿 Apothecarian (Caldera)"] = Vector3.new(5131.5, 657.8, -4355.9),
+    ["🌿 Apothecarian (Westwood)"] = Vector3.new(8388.3, 822.9, -5904.8),
+    ["✨ Enchanter (Caldera)"] = Vector3.new(5045.7, 657.5, -4234.2),
 }
 
 local Teleporter = {
@@ -1608,15 +1467,16 @@ local Tabs = {
 }
 
 -- -----------------------------------------------------------------------------
--- TAB 1: AUTO FARM (CUSTOM WHITELIST & ADAPTABLE WEBHOOK)
+-- TAB 1: AUTO FARM (INGREDIENTS & ORE MINING)
 -- -----------------------------------------------------------------------------
-local FarmGroup = Tabs.AutoFarm:AddLeftGroupbox("Ingredient Auto Hunter")
-local HopGroup = Tabs.AutoFarm:AddRightGroupbox("Server Hop & Webhook")
+local FarmGroup = Tabs.AutoFarm:AddLeftGroupbox("🌿 Ingredient Auto Hunter")
+local MineGroup = Tabs.AutoFarm:AddLeftGroupbox("⛏️ Auto Mine Ores")
+local HopGroup  = Tabs.AutoFarm:AddRightGroupbox("🌐 Server Hop & Webhook")
 
 FarmGroup:AddToggle("AutoFarmCrylight", {
-    Text = "Enable Auto Farm",
+    Text = "Enable Ingredient Auto Farm",
     Default = false,
-    Tooltip = "Tự động quét Menu -> Vào game -> Bay Sky-Tween -> Lụm -> Đổi Server",
+    Tooltip = "Tự động quét Menu -> Vào game -> Bay Sky-Tween -> Thu hoạch nguyên liệu -> Đổi Server",
     Callback = function(Value)
         if Value then Farmer.runCycle() else Farmer.stop() end
     end
@@ -1626,11 +1486,11 @@ FarmGroup:AddDropdown("FarmItemsWhitelist", {
     Values = {
         "Crylight", "Cryastem", "Hightail", "Everthistle",
         "Carnastool", "Driproot", "Cursed Shroom", "Cursed Shroom 2",
-        "Mushrooms", "Bones", "Branch Pile", "Ferrus", "Aestic", "Laneus"
+        "Mushrooms", "Bones", "Branch Pile"
     },
     Default = { "Crylight" },
     Multi = true,
-    Text = "Farm Target Whitelist",
+    Text = "Ingredient Target Whitelist",
 })
 
 FarmGroup:AddToggle("AutoStart", {
@@ -1689,6 +1549,41 @@ FarmGroup:AddSlider("PickupTimeout", {
     Rounding = 1,
 })
 
+MineGroup:AddToggle("AutoMineOre", {
+    Text = "Enable Auto Mine Ores",
+    Default = false,
+    Tooltip = "Tự động kiểm tra Pickaxe -> Mua nếu thiếu -> Bay tới mỏ -> Tự đào khoáng",
+    Callback = function(Value)
+        if Value then Miner.runCycle() else Miner.stop() end
+    end
+})
+
+MineGroup:AddDropdown("MineOresWhitelist", {
+    Values = { "Ferrus", "Aestic", "Laneus" },
+    Default = { "Ferrus", "Aestic", "Laneus" },
+    Multi = true,
+    Text = "Target Ores to Mine",
+})
+
+MineGroup:AddToggle("AutoBuyPickaxe", {
+    Text = "Auto Buy Pickaxe if Missing (50g)",
+    Default = true,
+    Tooltip = "Nếu trong túi/balo chưa có cuốc, sẽ tự động bay tới Caldera để mua cuốc (50 Gold)",
+})
+
+MineGroup:AddSlider("MineTimeout", {
+    Text = "Mine Node Timeout (s)",
+    Default = 12,
+    Min = 3,
+    Max = 30,
+    Rounding = 0,
+})
+
+MineGroup:AddButton({
+    Text = "⛏️ Mine Ores Now",
+    Func = function() Miner.runCycle() end,
+})
+
 HopGroup:AddToggle("AutoServerHop", {
     Text = "Auto Server Hop",
     Default = false,
@@ -1731,69 +1626,53 @@ HopGroup:AddButton({
 })
 
 -- -----------------------------------------------------------------------------
--- TAB 2: AUTO COMBAT QTE & SPELLDRAW ADVISOR 2.0
 -- -----------------------------------------------------------------------------
-local MainQTEGroup = Tabs.AutoQTE:AddLeftGroupbox("General Combat")
-local WeaponGroup = Tabs.AutoQTE:AddRightGroupbox("Weapon Specials")
-local GambleGroup = Tabs.AutoQTE:AddLeftGroupbox("🃏 Spelldraw (Blackjack AI)")
+-- TAB 2: AUTO COMBAT QTE
+-- -----------------------------------------------------------------------------
+local CombatGroup = Tabs.AutoQTE:AddLeftGroupbox("⚡ Auto Combat & Minigames QTE")
 
-MainQTEGroup:AddToggle("MasterQTE", {
-    Text = "Enable Master Auto QTE",
-    Default = false,
+CombatGroup:AddToggle("MasterQTE", {
+    Text = "Enable Auto Combat QTE",
+    Default = true,
+    Tooltip = "Tự động giải và hoàn thành toàn bộ QTE khi chiến đấu / mở rương",
 })
 
-MainQTEGroup:AddToggle("AutoDodge", {
-    Text = "Auto Dodge / Block",
-    Default = false,
+CombatGroup:AddDropdown("EnabledQTEList", {
+    Values = {
+        "Auto Dodge / Block",
+        "Sword (Window Strike)",
+        "Dagger (Weakpoints)",
+        "Hammer (Power Bar)",
+        "Axe (Equilibrium)",
+        "Fist / Cestus (Combos)",
+        "Chest Lockpick"
+    },
+    Default = {
+        "Auto Dodge / Block",
+        "Sword (Window Strike)",
+        "Dagger (Weakpoints)",
+        "Hammer (Power Bar)",
+        "Axe (Equilibrium)",
+        "Fist / Cestus (Combos)",
+        "Chest Lockpick"
+    },
+    Multi = true,
+    Text = "Active QTE Minigames",
 })
 
-MainQTEGroup:AddToggle("PreferPerfectDodge", {
-    Text = "Prefer Perfect Dodge (Yellow Zone)",
-    Default = false,
+CombatGroup:AddToggle("PreferPerfectDodge", {
+    Text = "Prefer Perfect Dodge (100% Invuln)",
+    Default = true,
+    Tooltip = "Ưu tiên canh chuẩn ô Dodge (Né hoàn hảo 100% không mất máu), dự phòng Block",
 })
 
-MainQTEGroup:AddSlider("ReactionDelayMs", {
-    Text = "Human Reaction Delay (ms)",
+CombatGroup:AddSlider("ReactionDelayMs", {
+    Text = "Reaction Delay (ms)",
     Default = 0,
     Min = 0,
-    Max = 200,
+    Max = 150,
     Rounding = 0,
-})
-
-MainQTEGroup:AddToggle("AutoLockpick", {
-    Text = "Auto Chest Lockpick",
-    Default = false,
-})
-
-WeaponGroup:AddToggle("AutoSword", {
-    Text = "Auto Sword (Window Strike)",
-    Default = false,
-})
-
-WeaponGroup:AddToggle("AutoDagger", {
-    Text = "Auto Dagger (All Weakpoints)",
-    Default = false,
-})
-
-WeaponGroup:AddToggle("AutoHammer", {
-    Text = "Auto Hammer (Gauge Timing)",
-    Default = false,
-})
-
-WeaponGroup:AddToggle("AutoAxe", {
-    Text = "Auto Axe (Threshold Balance)",
-    Default = false,
-})
-
-WeaponGroup:AddToggle("AutoFist", {
-    Text = "Auto Fist / Cestus (Arrows)",
-    Default = false,
-})
-
-GambleGroup:AddToggle("SpelldrawHelper", {
-    Text = "Spelldraw AI Advisor (HUD 2.0)",
-    Default = false,
-    Tooltip = "Bảng nổi thông minh hiển thị hành động rõ ràng (Rút / Dừng), % Quắc và lời khuyên chiến thuật",
+    Tooltip = "Độ trễ mô phỏng phản xạ người chơi (0 = chuẩn xác tức thì)",
 })
 
 -- -----------------------------------------------------------------------------
@@ -1807,7 +1686,7 @@ FlyGroup:AddToggle("Fly", {
     Default = false,
     Tooltip = "Bay tự do theo hướng Camera (W/A/S/D + Space / Shift)",
 }):AddKeyPicker("FlyKeybind", {
-    Default = "X",
+    Default = "None",
     SyncToggleState = true,
     Mode = "Toggle",
     Text = "Fly Keybind",
@@ -1834,7 +1713,7 @@ FlyGroup:AddToggle("NoClip", {
     Text = "Enable NoClip (Walk Through Walls)",
     Default = false,
 }):AddKeyPicker("NoClipKeybind", {
-    Default = "V",
+    Default = "None",
     SyncToggleState = true,
     Mode = "Toggle",
     Text = "NoClip Keybind",
@@ -1845,7 +1724,7 @@ SpeedGroup:AddToggle("Speedhack", {
     Text = "Speedhack (Linear Velocity)",
     Default = false,
 }):AddKeyPicker("SpeedhackKeybind", {
-    Default = "B",
+    Default = "None",
     SyncToggleState = true,
     Mode = "Toggle",
     Text = "Speedhack Keybind",
@@ -1864,7 +1743,7 @@ SpeedGroup:AddToggle("CFrameSpeed", {
     Text = "CFrame Speed (Direct Bypass)",
     Default = false,
 }):AddKeyPicker("CFrameSpeedKeybind", {
-    Default = "N",
+    Default = "None",
     SyncToggleState = true,
     Mode = "Toggle",
     Text = "CFrame Speed Keybind",
@@ -1883,7 +1762,7 @@ SpeedGroup:AddToggle("InfiniteJump", {
     Text = "Infinite Jump (Hold Space)",
     Default = false,
 }):AddKeyPicker("InfJumpKeybind", {
-    Default = "J",
+    Default = "None",
     SyncToggleState = true,
     Mode = "Toggle",
     Text = "Infinite Jump Keybind",
@@ -2146,7 +2025,7 @@ ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 
 SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({ "MenuKeybind", "FlyKeybind", "NoClipKeybind", "SpeedhackKeybind", "CFrameSpeedKeybind", "InfJumpKeybind" })
+SaveManager:SetIgnoreIndexes({})
 
 ThemeManager:SetFolder("ArcaneHub")
 SaveManager:SetFolder("ArcaneHub/Configs")
@@ -2161,7 +2040,7 @@ MenuGroup:AddButton("Unload Script", function()
 end)
 
 MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", {
-    Default = "RightControl",
+    Default = "None",
     NoUI = true,
     Text = "Menu keybind"
 })
@@ -2177,4 +2056,7 @@ shared.ArcaneHub = Library
 
 if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then
     Farmer.runCycle()
+end
+if Toggles.AutoMineOre and Toggles.AutoMineOre.Value then
+    Miner.runCycle()
 end
