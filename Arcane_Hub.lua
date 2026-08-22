@@ -6,7 +6,7 @@
     • [Auto Farm Whitelist]: Fast Menu-Scan (Hops directly from MainMenu if 0 targets),
       Smooth anti-jitter 3-phase Sky-Tween flight (default 1500 Y), Auto-Harvest, Auto-ServerHop,
       Adaptable Multi-Item Discord Webhook Notifications.
-    • [Whole-Region Fake Crylight Blacklist]: Complete 2000+ studs bounding box & path filter for Desert Sanctum.
+    • [Desert & Sanctum Fake Item Blacklist]: Ignores Vastic Grave Desert Crylights & Sanctum Decoys.
     • [Auto Combat QTE]: Perfect Dodge 100%, Sword (100% single-click, 0.25s debounced sweet-spot precision),
       Dagger (100% dynamic arc-size weakpoint precision tracking), Hammer (PID Bang-Bang),
       Axe (Threshold Equilibrium), Fist/Cestus (Sequential combos),
@@ -90,19 +90,24 @@ local function pressKey(keyCode)
 end
 
 -- =============================================================================
--- TOÀN DIỆN BLACKLIST VẬT PHẨM GIẢ (WHOLE-REGION BOUNDING BOX & PATH FILTER)
+-- TOÀN DIỆN BLACKLIST VẬT PHẨM GIẢ (VASTIC GRAVE DESERT + FORGOTTEN SANCTUM)
 -- =============================================================================
 local function isBlacklistedCrylight(obj)
     if not Toggles.BlacklistDesert or not Toggles.BlacklistDesert.Value then return false end
     if not obj:IsA("Model") and not obj:IsA("BasePart") then return false end
     local pos = obj:GetPivot().Position
 
-    -- 1. Bounding box của toàn bộ khu vực Forgotten Sanctum / Desert Pyramid
+    -- 1. Khu vực Mộ Sa Mạc (Vastic Grave in Desert @ X: 1423, Y: 617, Z: -4468)
+    if (pos - Vector3.new(1423.0, 616.8, -4468.0)).Magnitude < 150 then
+        return true
+    end
+
+    -- 2. Bounding box của toàn bộ khu vực Forgotten Sanctum / Desert Pyramid
     if pos.X > 8800 and pos.Y > 1000 then
         return true
     end
 
-    -- 2. Khoảng cách toàn bộ cụm kim tự tháp / sanctum
+    -- 3. Khoảng cách toàn bộ cụm kim tự tháp / sanctum
     if (pos - Vector3.new(10831.2, 1581.7, -3463.6)).Magnitude < 2000 then
         return true
     end
@@ -110,9 +115,9 @@ local function isBlacklistedCrylight(obj)
         return true
     end
 
-    -- 3. Kiểm tra đường dẫn thư mục cha
+    -- 4. Kiểm tra đường dẫn thư mục cha
     local path = obj:GetFullName():lower()
-    if path:find("forgotten") or path:find("sanctum") or path:find("pyramid") or path:find("dungeon") then
+    if path:find("vastic") or path:find("grave") or path:find("forgotten") or path:find("sanctum") or path:find("pyramid") or path:find("dungeon") or path:find("menu") then
         return true
     end
 
@@ -1398,9 +1403,9 @@ FarmGroup:AddToggle("AutoSkipIntro", {
 })
 
 FarmGroup:AddToggle("BlacklistDesert", {
-    Text = "Ignore Desert Fake Crylights (Whole Region)",
+    Text = "Ignore Desert Fake Crylights (Vastic Grave & Sanctum)",
     Default = false,
-    Tooltip = "Loại bỏ hoàn toàn toàn bộ Crylight giả trong khu vực Sa mạc / Forgotten Sanctum",
+    Tooltip = "Loại bỏ hoàn toàn toàn bộ Crylight giả trong khu vực Sa mạc (Vastic Grave) & Forgotten Sanctum",
 })
 
 FarmGroup:AddSlider("SkyHeight", {
