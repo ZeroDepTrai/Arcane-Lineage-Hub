@@ -45,7 +45,8 @@ Frostburned Rune       | Gear     | 15.0%  | 22.5%       | 52.5%
 Chronos                | Artifact |  8.0%  | 12.0%       | 28.0%
 Narthana's Sigil       | Artifact | 10.0%  | 15.0%       | 35.0%
 Shifting Hourglass     | Artifact | 12.0%  | 18.0%       | 42.0%
-Soul Dust / Frag       | Resource | 40.0%  | 60.0%       | 100.0% (Guaranteed)
+Trait Orbs (T1 & T2)   | Orb      | 35.0%  | 52.5%       | 100.0% (Guaranteed)
+Soul Dust / Mem. Frag  | Resource | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 -----------------------+----------+--------+-------------+------------------
 Special: Unlocks quest for MIDAS ENCHANT at NPC Lodyssa (Caldera Inn)
 ================================================================================
@@ -67,7 +68,8 @@ Tainted Quiver         | Gear     | 15.0%  | 22.5%       | 52.5%
 Dark Sigil             | Artifact | 10.0%  | 15.0%       | 35.0%
 Metroms Amulet         | Artifact | 10.0%  | 15.0%       | 35.0%
 Stellian Core          | Artifact |  8.0%  | 12.0%       | 28.0%
-Soul Dust / Frag       | Resource | 40.0%  | 60.0%       | 100.0% (Guaranteed)
+Trait Orbs (T1 & T2)   | Orb      | 35.0%  | 52.5%       | 100.0% (Guaranteed)
+Soul Dust / Mem. Frag  | Resource | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 ================================================================================
 ```
 
@@ -87,6 +89,7 @@ Divine Promise         | Gear     | 20.0%  | 30.0%       | 70.0%
 Focused Mind           | Gear     | 20.0%  | 30.0%       | 70.0%
 Heaven's Authority     | Artifact |  6.0%  |  9.0%       | 22.0%
 Stellian Core          | Artifact | 10.0%  | 15.0%       | 35.0%
+Trait Orbs (T1 & T2)   | Orb      | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 Void Key (Corrupted)   | Raid Key | 25.0%  | 37.5%       | 87.5% - 100%
 -----------------------+----------+--------+-------------+------------------
 Special: Rapheon's Blessing (BLESSED ENCHANT) at Covenant Rank 20
@@ -110,6 +113,7 @@ Frostburned Rune       | Gear     | 15.0%  | 22.5%       | 52.5%
 Arkhaia's Visage       | Artifact |  6.0%  |  9.0%       | 22.0%
 Dark Sigil             | Artifact | 10.0%  | 15.0%       | 35.0%
 Metroms Amulet         | Artifact | 10.0%  | 15.0%       | 35.0%
+Trait Orbs (T1 & T2)   | Orb      | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 Void Key (Corrupted)   | Raid Key | 25.0%  | 37.5%       | 87.5% - 100%
 -----------------------+----------+--------+-------------+------------------
 Special: Arkhaia's Curse (SPECTRAL ENCHANT) at Covenant Rank 20
@@ -130,8 +134,8 @@ Darkblood Weapons (x8) | Weapon   | 25.0%  | 37.5%       | 87.5% - 100%
 Vainglorious Locket    | Gear     | 20.0%  | 30.0%       | 70.0%
 Chaos Orb              | Artifact | 10.0%  | 15.0%       | 35.0%
 Lost Scroll: M. Grasp  | Scroll   |  5.0%  |  7.5%       | 18.0% - 20%
+Tier 2 Trait Orbs (x2) | Orb      | 50.0%  | 75.0%       | 100.0% (Guaranteed)
 Pure Arcanium Shards   | Shard    | 40.0%  | 60.0%       | 100.0% (Guaranteed)
-Tier 2 Trait Orbs      | Orb      | 50.0%  | 75.0%       | 100.0% (Guaranteed)
 ================================================================================
 ```
 
@@ -153,6 +157,7 @@ Dust Devil's Eye       | Gear     | 15.0%  | 22.5%       | 52.5%
 Open Hand              | Gear     | 20.0%  | 30.0%       | 70.0%
 Paranoxian Crux        | Artifact | 10.0%  | 15.0%       | 35.0%
 Ancient Insignia       | Artifact | 10.0%  | 15.0%       | 35.0%
+Trait Orbs (T1 & T2)   | Orb      | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 -----------------------+----------+--------+-------------+------------------
 Special: Unlocks HIEMAL ENCHANT via NPC Thurisaz (Corrupted State Defeat)
 ================================================================================
@@ -170,14 +175,19 @@ MINI-BOSS      | LOCATION         | HP       | EXCLUSIVE DROPS & GEARS
 ---------------+------------------+----------+----------------------------------
 Slime King     | Caldera Forest   | 400 HP   | • Gelat Band (Summon Slime 35 HP)
                |                  |          | • Slime Shield (Unique Weapon)
+               |                  |          | • Tier 1 Trait Orbs (~25%)
 ---------------+------------------+----------+----------------------------------
 Carnis         | Deeproot Depths  | 380 HP   | • Tear Blood Crystal (+5% Def/Crit)
+               |                  |          | • Tier 1 Trait Orbs (~25%)
 ---------------+------------------+----------+----------------------------------
 Pterathanaian  | Deeproot Depths  | 2,500 HP | • Ptera's Heart (Auto Poison Field)
                |                  |          | • DeathBeak Dagger (Crit Projectile)
+               |                  |          | • Tier 1 & 2 Trait Orbs (~35%)
 ---------------+------------------+----------+----------------------------------
 Magma Golem    | Volcano          | 600 HP   | • Blazing Brand (Summon Thorns + Burn)
+               |                  |          | • Tier 1 Trait Orbs (~20%)
 ---------------+------------------+----------+----------------------------------
 Lava Crab      | Volcano          | 450 HP   | • Molten Carapace (+30% Def under 40%)
+               |                  |          | • Tier 1 Trait Orbs (~20%)
 ================================================================================
 ```
