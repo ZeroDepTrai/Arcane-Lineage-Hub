@@ -568,7 +568,6 @@ local function handleSwordQTE(swordQTE)
     local window = inset:FindFirstChild("Window")
     if not window or not window.Visible then return end
 
-    -- Tìm indicator có chỉ số nhỏ nhất CHƯA TỪNG BỊ CLICK
     local currentActiveInd = nil
     local lowestIndex = math.huge
 
@@ -597,7 +596,7 @@ local function handleSwordQTE(swordQTE)
     end
 
     if isHit then
-        AutoQTE.swordHitIndices[lowestIndex] = true -- ĐÁNH DẤU CHỈ SỐ NÀY ĐÃ BẤM -> KHÔNG BAO GIỜ BẤM LẦN 2!
+        AutoQTE.swordHitIndices[lowestIndex] = true
         AutoQTE.lastSwordHit = os.clock()
         local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
         if delayMs > 0 then task.wait(delayMs / 1000) end
@@ -625,9 +624,8 @@ local function handleDaggerQTE(daggerQTE)
             if diff < 0 then diff = diff + 360 end
             if diff > 180 then diff = diff - 360 end
 
-            -- Bullseye window: Trong khoảng 7 độ tính từ tâm weakpoint (luôn trúng 100% kể cả weakpoint nhỏ nhất 20 độ)
             if math.abs(diff) <= 7 then
-                AutoQTE.hitWeakpoints[wp] = true -- Đánh dấu weakpoint này đã xử lý xong
+                AutoQTE.hitWeakpoints[wp] = true
                 local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
                 if delayMs > 0 then task.wait(delayMs / 1000) end
                 if stopBtn then safeClick(stopBtn) else pressKey(Enum.KeyCode.Space) end
@@ -932,32 +930,39 @@ local KeyLocations = {
     ["🌋 Volcano"] = Vector3.new(98.9, 577.0, -4115.9),
 
     -- Base Class Trainers
-    ["⚔️ Trainer: Thorin (Warrior)"] = Vector3.new(4253.1, 653.8, -3369.2),
-    ["🔮 Trainer: June (Mage / Elementalist)"] = Vector3.new(4903.8, 624.7, -4423.1),
-    ["🗡️ Trainer: Dusk (Thief / Rogue)"] = Vector3.new(5451.4, 660.9, -4309.0),
-    ["🥊 Trainer: Luther (Martial Artist / Fist)"] = Vector3.new(3496.5, 632.8, -3983.3),
-    ["🛡️ Trainer: Geron (Slayer / Fighter)"] = Vector3.new(4448.3, 652.1, -3359.3),
+    ["⚔️ Trainer: Thorin (Warrior - Sword)"] = Vector3.new(4253.1, 653.8, -3369.2),
+    ["🔮 Trainer: June (Wizard - Magic / Staff)"] = Vector3.new(4903.8, 624.7, -4423.1),
+    ["🗡️ Trainer: Dusk (Thief - Dagger)"] = Vector3.new(5451.4, 660.9, -4309.0),
+    ["🥊 Trainer: Luther (Martial Artist - Fist)"] = Vector3.new(3496.5, 632.8, -3983.3),
+    ["🛡️ Trainer: Geron (Slayer - Spear / Greatsword)"] = Vector3.new(4448.3, 652.1, -3359.3),
+    ["🪓 Trainer: Cantia (Marauder - Axe)"] = Vector3.new(2845.8, 624.1, -3222.9),
 
-    -- Super & Ultra Class Trainers
+    -- Super Class Trainers
     ["✨ Trainer: Arandor (Paladin)"] = Vector3.new(5840.1, 727.0, -4790.1),
     ["⚡ Trainer: Orin (Berserker)"] = Vector3.new(8043.9, 822.6, -5599.3),
     ["🥷 Trainer: Diiz (Assassin)"] = Vector3.new(8066.4, 831.2, -5648.9),
     ["🕊️ Trainer: Prelate Fyran (Cleric / Saint)"] = Vector3.new(8459.8, 822.4, -5885.1),
     ["💀 Trainer: Ryzar Infelio (Necromancer)"] = Vector3.new(2134.9, 382.7, -2922.0),
-    ["🔥 Trainer: Thuriaz (Chaos / Hexer)"] = Vector3.new(2151.2, 519.8, -3394.1),
+    ["🔥 Trainer: Thuriaz (Hexer / Chaos)"] = Vector3.new(2151.2, 519.8, -3394.1),
+    ["🥋 Trainer: Lagolt (Monk)"] = Vector3.new(4651.7, 718.7, -5574.9),
+    ["🏹 Trainer: Inette (Ranger)"] = Vector3.new(6699.0, 568.2, -3461.3),
+    ["🔱 Trainer: Fernain (Impaler)"] = Vector3.new(2296.1, 663.3, -4392.7),
+    ["🌪️ Trainer: Aberon (Elementalist)"] = Vector3.new(2800.0, 610.7, -4018.2),
+    ["🥊 Trainer: Leoran (Brawler)"] = Vector3.new(4995.5, 754.4, -6194.1),
+    ["🌑 Trainer: Relan (Dark Wraith)"] = Vector3.new(5322.2, 749.4, -6324.2),
+    ["🚩 Trainer: Landrum (Lancer)"] = Vector3.new(2473.2, 624.7, -3540.3),
+    ["⚔️ Trainer: Mael (Blade Dancer)"] = Vector3.new(414.1, 2858.0, -3020.1),
+    ["⚖️ Trainer: Thanasius (Arbiter)"] = Vector3.new(7680.4, 576.2, -2656.3),
     ["🌟 Trainer: Seraphon (Saint Peak)"] = Vector3.new(13.9, 4741.6, -2113.1),
-    ["🪞 Trainer: Thanasius"] = Vector3.new(7680.4, 576.2, -2656.3),
-    ["🏺 Trainer: Staarun & Aderyn"] = Vector3.new(789.8, 238.0, 2120.8),
-    ["🦅 Trainer: Nevithas (Astraea)"] = Vector3.new(71.9, 2765.7, -3266.4),
-    ["👑 Trainer: Kether (Dark Realm)"] = Vector3.new(7821.2, 1279.8, 8480.1),
-    ["🏹 Trainer: Inette"] = Vector3.new(6699.0, 568.2, -3461.3),
-    ["🌿 Trainer: Fernain"] = Vector3.new(2296.1, 663.3, -4392.7),
-    ["🍃 Trainer: Aberon"] = Vector3.new(2800.0, 610.7, -4018.2),
-    ["🛡️ Trainer: Lagolt"] = Vector3.new(4651.7, 718.7, -5574.9),
-    ["🐉 Trainer: Leoran"] = Vector3.new(4995.5, 754.4, -6194.1),
-    ["⚔️ Trainer: Relan"] = Vector3.new(5322.2, 749.4, -6324.2),
-    ["💎 Trainer: Ardentis"] = Vector3.new(474.5, 581.5, -4816.9),
-    ["💀 Trainer: Bone Man"] = Vector3.new(1397.0, 610.3, -4097.6),
+
+    -- Ultra / Mastery / Soul Masters
+    ["❄️ Trainer: Ardentis (Cryomancer / Ice Mastery)"] = Vector3.new(474.5, 581.5, -4816.9),
+    ["👑 Trainer: Kether (Dark Realm Guardian)"] = Vector3.new(7821.2, 1279.8, 8480.1),
+    ["🦅 Trainer: Nevithas (Astraea Light Guardian)"] = Vector3.new(71.9, 2765.7, -3266.4),
+    ["🏺 Trainer: Staarun & Aderyn (Spirit Mastery)"] = Vector3.new(789.8, 238.0, 2120.8),
+    ["🔮 Trainer: The Soulmaster (Soul Awakening)"] = Vector3.new(-44.9, 574.8, -5467.4),
+    ["✨ Trainer: Aretim (True Soul / Resonance)"] = Vector3.new(789.8, 238.0, 2120.8),
+    ["💀 Trainer: Bone Man (Necromancy Quest)"] = Vector3.new(1397.0, 610.3, -4097.6),
 
     -- Town Merchants & Services
     ["⚒️ Blacksmith (Westwood)"] = Vector3.new(8465.8, 821.8, -5589.8),
