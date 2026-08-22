@@ -73,6 +73,8 @@ local AutoQTE = {
     lastAxePress = 0,
     lastFistHit = 0,
     lastSpearHit = 0,
+    swordHitIndices = {},
+    hitWeakpoints = {},
 }
 
 -- 1. XỬ LÝ DODGE QTE (NÉ TRÁNH HOÀN HẢO)
@@ -118,13 +120,13 @@ local function handleSwordQTE(swordQTE)
     local window = inset:FindFirstChild("Window")
     if not window or not window.Visible then return end
 
-    -- Tìm đúng Indicator hiện tại mà game đang chờ (chỉ số nhỏ nhất chưa bị dừng)
+    -- Tìm đúng Indicator có chỉ số nhỏ nhất CHƯA TỪNG BỊ CLICK
     local currentActiveInd = nil
     local lowestIndex = math.huge
 
     for _, child in ipairs(inset:GetChildren()) do
         local idx = tonumber(child.Name)
-        if idx and idx < lowestIndex and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.6 then
+        if idx and not AutoQTE.swordHitIndices[idx] and idx < lowestIndex and child:IsA("GuiObject") and child.Visible then
             lowestIndex = idx
             currentActiveInd = child
         end
@@ -132,47 +134,46 @@ local function handleSwordQTE(swordQTE)
 
     if not currentActiveInd then return end
 
-    local indCenter = currentActiveInd.AbsolutePosition.X + (currentActiveInd.AbsoluteSize.X / 2)
+    local indLeft = currentActiveInd.AbsolutePosition.X
+    local indWidth = currentActiveInd.AbsoluteSize.X
+    local indCenter = indLeft + (indWidth / 2)
+
     local winMin = window.AbsolutePosition.X
     local winMax = winMin + window.AbsoluteSize.X
 
-    -- Chỉ kích hoạt khi chính con trỏ hiện tại này lọt vào trong ô Window
-    if indCenter >= (winMin + 2) and indCenter <= (winMax - 2) then
-        local now = os.clock()
-        if now - AutoQTE.lastSwordHit > 0.2 then
-            AutoQTE.lastSwordHit = now
-            if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
-            safeClick(stopBtn)
-        end
+    if indCenter >= (winMin + 3) and indCenter <= (winMax - 3) then
+        AutoQTE.swordHitIndices[lowestIndex] = true
+        AutoQTE.lastSwordHit = os.clock()
+        if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
+        safeClick(stopBtn)
     end
 end
 
 -- 3. XỬ LÝ DAGGER QTE (DAO GĂM)
 local function handleDaggerQTE(daggerQTE)
-    if not Config.AutoDagger or not daggerQTE or not daggerQTE.Visible then return end
+    if not Config.AutoDagger or not daggerQTE or not daggerQTE.Visible then
+        AutoQTE.hitWeakpoints = {}
+        return
+    end
     local stopBtn = daggerQTE:FindFirstChild("Stop")
     local activeRing = daggerQTE:FindFirstChild("ActiveRing")
     if not activeRing then return end
 
-    local ringRot = -activeRing.Rotation % 360
-    if ringRot < 0 then ringRot = ringRot + 360 end
+    local targetAngle = -activeRing.Rotation % 360
+    if targetAngle < 0 then targetAngle = targetAngle + 360 end
 
     for _, wp in ipairs(activeRing:GetChildren()) do
-        if wp.Name == "Weakpoint" and wp:IsA("GuiObject") and wp.ImageTransparency < 0.8 then
+        if wp.Name == "Weakpoint" and wp:IsA("GuiObject") and not AutoQTE.hitWeakpoints[wp] and wp.ImageTransparency < 0.3 then
             local wpAngle = wp.Rotation % 360
-            local diff = (ringRot - wpAngle) % 360
+            local diff = (targetAngle - wpAngle) % 360
             if diff < 0 then diff = diff + 360 end
             if diff > 180 then diff = diff - 360 end
 
-            if math.abs(diff) <= 18 then
-                local now = os.clock()
-                if now - AutoQTE.lastDaggerHit > 0.04 then
-                    AutoQTE.lastDaggerHit = now
-                    if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
-                    if stopBtn then safeClick(stopBtn) end
-                    pressKey(Enum.KeyCode.Space)
-                    break
-                end
+            if math.abs(diff) <= 7 then
+                AutoQTE.hitWeakpoints[wp] = true
+                if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
+                if stopBtn then safeClick(stopBtn) else pressKey(Enum.KeyCode.Space) end
+                break
             end
         end
     end

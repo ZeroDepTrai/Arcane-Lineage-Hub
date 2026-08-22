@@ -6,8 +6,9 @@
     • [Auto Farm Whitelist]: Fast Menu-Scan (Hops directly from MainMenu if 0 targets),
       Smooth anti-jitter 3-phase Sky-Tween flight (default 1500 Y), Auto-Harvest, Auto-ServerHop,
       Adaptable Multi-Item Discord Webhook Notifications.
-    • [Auto Combat QTE]: Perfect Dodge 100%, Sword (no double-tap bug), Dagger (all weakpoints),
-      Hammer (PID Bang-Bang), Axe (Threshold Equilibrium), Fist/Cestus (Sequential combos),
+    • [Auto Combat QTE]: Perfect Dodge 100%, Sword (100% single-hit index tracking),
+      Dagger (100% precision bullseye angle tracking), Hammer (PID Bang-Bang),
+      Axe (Threshold Equilibrium), Fist/Cestus (Sequential combos),
       Spear (Active Button Clicker), Chest Lockpicking.
     • [Movement Suite with Keybinds]: Fly Hack (X), NoClip (V), Velocity Speedhack (B),
       CFrame Speed Bypass (N), Infinite Jump Boost (J) with LinoriaLib Keybind Pickers.
@@ -406,15 +407,12 @@ local function flyToItem(targetPosition)
     local currentPos = root.Position
     local skyY = math.max(skyHeight, currentPos.Y + 200, targetPosition.Y + 200)
 
-    -- Phase 1: Bay thẳng đứng lên trời cao 1500 Y
     local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), ascendSpeed, function() return Farmer.running end)
     if not s1 or not Farmer.running then return false end
 
-    -- Phase 2: Bay ngang trên không trung tới ngay trên đầu nguyên liệu
     local s2 = smoothTweenTo(CFrame.new(targetPosition.X, skyY, targetPosition.Z), cruiseSpeed, function() return Farmer.running end)
     if not s2 or not Farmer.running then return false end
 
-    -- Phase 3: Hạ cánh thẳng đứng xuống cách nguyên liệu 3.5 studs
     local s3 = smoothTweenTo(CFrame.new(targetPosition.X, targetPosition.Y + 3.5, targetPosition.Z), descendSpeed, function() return Farmer.running end)
     return s3
 end
@@ -477,7 +475,6 @@ function Farmer.runCycle()
                 end
             end
 
-            -- Bay ngược lên trời an toàn sau khi nhặt xong
             local char = LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
             if root and Farmer.running then
@@ -513,7 +510,7 @@ function Farmer.stop()
 end
 
 -- =============================================================================
--- AUTO COMBAT QTE ENGINE
+-- AUTO COMBAT QTE ENGINE (WITH BULLETPROOF HIT TRACKING)
 -- =============================================================================
 local AutoQTE = {
     lastDodgeHit = 0,
@@ -522,8 +519,11 @@ local AutoQTE = {
     isHammerHolding = false,
     lastAxePress = 0,
     lastFistHit = 0,
+    swordHitIndices = {},
+    hitWeakpoints = {},
 }
 
+-- 1. DODGE QTE (PERFECT DODGE 100% / BLOCK)
 local function handleDodgeQTE(dodgeQTE)
     if not Toggles.AutoDodge or not Toggles.AutoDodge.Value or not dodgeQTE or not dodgeQTE.Visible then return end
     local inset = dodgeQTE:FindFirstChild("Inset")
@@ -555,8 +555,12 @@ local function handleDodgeQTE(dodgeQTE)
     end
 end
 
+-- 2. SWORD QTE (PERFECT WINDOW STRIKE - 100% SINGLE-HIT INDEX TRACKING)
 local function handleSwordQTE(swordQTE)
-    if not Toggles.AutoSword or not Toggles.AutoSword.Value or not swordQTE or not swordQTE.Visible then return end
+    if not Toggles.AutoSword or not Toggles.AutoSword.Value or not swordQTE or not swordQTE.Visible then
+        AutoQTE.swordHitIndices = {}
+        return
+    end
     local inset = swordQTE:FindFirstChild("Inset")
     local stopBtn = swordQTE:FindFirstChild("Stop")
     if not inset or not stopBtn then return end
@@ -564,12 +568,13 @@ local function handleSwordQTE(swordQTE)
     local window = inset:FindFirstChild("Window")
     if not window or not window.Visible then return end
 
+    -- Tìm indicator có chỉ số nhỏ nhất CHƯA TỪNG BỊ CLICK
     local currentActiveInd = nil
     local lowestIndex = math.huge
 
     for _, child in ipairs(inset:GetChildren()) do
         local idx = tonumber(child.Name)
-        if idx and idx < lowestIndex and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.6 then
+        if idx and not AutoQTE.swordHitIndices[idx] and idx < lowestIndex and child:IsA("GuiObject") and child.Visible then
             lowestIndex = idx
             currentActiveInd = child
         end
@@ -577,58 +582,62 @@ local function handleSwordQTE(swordQTE)
 
     if not currentActiveInd then return end
 
-    local indCenter = currentActiveInd.AbsolutePosition.X + (currentActiveInd.AbsoluteSize.X / 2)
+    local indLeft = currentActiveInd.AbsolutePosition.X
+    local indWidth = currentActiveInd.AbsoluteSize.X
+    local indCenter = indLeft + (indWidth / 2)
+
     local winMin = window.AbsolutePosition.X
     local winMax = winMin + window.AbsoluteSize.X
 
     local isHit = false
     if GuiCollisionService and GuiCollisionService.isColliding then
-        isHit = GuiCollisionService.isColliding(currentActiveInd, window) and (indCenter >= winMin + 2 and indCenter <= winMax - 2)
+        isHit = GuiCollisionService.isColliding(currentActiveInd, window) and (indCenter >= winMin + 3 and indCenter <= winMax - 3)
     else
-        isHit = (indCenter >= winMin + 2 and indCenter <= winMax - 2)
+        isHit = (indCenter >= winMin + 3 and indCenter <= winMax - 3)
     end
 
     if isHit then
-        local now = os.clock()
-        if now - AutoQTE.lastSwordHit > 0.2 then
-            AutoQTE.lastSwordHit = now
-            local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
-            if delayMs > 0 then task.wait(delayMs / 1000) end
-            safeClick(stopBtn)
-        end
+        AutoQTE.swordHitIndices[lowestIndex] = true -- ĐÁNH DẤU CHỈ SỐ NÀY ĐÃ BẤM -> KHÔNG BAO GIỜ BẤM LẦN 2!
+        AutoQTE.lastSwordHit = os.clock()
+        local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
+        if delayMs > 0 then task.wait(delayMs / 1000) end
+        safeClick(stopBtn)
     end
 end
 
+-- 3. DAGGER QTE (BULLSEYE PRECISION WEAKPOINT TRACKING)
 local function handleDaggerQTE(daggerQTE)
-    if not Toggles.AutoDagger or not Toggles.AutoDagger.Value or not daggerQTE or not daggerQTE.Visible then return end
+    if not Toggles.AutoDagger or not Toggles.AutoDagger.Value or not daggerQTE or not daggerQTE.Visible then
+        AutoQTE.hitWeakpoints = {}
+        return
+    end
     local stopBtn = daggerQTE:FindFirstChild("Stop")
     local activeRing = daggerQTE:FindFirstChild("ActiveRing")
     if not activeRing then return end
 
-    local ringRot = -activeRing.Rotation % 360
-    if ringRot < 0 then ringRot = ringRot + 360 end
+    local targetAngle = -activeRing.Rotation % 360
+    if targetAngle < 0 then targetAngle = targetAngle + 360 end
 
     for _, wp in ipairs(activeRing:GetChildren()) do
-        if wp.Name == "Weakpoint" and wp:IsA("GuiObject") and wp.ImageTransparency < 0.8 then
+        if wp.Name == "Weakpoint" and wp:IsA("GuiObject") and not AutoQTE.hitWeakpoints[wp] and wp.ImageTransparency < 0.3 then
             local wpAngle = wp.Rotation % 360
-            local diff = (ringRot - wpAngle) % 360
+            local diff = (targetAngle - wpAngle) % 360
             if diff < 0 then diff = diff + 360 end
             if diff > 180 then diff = diff - 360 end
 
-            if math.abs(diff) <= 18 then
-                local now = os.clock()
-                if now - AutoQTE.lastDaggerHit > 0.04 then
-                    AutoQTE.lastDaggerHit = now
-                    local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
-                    if delayMs > 0 then task.wait(delayMs / 1000) end
-                    if stopBtn then safeClick(stopBtn) else pressKey(Enum.KeyCode.Space) end
-                    break
-                end
+            -- Bullseye window: Trong khoảng 7 độ tính từ tâm weakpoint (luôn trúng 100% kể cả weakpoint nhỏ nhất 20 độ)
+            if math.abs(diff) <= 7 then
+                AutoQTE.hitWeakpoints[wp] = true -- Đánh dấu weakpoint này đã xử lý xong
+                local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
+                if delayMs > 0 then task.wait(delayMs / 1000) end
+                if stopBtn then safeClick(stopBtn) else pressKey(Enum.KeyCode.Space) end
+                break
             end
         end
     end
 end
 
+-- 4. HAMMER QTE (HOLD/RELEASE SPACE PID CONTROLLER)
 local function handleHammerQTE(hammerQTE)
     if not Toggles.AutoHammer or not Toggles.AutoHammer.Value or not hammerQTE or not hammerQTE.Visible then
         if AutoQTE.isHammerHolding then
@@ -669,6 +678,7 @@ local function handleHammerQTE(hammerQTE)
     end
 end
 
+-- 5. AXE QTE (THRESHOLD EQUILIBRIUM TAPPER)
 local function handleAxeQTE(axeQTE)
     if not Toggles.AutoAxe or not Toggles.AutoAxe.Value or not axeQTE or not axeQTE.Visible then return end
     local gauge = axeQTE:FindFirstChild("Gauge")
@@ -694,6 +704,7 @@ local function handleAxeQTE(axeQTE)
     end
 end
 
+-- 6. FIST / CESTUS QTE (SEQUENTIAL COMBO ARROWS)
 local function handleFistQTE(fistQTE)
     if not Toggles.AutoFist or not Toggles.AutoFist.Value or not fistQTE or not fistQTE.Visible then return end
     local keyHolder = fistQTE:FindFirstChild("KeyHolder") or fistQTE:FindFirstChild("Inset")
@@ -745,6 +756,7 @@ local function handleFistQTE(fistQTE)
     end
 end
 
+-- 7. SPEAR QTE (ACTIVE TAP AUTOCLICKER)
 local function handleSpearQTE(spearQTE)
     if not spearQTE or not spearQTE.Visible then return end
     local container = spearQTE:FindFirstChild("Container")
@@ -761,6 +773,7 @@ local function handleSpearQTE(spearQTE)
     end
 end
 
+-- 8. LOCKPICK QTE (CHEST UNLOCKER)
 local function handleLockpickQTE(lockpickQTE)
     if not Toggles.AutoLockpick or not Toggles.AutoLockpick.Value or not lockpickQTE or not lockpickQTE.Visible then return end
     local stopBtn = lockpickQTE:FindFirstChild("Stop", true) or lockpickQTE:FindFirstChildWhichIsA("TextButton", true)
@@ -986,7 +999,6 @@ local function teleportToLocation(targetPos)
         local currentPos = root.Position
         local skyY = math.max(height, currentPos.Y + 200, targetPos.Y + 200)
 
-        -- Phase 1: Bay vút lên độ cao đã chỉnh (mặc định 1500 Y)
         local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), speed, function() return Teleporter.active end)
         if not s1 or not Teleporter.active then
             disableFlightState()
@@ -994,7 +1006,6 @@ local function teleportToLocation(targetPos)
             return
         end
 
-        -- Phase 2: Bay ngang trên không trung tới ngay trên đầu mục tiêu
         local s2 = smoothTweenTo(CFrame.new(targetPos.X, skyY, targetPos.Z), speed, function() return Teleporter.active end)
         if not s2 or not Teleporter.active then
             disableFlightState()
@@ -1002,7 +1013,6 @@ local function teleportToLocation(targetPos)
             return
         end
 
-        -- Phase 3: Hạ cánh an toàn xuống mặt đất
         local s3 = smoothTweenTo(CFrame.new(targetPos.X, targetPos.Y + 4, targetPos.Z), speed, function() return Teleporter.active end)
 
         disableFlightState()
