@@ -541,32 +541,6 @@ local LevelFarmer = {
     running = false,
 }
 
-local WildernessZones = {
-    ["Caldera Wilderness (Level 1-15)"] = {
-        Vector3.new(3200, 610, -3950),
-        Vector3.new(3350, 615, -3850),
-        Vector3.new(3100, 605, -4100),
-        Vector3.new(3400, 612, -4000),
-    },
-    ["Deeproot Canopy (Level 15-30)"] = {
-        Vector3.new(6650, 568, -3550),
-        Vector3.new(6800, 572, -3450),
-        Vector3.new(6550, 565, -3650),
-        Vector3.new(6750, 570, -3600),
-    },
-    ["Desert / Amoran Sands (Level 30-45)"] = {
-        Vector3.new(8150, 604, -4250),
-        Vector3.new(8300, 608, -4150),
-        Vector3.new(8050, 602, -4350),
-        Vector3.new(8250, 605, -4400),
-    },
-    ["Mount Thul / Volcano (Level 40-50)"] = {
-        Vector3.new(5120, 608, -5450),
-        Vector3.new(5250, 612, -5380),
-        Vector3.new(5050, 606, -5520),
-        Vector3.new(5180, 610, -5500),
-    }
-}
 
 local function isInCombat()
     local pgui = PlayerGui
@@ -700,8 +674,7 @@ function LevelFarmer.runCycle()
     LevelFarmer.running = true
 
     task.spawn(function()
-        print("[AutoLevel] ⚔️ Bắt đầu Auto Farm Level (Wilderness Encounter & Skill Engine)...")
-        local waypointIndex = 1
+        print("[AutoLevel] ⚔️ Bắt đầu Auto Combat Helper (Đứng im chờ trận đấu)...")
 
         while LevelFarmer.running do
             if isInCombat() then
@@ -710,36 +683,11 @@ function LevelFarmer.runCycle()
                 local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.4
                 task.wait(combatDelay)
             else
-                -- OVERWORLD: Patrol Wilderness zone to trigger Random Encounters
-                local selectedZone = Options.FarmZone and Options.FarmZone.Value or "Caldera Wilderness (Level 1-15)"
-                local waypoints = WildernessZones[selectedZone]
-
-                if waypoints and #waypoints > 0 then
-                    local targetWp = waypoints[waypointIndex]
-                    local patrolSpeed = Options.PatrolSpeed and Options.PatrolSpeed.Value or 45
-
-                    -- Walk / Move toward waypoint on ground
-                    local char = LocalPlayer.Character
-                    local hum = char and char:FindFirstChildOfClass("Humanoid")
-                    local root = char and char:FindFirstChild("HumanoidRootPart")
-
-                    if hum and root then
-                        hum:MoveTo(targetWp)
-                        local moveStart = tick()
-                        while LevelFarmer.running and not isInCombat() and (root.Position - targetWp).Magnitude > 8 and (tick() - moveStart < 8) do
-                            task.wait(0.2)
-                        end
-                        waypointIndex = (waypointIndex % #waypoints) + 1
-                    else
-                        task.wait(1)
-                    end
-                else
-                    task.wait(1)
-                end
+                -- OVERWORLD: Stand still in place, waiting for encounters
+                task.wait(0.3)
             end
-            task.wait(0.15)
         end
-        print("[AutoLevel] ⏹️ Đã dừng Auto Farm Level.")
+        print("[AutoLevel] ⏹️ Đã dừng Auto Combat Helper.")
     end)
 end
 
@@ -1802,24 +1750,12 @@ MineGroup:AddButton({
 })
 
 LevelGroup:AddToggle("AutoFarmLevel", {
-    Text = "Enable Auto Farm Level",
+    Text = "Enable Auto Combat Helper",
     Default = false,
-    Tooltip = "Tự động tuần tra vùng hoang dã (Wilderness) để trigger Random Encounters -> Tự dùng Skill/Strike -> Tự chọn mục tiêu",
+    Tooltip = "Đứng im một chỗ -> Khi vào trận đấu (Random Encounter/PvE) sẽ tự động dùng Skill / Strike và tự chọn mục tiêu quái",
     Callback = function(Value)
         if Value then LevelFarmer.runCycle() else LevelFarmer.stop() end
     end
-})
-
-LevelGroup:AddDropdown("FarmZone", {
-    Values = {
-        "Caldera Wilderness (Level 1-15)",
-        "Deeproot Canopy (Level 15-30)",
-        "Desert / Amoran Sands (Level 30-45)",
-        "Mount Thul / Volcano (Level 40-50)"
-    },
-    Default = 1,
-    Multi = false,
-    Text = "Wilderness Farm Zone",
 })
 
 LevelGroup:AddDropdown("SelectedCombatAction", {
@@ -1853,25 +1789,12 @@ LevelGroup:AddDropdown("TargetPriority", {
     Text = "Enemy Target Priority",
 })
 
-LevelGroup:AddSlider("PatrolSpeed", {
-    Text = "Patrol Movement Speed",
-    Default = 45,
-    Min = 20,
-    Max = 120,
-    Rounding = 0,
-})
-
 LevelGroup:AddSlider("CombatDelay", {
     Text = "Turn Action Delay (s)",
     Default = 0.4,
     Min = 0.1,
     Max = 2.0,
     Rounding = 1,
-})
-
-LevelGroup:AddButton({
-    Text = "⚔️ Start Wilderness Farm Now",
-    Func = function() LevelFarmer.runCycle() end,
 })
 
 HopGroup:AddToggle("AutoServerHop", {
