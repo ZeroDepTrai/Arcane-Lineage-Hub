@@ -137,13 +137,12 @@ local function handleSwordQTE(swordQTE)
     local winMax = winMin + window.AbsoluteSize.X
 
     -- Chỉ kích hoạt khi chính con trỏ hiện tại này lọt vào trong ô Window
-    if indCenter >= (winMin + 4) and indCenter <= (winMax - 4) then
+    if indCenter >= (winMin + 2) and indCenter <= (winMax - 2) then
         local now = os.clock()
-        if now - AutoQTE.lastSwordHit > 0.15 then
+        if now - AutoQTE.lastSwordHit > 0.2 then
             AutoQTE.lastSwordHit = now
             if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
             safeClick(stopBtn)
-            pressKey(Enum.KeyCode.Space)
         end
     end
 end

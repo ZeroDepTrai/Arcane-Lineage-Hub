@@ -3,12 +3,18 @@
     🌟 ARCANE LINEAGE - ALL-IN-ONE MASTER HUB (LinoriaLib GUI + SaveManager + ThemeManager)
     ========================================================================================
     Features:
-    • [Auto Farm Crylight]: Fast Menu-Scan (Hops directly from MainMenu if 0 Crylight),
+    • [Auto Farm Whitelist]: Fast Menu-Scan (Hops directly from MainMenu if 0 targets),
       Sky-Tween 3-phase flight (avoids mobs & combat), Auto-Harvest, Auto-ServerHop (resets after 20 hops),
-      Discord Webhook Notifications.
-    • [Auto Combat QTE]: Perfect Dodge 100%, Sword, Dagger (all weakpoints), Hammer, Axe, Fist/Cestus,
-      Spear, Chest Lockpicking.
+      Adaptable Multi-Item Discord Webhook Notifications.
+    • [Auto Combat QTE]: Perfect Dodge 100%, Sword (no double-tap), Dagger (all weakpoints),
+      Hammer (PID Bang-Bang), Axe (Threshold Equilibrium), Fist/Cestus (Sequential combos),
+      Spear (Active Button Clicker), Chest Lockpicking.
+    • [Movement Suite]: Fly Hack (BodyVelocity + WASD/Space/Shift), NoClip, Velocity Speedhack,
+      CFrame Speed Bypass, Infinite Jump Boost.
+    • [Teleport Suite]: Smooth 3-Phase Sky-Tween to 26+ key locations (Towns, Blacksmiths, Doctors,
+      Bankers, Merchants, Class Trainers) with configurable Flight Altitude and Speed.
     • [Ingredient ESP]: Custom BillboardGui OOP Engine with Distance, Persistent Mode, Whitelist filter.
+    • [FPS Booster & Optimization]: Remove Fog, Atmosphere, Shadows, Foliage, Materials, Instant Clean RAM.
     • [Config & Theme System]: SaveManager & ThemeManager (Full save/load configurations).
     ========================================================================================
 --]]
@@ -33,7 +39,13 @@ local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
+
+local GuiCollisionService = nil
+pcall(function()
+    GuiCollisionService = require(game.ReplicatedStorage:WaitForChild("GuiCollisionService", 5))
+end)
 
 -- Hàm HTTP request đa năng của các Executor
 local HttpRequest = (syn and syn.request) or (http and http.request) or http_request or request
@@ -60,92 +72,84 @@ local function safeClick(button)
 end
 
 local function pressKey(keyCode)
-    VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
-    task.wait(0.02)
-    VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
+    task.spawn(function()
+        VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
+        task.wait(0.04)
+        VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
+    end)
 end
 
 -- =============================================================================
--- BLACKLIST CRYLIGHT MẶC ĐỊNH Ở DESERT (KHÔNG LỤM ĐƯỢC)
+-- TỌA ĐỘ VÀ BLACKLIST VẬT PHẨM GIẢ
 -- =============================================================================
-local DESERT_CENTER = Vector3.new(1423.0, 616.7, -4468.5)
-local DESERT_RADIUS = 50
+local DesertBlacklist = {
+    Vector3.new(10486.2, 1572.7, -3502.8),
+    Vector3.new(10398.9, 1570.6, -3450.4),
+    Vector3.new(10490.0, 1573.0, -3500.0),
+    Vector3.new(10400.0, 1570.0, -3450.0)
+}
 
-local function isBlacklistedCrylight(inst)
-    if not inst then return true end
-    if Toggles.BlacklistDesert and Toggles.BlacklistDesert.Value and inst.Name == "Crylight" then
-        local pos = inst:GetPivot().Position
-        local dist = (pos - DESERT_CENTER).Magnitude
-        if dist <= DESERT_RADIUS then
-            return true
-        end
+local function isBlacklistedCrylight(obj)
+    if not Toggles.BlacklistDesert or not Toggles.BlacklistDesert.Value then return false end
+    if not obj:IsA("Model") and not obj:IsA("BasePart") then return false end
+    local pos = obj:GetPivot().Position
+    for _, bPos in ipairs(DesertBlacklist) do
+        if (pos - bPos).Magnitude < 15 then return true end
     end
     return false
 end
 
 -- =============================================================================
--- SERVER HOPPER (CHỐNG KẸT / TỰ ĐỘNG XÓA DỮ LIỆU SAU 20 SERVER)
+-- HỆ THỐNG SERVER HOP TỰ ĐỘNG (JSON PERSISTENT - TỐI ĐA 20 SERVER RỒI RESET)
 -- =============================================================================
 local ServerHopper = {
     isHopping = false,
+    visitedFile = "ArcaneHub_VisitedServers.json",
     lastAttemptServer = nil,
-    visitedFile = "Crylight_Visited_Servers.json",
-    maxVisitedLimit = 20, -- Tối đa 20 server, sau đó tự động reset dữ liệu
 }
 
 local function getVisitedServers()
-    local visited = {}
-    if readfile and isfile and isfile(ServerHopper.visitedFile) then
-        local content = readfile(ServerHopper.visitedFile)
-        local success, data = pcall(HttpService.JSONDecode, HttpService, content)
-        if success and type(data) == "table" then visited = data end
-    end
-    return visited
+    if not isfile or not readfile or not isfile(ServerHopper.visitedFile) then return {} end
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(readfile(ServerHopper.visitedFile))
+    end)
+    if success and type(data) == "table" then return data end
+    return {}
 end
 
 local function saveVisitedServer(jobId)
+    if not writefile then return end
     local visited = getVisitedServers()
-    
-    -- Đếm số lượng server đã lưu
+    visited[jobId] = os.time()
     local count = 0
     for _ in pairs(visited) do count = count + 1 end
-
-    -- NẾU ĐÃ HOP QUÁ 20 SERVER THÌ TỰ ĐỘNG XÓA TOÀN BỘ ĐỂ TRÁNH HẾT SERVER
-    if count >= ServerHopper.maxVisitedLimit then
-        print(string.format("[ServerHop] 🔄 Đã hop qua %d server. Đang xóa bộ nhớ đệm để tái tạo danh sách server mới!", count))
-        visited = {}
+    if count >= 20 then
+        print(string.format("[ServerHop] 🔄 Đã ghé qua %d server. Đang reset danh sách để tái sử dụng server cũ!", count))
+        visited = { [jobId] = os.time() }
     end
-
-    visited[jobId] = os.time()
-    if writefile then
-        pcall(function()
-            writefile(ServerHopper.visitedFile, HttpService:JSONEncode(visited))
-        end)
-    end
+    pcall(function()
+        writefile(ServerHopper.visitedFile, HttpService:JSONEncode(visited))
+    end)
 end
 
 function ServerHopper.hop()
     if ServerHopper.isHopping then return end
     ServerHopper.isHopping = true
 
-    print("[ServerHop] 🔍 Đang quét tìm server mới còn chỗ trống...")
-    saveVisitedServer(game.JobId)
-
     task.spawn(function()
+        print("[ServerHop] 🌐 Đang tìm kiếm Server mới...")
         local placeId = game.PlaceId
         local visited = getVisitedServers()
-        local nextCursor = ""
-        local candidates = {}
         local maxBuffer = Options.MaxPlayerBuffer and Options.MaxPlayerBuffer.Value or 2
+        local candidates = {}
+        local nextCursor = ""
 
-        for _ = 1, 3 do
-            local url = string.format("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Desc&limit=100%s", placeId, (nextCursor ~= "" and ("&cursor=" .. nextCursor) or ""))
-            local success, res = pcall(function()
-                return HttpRequest({ Url = url, Method = "GET", Headers = { ["Content-Type"] = "application/json" } })
-            end)
-            if success and res and res.Body then
-                local sDecode, data = pcall(HttpService.JSONDecode, HttpService, res.Body)
-                if sDecode and data and data.data then
+        for _ = 1, 5 do
+            local url = string.format("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100&cursor=%s", placeId, nextCursor)
+            local success, res = pcall(function() return game:HttpGet(url) end)
+            if success and res then
+                local data = HttpService:JSONDecode(res)
+                if data and data.data then
                     for _, s in ipairs(data.data) do
                         local maxP = s.maxPlayers or 25
                         local playing = s.playing or 0
@@ -188,7 +192,6 @@ function ServerHopper.hop()
     end)
 end
 
--- Tự động bắt lỗi khi Teleport thất bại
 TeleportService.TeleportInitFailed:Connect(function(player, teleportResult, errorMessage)
     warn(string.format("[ServerHop] ❌ Teleport thất bại: %s (%s). Đang đổi server khác ngay...", tostring(teleportResult), tostring(errorMessage)))
     if ServerHopper.lastAttemptServer then saveVisitedServer(ServerHopper.lastAttemptServer) end
@@ -198,24 +201,30 @@ TeleportService.TeleportInitFailed:Connect(function(player, teleportResult, erro
 end)
 
 -- =============================================================================
--- DISCORD WEBHOOK NOTIFIER
+-- DISCORD WEBHOOK NOTIFIER (MULTI-ITEM ADAPTABLE)
 -- =============================================================================
-local function sendDiscordReport(harvestedCount)
+local function sendDiscordReport(harvestedMap, totalHarvested)
     local webhookUrl = Options.DiscordWebhook and Options.DiscordWebhook.Value or ""
     if #webhookUrl < 10 or not HttpRequest then return end
 
     task.spawn(function()
+        local itemListStr = ""
+        for name, count in pairs(harvestedMap) do
+            itemListStr = itemListStr .. string.format("• **%s**: x%d\n", name, count)
+        end
+        if #itemListStr == 0 then itemListStr = string.format("• **Item**: x%d\n", totalHarvested) end
+
         local payload = {
-            username = "Crylight Master Hunter",
+            username = "Arcane Lineage Master Farmer",
             avatar_url = "https://cdn-icons-png.flaticon.com/512/3655/3655581.png",
             embeds = {{
-                title = "💎 THU HOẠCH CRYLIGHT THÀNH CÔNG! 💎",
-                description = string.format("Nhân vật vừa hoàn thành lụm **%d** Crylight và đang chuyển server!", harvestedCount),
+                title = "🌿 THU HOẠCH NGUYÊN LIỆU THÀNH CÔNG! 🌿",
+                description = string.format("Nhân vật vừa hoàn thành thu hoạch **%d** nguyên liệu và đang chuyển server!", totalHarvested),
                 color = 0x00FF88,
                 fields = {
-                    { name = "🌾 Số lượng vừa nhặt", value = string.format("**%d** Crylight", harvestedCount), inline = true },
+                    { name = "🎒 Danh Sách Thu Hoạch", value = itemListStr, inline = false },
                     { name = "👤 Nhân vật", value = string.format("`%s` (%s)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true },
-                    { name = "🆔 Server Vừa Xong", value = string.format("`%s`", game.JobId), inline = false }
+                    { name = "🆔 Server JobId", value = string.format("`%s`", game.JobId), inline = false }
                 },
                 footer = { text = "Arcane Lineage • Master Hub" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -277,7 +286,7 @@ local function handleAutoStart()
 end
 
 -- =============================================================================
--- AUTO FARM CRYLIGHT (MENU-FIRST CYCLE + SKY TWEEN)
+-- AUTO FARM INGREDIENTS (MULTI-ITEM SCAN + SKY TWEEN)
 -- =============================================================================
 local Farmer = {
     running = false,
@@ -329,12 +338,12 @@ local function tweenTo(targetCFrame, speed)
         if conn then conn:Disconnect() end
     end)
 
-    while not completed and Farmer.running do task.wait() end
+    while not completed and (Farmer.running or (Teleporter and Teleporter.active)) do task.wait() end
     Farmer.currentTween = nil
     return completed
 end
 
-local function flyToCrylight(targetPosition)
+local function flyToItem(targetPosition)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return false end
@@ -353,11 +362,11 @@ local function flyToCrylight(targetPosition)
     tweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), ascendSpeed)
     if not Farmer.running then return false end
 
-    -- Phase 2: Bay ngang trên không trung tới ngay trên đầu Crylight
+    -- Phase 2: Bay ngang trên không trung tới ngay trên đầu nguyên liệu
     tweenTo(CFrame.new(targetPosition.X, skyY, targetPosition.Z), cruiseSpeed)
     if not Farmer.running then return false end
 
-    -- Phase 3: Hạ cánh thẳng đứng xuống cách Crylight 3.5 studs
+    -- Phase 3: Hạ cánh thẳng đứng xuống cách nguyên liệu 3.5 studs
     tweenTo(CFrame.new(targetPosition.X, targetPosition.Y + 3.5, targetPosition.Z), descendSpeed)
     return true
 end
@@ -380,35 +389,43 @@ function Farmer.runCycle()
     Farmer.running = true
 
     task.spawn(function()
-        print("[AutoFarm] 🔍 [BƯỚC 1]: Đang kiểm tra Crylight ngay tại Menu...")
-        task.wait(2.5) -- Đợi 2.5s để ShroomGarbage replicate
+        print("[AutoFarm] 🔍 [BƯỚC 1]: Đang quét nguyên liệu được chọn ngay tại Menu...")
+        task.wait(2.5)
 
-        -- Quét danh sách Crylight thật có thể lụm
+        local selectedMap = (Options.FarmItemsWhitelist and Options.FarmItemsWhitelist.Value) or { ["Crylight"] = true }
+
+        -- Quét danh sách nguyên liệu theo cấu hình
         local harvestList = {}
         for _, desc in ipairs(workspace:GetDescendants()) do
-            if desc.Name == "Crylight" and desc.Parent and not isBlacklistedCrylight(desc) then
-                table.insert(harvestList, desc)
+            if desc.Parent and selectedMap[desc.Name] and not isBlacklistedCrylight(desc) then
+                table.insert(harvestList, { instance = desc, name = desc.Name })
             end
         end
 
-        print(string.format("[AutoFarm] 📊 Kết quả kiểm tra tại Menu: Tìm thấy %d viên Crylight thật.", #harvestList))
+        print(string.format("[AutoFarm] 📊 Kết quả kiểm tra tại Menu: Tìm thấy %d nguyên liệu hợp lệ.", #harvestList))
 
-        -- NẾU CÓ CRYLIGHT: TIẾN HÀNH VÀO GAME VÀ LỤM
+        -- NẾU CÓ NGUYÊN LIỆU: TIẾN HÀNH VÀO GAME VÀ LỤM
         if #harvestList > 0 then
-            print("[AutoFarm] ✨ Phát hiện Crylight! Đang tự động bấm Play để vào game thu hoạch...")
+            print("[AutoFarm] ✨ Phát hiện nguyên liệu mục tiêu! Đang tự động bấm Play để vào game thu hoạch...")
             handleAutoStart()
 
+            local harvestedCounts = {}
             local totalHarvested = 0
-            for i, crylight in ipairs(harvestList) do
+            for i, itemData in ipairs(harvestList) do
                 if not Farmer.running then break end
-                if crylight and crylight.Parent then
-                    local targetPos = crylight:GetPivot().Position
-                    print(string.format("[AutoFarm] 🎯 [%d/%d] Đang bay tới Crylight tại (%.1f, %.1f, %.1f)...", i, #harvestList, targetPos.X, targetPos.Y, targetPos.Z))
-                    
-                    local flew = flyToCrylight(targetPos)
-                    if flew and crylight and crylight.Parent then
-                        local picked = harvestItem(crylight)
-                        if picked then totalHarvested = totalHarvested + 1 end
+                local item = itemData.instance
+                local itemName = itemData.name
+                if item and item.Parent then
+                    local targetPos = item:GetPivot().Position
+                    print(string.format("[AutoFarm] 🎯 [%d/%d] Đang bay tới %s tại (%.1f, %.1f, %.1f)...", i, #harvestList, itemName, targetPos.X, targetPos.Y, targetPos.Z))
+
+                    local flew = flyToItem(targetPos)
+                    if flew and item and item.Parent then
+                        local picked = harvestItem(item)
+                        if picked then
+                            totalHarvested = totalHarvested + 1
+                            harvestedCounts[itemName] = (harvestedCounts[itemName] or 0) + 1
+                        end
                         task.wait(0.5)
                     end
                 end
@@ -424,11 +441,10 @@ function Farmer.runCycle()
             end
 
             if totalHarvested > 0 and Toggles.NotifyOnHarvest and Toggles.NotifyOnHarvest.Value then
-                sendDiscordReport(totalHarvested)
+                sendDiscordReport(harvestedCounts, totalHarvested)
             end
         else
-            -- NẾU KHÔNG CÓ CRYLIGHT: KHÔNG CẦN SPAWN VÀO GAME -> HOP LUÔN TỪ MENU ĐỂ TIẾT KIỆM THỜI GIAN
-            print("[AutoFarm] ❌ Server không có Crylight! Đang Server Hop ngay từ Main Menu...")
+            print("[AutoFarm] ❌ Server không có nguyên liệu mục tiêu! Đang Server Hop ngay từ Main Menu...")
         end
 
         disableNoClip()
@@ -457,7 +473,7 @@ local AutoQTE = {
     lastDodgeHit = 0,
     lastSwordHit = 0,
     lastDaggerHit = 0,
-    lastHammerHit = 0,
+    isHammerHolding = false,
     lastAxePress = 0,
     lastFistHit = 0,
 }
@@ -483,7 +499,6 @@ local function handleDodgeQTE(dodgeQTE)
     local targetLeft = targetZone.AbsolutePosition.X
     local targetRight = targetLeft + targetZone.AbsoluteSize.X
 
-    -- Collision occurs if indicator overlaps target zone
     if (indRight >= targetLeft and indLeft <= targetRight) or (indCenter >= targetLeft and indCenter <= targetRight) then
         local now = os.clock()
         if now - AutoQTE.lastDodgeHit > 0.25 then
@@ -495,7 +510,7 @@ local function handleDodgeQTE(dodgeQTE)
     end
 end
 
--- 2. SWORD QTE (PERFECT WINDOW STRIKE - SEQUENTIAL TARGETING)
+-- 2. SWORD QTE (PERFECT WINDOW STRIKE - SEQUENTIAL TARGETING NO DOUBLE-TAP)
 local function handleSwordQTE(swordQTE)
     if not Toggles.AutoSword or not Toggles.AutoSword.Value or not swordQTE or not swordQTE.Visible then return end
     local inset = swordQTE:FindFirstChild("Inset")
@@ -505,7 +520,6 @@ local function handleSwordQTE(swordQTE)
     local window = inset:FindFirstChild("Window")
     if not window or not window.Visible then return end
 
-    -- Tìm đúng Indicator hiện tại mà game đang chờ (chỉ số nhỏ nhất chưa bị dừng)
     local currentActiveInd = nil
     local lowestIndex = math.huge
 
@@ -523,19 +537,25 @@ local function handleSwordQTE(swordQTE)
     local winMin = window.AbsolutePosition.X
     local winMax = winMin + window.AbsoluteSize.X
 
-    -- Chỉ kích hoạt khi chính con trỏ hiện tại này lọt vào trong ô Window
-    if indCenter >= (winMin + 4) and indCenter <= (winMax - 4) then
+    local isHit = false
+    if GuiCollisionService and GuiCollisionService.isColliding then
+        isHit = GuiCollisionService.isColliding(currentActiveInd, window) and (indCenter >= winMin + 2 and indCenter <= winMax - 2)
+    else
+        isHit = (indCenter >= winMin + 2 and indCenter <= winMax - 2)
+    end
+
+    if isHit then
         local now = os.clock()
-        if now - AutoQTE.lastSwordHit > 0.15 then
+        if now - AutoQTE.lastSwordHit > 0.2 then
             AutoQTE.lastSwordHit = now
             local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
             if delayMs > 0 then task.wait(delayMs / 1000) end
             safeClick(stopBtn)
-            pressKey(Enum.KeyCode.Space)
         end
     end
 end
 
+-- 3. DAGGER QTE (ALL WEAKPOINTS)
 local function handleDaggerQTE(daggerQTE)
     if not Toggles.AutoDagger or not Toggles.AutoDagger.Value or not daggerQTE or not daggerQTE.Visible then return end
     local stopBtn = daggerQTE:FindFirstChild("Stop")
@@ -558,8 +578,7 @@ local function handleDaggerQTE(daggerQTE)
                     AutoQTE.lastDaggerHit = now
                     local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
                     if delayMs > 0 then task.wait(delayMs / 1000) end
-                    if stopBtn then safeClick(stopBtn) end
-                    pressKey(Enum.KeyCode.Space)
+                    if stopBtn then safeClick(stopBtn) else pressKey(Enum.KeyCode.Space) end
                     break
                 end
             end
@@ -642,7 +661,6 @@ local function handleFistQTE(fistQTE)
     local keysFolder = (keyHolder and keyHolder:FindFirstChild("Keys")) or keyHolder
     if not keysFolder then return end
 
-    -- Tìm đúng Arrow hiện tại có số thứ tự nhỏ nhất (1_arrow, 2_arrow, ...)
     local currentArrow = nil
     local lowestIndex = math.huge
 
@@ -718,12 +736,10 @@ local function handleLockpickQTE(lockpickQTE)
 
         if indCenter >= tMin and indCenter <= tMax then
             safeClick(stopBtn)
-            pressKey(Enum.KeyCode.Space)
         end
     end
 end
 
--- Hook QTE vào RenderStepped
 RunService.RenderStepped:Connect(function()
     if not Toggles.MasterQTE or not Toggles.MasterQTE.Value then return end
     local combatGui = PlayerGui and PlayerGui:FindFirstChild("Combat")
@@ -747,95 +763,281 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- =============================================================================
+-- MOVEMENT CONTROLLER (FLY, NOCLIP, SPEEDHACK, CFRAME SPEED, INFINITE JUMP)
+-- =============================================================================
+local Movement = {
+    flyBodyVelocity = nil,
+}
+
+RunService.Stepped:Connect(function()
+    if Toggles.NoClip and Toggles.NoClip.Value then
+        local char = LocalPlayer.Character
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") and part.CanCollide then
+                    part.CanCollide = false
+                end
+            end
+        end
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local cam = workspace.CurrentCamera
+
+    if Toggles.Fly and Toggles.Fly.Value and hrp and hum and cam then
+        if not Movement.flyBodyVelocity or Movement.flyBodyVelocity.Parent ~= hrp then
+            if Movement.flyBodyVelocity then Movement.flyBodyVelocity:Destroy() end
+            local bv = Instance.new("BodyVelocity")
+            bv.Name = "ArcaneFlyVelocity"
+            bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
+            bv.Velocity = Vector3.zero
+            bv.Parent = hrp
+            Movement.flyBodyVelocity = bv
+        end
+
+        local moveVec = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveVec = moveVec + Vector3.new(0, 0, -1) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveVec = moveVec + Vector3.new(0, 0, 1) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveVec = moveVec + Vector3.new(-1, 0, 0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveVec = moveVec + Vector3.new(1, 0, 0) end
+
+        local flySpeed = Options.FlySpeed and Options.FlySpeed.Value or 100
+        local flyUpSpeed = Options.FlyUpSpeed and Options.FlyUpSpeed.Value or 60
+
+        local worldVelocity = Vector3.zero
+        if moveVec.Magnitude > 0 then
+            worldVelocity = cam.CFrame:VectorToWorldSpace(moveVec.Unit * flySpeed)
+        end
+
+        local verticalSpeed = 0
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            verticalSpeed = verticalSpeed + flyUpSpeed
+        end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            verticalSpeed = verticalSpeed - flyUpSpeed
+        end
+
+        Movement.flyBodyVelocity.Velocity = Vector3.new(worldVelocity.X, worldVelocity.Y + verticalSpeed, worldVelocity.Z)
+    else
+        if Movement.flyBodyVelocity then
+            Movement.flyBodyVelocity:Destroy()
+            Movement.flyBodyVelocity = nil
+        end
+    end
+end)
+
+RunService.Heartbeat:Connect(function(dt)
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+
+    if Toggles.Fly and Toggles.Fly.Value then return end
+
+    -- Speedhack (LinearVelocity)
+    if Toggles.Speedhack and Toggles.Speedhack.Value then
+        local moveDir = hum.MoveDirection
+        local speed = Options.SpeedhackSpeed and Options.SpeedhackSpeed.Value or 50
+        if moveDir.Magnitude > 0.001 then
+            hrp.AssemblyLinearVelocity = Vector3.new(moveDir.X * speed, hrp.AssemblyLinearVelocity.Y, moveDir.Z * speed)
+        end
+    end
+
+    -- CFrame Speed (Bypass)
+    if Toggles.CFrameSpeed and Toggles.CFrameSpeed.Value then
+        local moveDir = hum.MoveDirection
+        local mult = Options.CFrameSpeedMult and Options.CFrameSpeedMult.Value or 30
+        if moveDir.Magnitude > 0.001 then
+            hrp.CFrame = hrp.CFrame + moveDir * (mult * dt)
+        end
+    end
+
+    -- Infinite Jump
+    if Toggles.InfiniteJump and Toggles.InfiniteJump.Value then
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            local boost = Options.InfiniteJumpBoost and Options.InfiniteJumpBoost.Value or 50
+            hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, boost, hrp.AssemblyLinearVelocity.Z)
+        end
+    end
+end)
+
+-- =============================================================================
+-- TELEPORT SUITE (26+ LOCATIONS & 3-PHASE SKY TWEEN)
+-- =============================================================================
+local KeyLocations = {
+    -- Towns & Hubs
+    ["Westwood Heart"] = Vector3.new(8421.9, 822.5, -5864.5),
+    ["Caldera Town"] = Vector3.new(5035.6, 658.1, -4407.9),
+    ["Deeproot Town"] = Vector3.new(2079.6, 382.7, -2903.1),
+    ["Desert Oasis"] = Vector3.new(10810.7, 1576.1, -3449.6),
+    ["Soulmaster (Purgatory)"] = Vector3.new(-44.9, 574.8, -5467.4),
+    ["Astraea Riddle (Peak)"] = Vector3.new(-177.6, 2767.7, -2868.4),
+
+    -- Town Merchants & Services
+    ["Blacksmith (Westwood)"] = Vector3.new(8465.8, 821.8, -5589.8),
+    ["Blacksmith (Caldera)"] = Vector3.new(4921.8, 657.9, -4162.3),
+    ["Blacksmith (Deeproot)"] = Vector3.new(2079.6, 382.7, -2903.1),
+    ["Doctor (Westwood)"] = Vector3.new(8079.1, 822.4, -5478.8),
+    ["Doctor (Caldera)"] = Vector3.new(5035.6, 658.1, -4407.9),
+    ["Doctor (Deeproot)"] = Vector3.new(2084.0, 382.7, -2946.7),
+    ["Banker (Westwood)"] = Vector3.new(8470.3, 823.6, -5824.3),
+    ["Banker (Caldera)"] = Vector3.new(5184.7, 657.7, -4266.2),
+    ["Merchant (Westwood)"] = Vector3.new(8473.8, 823.6, -5906.5),
+    ["Merchant (Caldera)"] = Vector3.new(5132.9, 658.0, -4124.2),
+
+    -- Class & Skill Trainers
+    ["Trainer: Thorin (Berserker)"] = Vector3.new(4253.1, 653.8, -3369.2),
+    ["Trainer: June (Elementalist)"] = Vector3.new(4903.8, 624.7, -4423.1),
+    ["Trainer: Arandor (Paladin)"] = Vector3.new(5840.1, 727.0, -4790.1),
+    ["Trainer: Dusk (Rogue)"] = Vector3.new(5451.4, 660.9, -4309.0),
+    ["Trainer: Orin (Slayer)"] = Vector3.new(8043.9, 822.6, -5599.3),
+    ["Trainer: Diiz (Thief)"] = Vector3.new(8066.4, 831.2, -5648.9),
+    ["Trainer: Prelate Fyran (Cleric)"] = Vector3.new(8459.8, 822.4, -5885.1),
+    ["Trainer: Ryzar Infelio (Necro)"] = Vector3.new(2134.9, 382.7, -2922.0),
+    ["Trainer: Geron (Warrior)"] = Vector3.new(4448.3, 652.1, -3359.3),
+    ["Trainer: Luther (Martial)"] = Vector3.new(3496.5, 632.8, -3983.3),
+}
+
+local Teleporter = {
+    active = false,
+}
+
+local function teleportToLocation(targetPos)
+    if Teleporter.active then
+        Library:Notify("Teleport is already running!", 3)
+        return
+    end
+    Teleporter.active = true
+
+    task.spawn(function()
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if not root then
+            Teleporter.active = false
+            return
+        end
+
+        enableNoClip()
+        Library:Notify("🚀 Starting Sky-Tween Teleport...", 3)
+
+        local height = Options.TeleportHeight and Options.TeleportHeight.Value or 250
+        local speed = Options.TeleportSpeed and Options.TeleportSpeed.Value or 180
+
+        local currentPos = root.Position
+        local skyY = math.max(currentPos.Y + height, targetPos.Y + height)
+
+        -- Phase 1: Ascend
+        tweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), speed)
+        if not Teleporter.active then disableNoClip() return end
+
+        -- Phase 2: Cruise
+        tweenTo(CFrame.new(targetPos.X, skyY, targetPos.Z), speed)
+        if not Teleporter.active then disableNoClip() return end
+
+        -- Phase 3: Descend safely
+        tweenTo(CFrame.new(targetPos.X, targetPos.Y + 4, targetPos.Z), speed)
+
+        disableNoClip()
+        Teleporter.active = false
+        Library:Notify("✅ Arrived at destination!", 3)
+    end)
+end
+
+local function cancelTeleport()
+    Teleporter.active = false
+    if Farmer.currentTween then
+        Farmer.currentTween:Cancel()
+        Farmer.currentTween = nil
+    end
+    disableNoClip()
+    Library:Notify("Teleport cancelled.", 3)
+end
+
+-- =============================================================================
 -- INGREDIENT ESP ENGINE (OOP BILLBOARD ENGINE)
 -- =============================================================================
 local ESP_Colors = {
     ["Crylight"]        = Color3.fromRGB(0, 255, 255),
-    ["Cryastem"]        = Color3.fromRGB(80, 180, 255),
-    ["Hightail"]        = Color3.fromRGB(120, 255, 120),
-    ["Everthistle"]     = Color3.fromRGB(255, 215, 0),
-    ["Carnastool"]      = Color3.fromRGB(255, 90, 90),
-    ["Driproot"]        = Color3.fromRGB(180, 110, 60),
-    ["Cursed Shroom"]   = Color3.fromRGB(190, 80, 255),
-    ["Cursed Shroom 2"] = Color3.fromRGB(210, 100, 255),
-    ["Mushrooms"]       = Color3.fromRGB(200, 200, 200),
-    ["Ferrus"]          = Color3.fromRGB(255, 140, 0),
-    ["Aestic"]          = Color3.fromRGB(255, 180, 50),
-    ["Laneus"]          = Color3.fromRGB(230, 230, 120),
+    ["Cryastem"]        = Color3.fromRGB(0, 180, 255),
+    ["Hightail"]        = Color3.fromRGB(255, 140, 0),
+    ["Everthistle"]     = Color3.fromRGB(180, 0, 255),
+    ["Carnastool"]      = Color3.fromRGB(255, 60, 60),
+    ["Driproot"]        = Color3.fromRGB(50, 205, 50),
+    ["Cursed Shroom"]   = Color3.fromRGB(128, 0, 128),
+    ["Cursed Shroom 2"] = Color3.fromRGB(148, 0, 211),
+    ["Mushrooms"]       = Color3.fromRGB(220, 220, 220),
     ["Bones"]           = Color3.fromRGB(240, 240, 240),
-    ["Branch Pile"]     = Color3.fromRGB(160, 120, 80),
+    ["Branch Pile"]     = Color3.fromRGB(139, 69, 19),
+    ["Ferrus"]          = Color3.fromRGB(192, 192, 192),
+    ["Aestic"]          = Color3.fromRGB(255, 215, 0),
+    ["Laneus"]          = Color3.fromRGB(144, 238, 144),
 }
 
-local ESPObjects = {}
+local activeESP = {}
 
-local function createESP(inst)
-    if not inst or isBlacklistedCrylight(inst) then return end
-    local name = inst.Name
-    local color = ESP_Colors[name] or Color3.new(1, 1, 1)
+local function createESP(instance)
+    if activeESP[instance] then return end
+    local name = instance.Name
+    local color = ESP_Colors[name] or Color3.fromRGB(255, 255, 255)
 
     local billboard = Instance.new("BillboardGui")
-    billboard.Name = "ESP_" .. name
+    billboard.Name = "Arcane_ESP_" .. name
     billboard.AlwaysOnTop = true
-    billboard.Size = UDim2.new(1e5, 0, 1e5, 0)
-    billboard.Enabled = false
-    billboard.Adornee = inst
-    billboard.AutoLocalize = false
-    billboard.ClipsDescendants = false
-    billboard.Parent = workspace
+    billboard.Size = UDim2.new(0, 150, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+    billboard.Adornee = instance
 
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Name = "Label"
-    textLabel.BackgroundTransparency = 1.0
-    textLabel.Size = UDim2.new(1, 0, 1, 0)
-    textLabel.TextStrokeTransparency = 0.0
-    textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-    textLabel.TextColor3 = color
-    textLabel.TextSize = 13
-    textLabel.Font = Enum.Font.Code
-    textLabel.Parent = billboard
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Text = name
+    label.TextColor3 = color
+    label.TextStrokeTransparency = 0.3
+    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 14
+    label.Parent = billboard
 
-    if inst:IsA("Model") then
-        pcall(function() inst.ModelStreamingMode = Enum.ModelStreamingMode.Persistent end)
-    end
-
-    ESPObjects[inst] = {
-        billboard = billboard,
-        label = textLabel,
-        name = name,
-        color = color
-    }
+    billboard.Parent = PlayerGui
+    activeESP[instance] = { billboard = billboard, label = label, name = name, color = color }
 end
 
-local function removeESP(inst)
-    local data = ESPObjects[inst]
-    if data then
-        if data.billboard then data.billboard:Destroy() end
-        ESPObjects[inst] = nil
+local function removeESP(instance)
+    if activeESP[instance] then
+        pcall(function() activeESP[instance].billboard:Destroy() end)
+        activeESP[instance] = nil
     end
 end
 
-local function shouldShowESP(name)
-    if not Toggles.MasterESP or not Toggles.MasterESP.Value then return false end
-    local mode = Options.ESPFilterMode and Options.ESPFilterMode.Value or "All"
-    if mode == "CrylightOnly" then return name == "Crylight"
-    elseif mode == "Whitelist" then
-        return Options.ESPWhitelist and Options.ESPWhitelist.Value and Options.ESPWhitelist.Value[name] == true
-    end
-    return true
-end
-
--- Update ESP Loop
 RunService.RenderStepped:Connect(function()
-    local localChar = LocalPlayer.Character
-    local localRoot = localChar and localChar:FindFirstChild("HumanoidRootPart")
-    local maxDist = Options.ESPMaxDistance and Options.ESPMaxDistance.Value or 5000
+    local char = LocalPlayer.Character
+    local localRoot = char and char:FindFirstChild("HumanoidRootPart")
+    local espEnabled = Toggles.MasterESP and Toggles.MasterESP.Value
+    local filterMode = Options.ESPFilterMode and Options.ESPFilterMode.Value or "All"
     local showDist = Toggles.ESPShowDistance and Toggles.ESPShowDistance.Value
+    local maxDist = Options.ESPMaxDistance and Options.ESPMaxDistance.Value or 10000
+    local whitelist = (Options.ESPWhitelist and Options.ESPWhitelist.Value) or {}
 
-    for inst, data in pairs(ESPObjects) do
-        if not inst.Parent then
+    for inst, data in pairs(activeESP) do
+        if not inst or not inst.Parent then
             removeESP(inst)
         else
-            if shouldShowESP(data.name) and localRoot then
+            local isVisible = false
+            if espEnabled and localRoot then
+                if filterMode == "All" then
+                    isVisible = true
+                elseif filterMode == "CrylightOnly" and data.name == "Crylight" then
+                    isVisible = true
+                elseif filterMode == "Whitelist" and whitelist[data.name] then
+                    isVisible = true
+                end
+            end
+
+            if isVisible then
                 local pos = inst:GetPivot().Position
                 local dist = (localRoot.Position - pos).Magnitude
                 if dist <= maxDist then
@@ -859,7 +1061,6 @@ workspace.DescendantAdded:Connect(function(desc)
 end)
 workspace.DescendantRemoving:Connect(removeESP)
 
--- Quét toàn bộ workspace ban đầu
 for _, desc in ipairs(workspace:GetDescendants()) do
     if ESP_Colors[desc.Name] then createESP(desc) end
 end
@@ -871,36 +1072,48 @@ local Window = Library:CreateWindow({
     Title = "Arcane Lineage • Master Hub",
     Center = true,
     AutoShow = true,
-    TabPadding = 6,
+    TabPadding = 4,
     MenuFadeTime = 0.2
 })
 
 local Tabs = {
-    AutoFarm = Window:AddTab("💎 Auto Farm"),
+    AutoFarm = Window:AddTab("💎 Farm"),
     AutoQTE  = Window:AddTab("⚔️ Combat"),
-    Visuals  = Window:AddTab("👁️ Visuals & FPS"),
+    Movement = Window:AddTab("🏃 Move"),
+    Teleport = Window:AddTab("🌐 Teleport"),
+    Visuals  = Window:AddTab("👁️ Visuals"),
     Settings = Window:AddTab("⚙️ Settings"),
 }
 
 -- -----------------------------------------------------------------------------
--- TAB 1: AUTO FARM CRYLIGHT
+-- TAB 1: AUTO FARM (CUSTOM WHITELIST & ADAPTABLE WEBHOOK)
 -- -----------------------------------------------------------------------------
-local FarmGroup = Tabs.AutoFarm:AddLeftGroupbox("Crylight Auto Hunter")
+local FarmGroup = Tabs.AutoFarm:AddLeftGroupbox("Ingredient Auto Hunter")
 local HopGroup = Tabs.AutoFarm:AddRightGroupbox("Server Hop & Webhook")
 
 FarmGroup:AddToggle("AutoFarmCrylight", {
-    Text = "Enable Auto Farm Crylight",
+    Text = "Enable Auto Farm",
     Default = false,
-    Tooltip = "Tự động kiểm tra tại Menu -> Vào game -> Bay Sky-Tween -> Lụm -> Đổi Server",
+    Tooltip = "Tự động quét Menu -> Vào game -> Bay Sky-Tween -> Lụm -> Đổi Server",
     Callback = function(Value)
         if Value then Farmer.runCycle() else Farmer.stop() end
     end
 })
 
+FarmGroup:AddDropdown("FarmItemsWhitelist", {
+    Values = {
+        "Crylight", "Cryastem", "Hightail", "Everthistle",
+        "Carnastool", "Driproot", "Cursed Shroom", "Cursed Shroom 2",
+        "Mushrooms", "Bones", "Branch Pile", "Ferrus", "Aestic", "Laneus"
+    },
+    Default = { "Crylight" },
+    Multi = true,
+    Text = "Farm Target Whitelist",
+})
+
 FarmGroup:AddToggle("AutoStart", {
     Text = "Auto Start / Skip Intro",
     Default = false,
-    Tooltip = "Tự động bấm Skip, Play, YES khi cần vào game",
 })
 
 FarmGroup:AddToggle("AutoSkipIntro", {
@@ -911,7 +1124,6 @@ FarmGroup:AddToggle("AutoSkipIntro", {
 FarmGroup:AddToggle("BlacklistDesert", {
     Text = "Ignore Desert Fake Crylights",
     Default = false,
-    Tooltip = "Bỏ qua 2 viên Crylight trang trí không lụm được ở Desert",
 })
 
 FarmGroup:AddSlider("SkyHeight", {
@@ -920,7 +1132,6 @@ FarmGroup:AddSlider("SkyHeight", {
     Min = 500,
     Max = 1500,
     Rounding = 0,
-    Compact = false,
 })
 
 FarmGroup:AddSlider("AscendSpeed", {
@@ -958,7 +1169,7 @@ FarmGroup:AddSlider("PickupTimeout", {
 HopGroup:AddToggle("AutoServerHop", {
     Text = "Auto Server Hop",
     Default = false,
-    Tooltip = "Tự động đổi server khi lụm xong hoặc khi server không có Crylight",
+    Tooltip = "Tự động đổi server khi lụm xong hoặc khi server không có nguyên liệu",
 })
 
 HopGroup:AddSlider("MaxPlayerBuffer", {
@@ -967,7 +1178,6 @@ HopGroup:AddSlider("MaxPlayerBuffer", {
     Min = 1,
     Max = 5,
     Rounding = 0,
-    Tooltip = "Chỉ vào server còn trống ít nhất N chỗ (tránh bị server full)",
 })
 
 HopGroup:AddSlider("TeleportTimeout", {
@@ -995,55 +1205,40 @@ HopGroup:AddButton({
     Text = "Hop Server Now",
     Func = function() ServerHopper.hop() end,
     DoubleClick = false,
-    Tooltip = "Chuyển sang server mới ngay lập tức"
-})
-
-HopGroup:AddButton({
-    Text = "Clear Visited Server Cache",
-    Func = function()
-        if writefile then writefile(ServerHopper.visitedFile, "{}") end
-        Library:Notify("Đã xóa bộ nhớ đệm server đã vào!", 3)
-    end,
-    DoubleClick = false,
 })
 
 -- -----------------------------------------------------------------------------
 -- TAB 2: AUTO COMBAT QTE
 -- -----------------------------------------------------------------------------
-local DefenseGroup = Tabs.AutoQTE:AddLeftGroupbox("Defense QTE")
-local WeaponGroup = Tabs.AutoQTE:AddRightGroupbox("Weapon QTEs")
+local MainQTEGroup = Tabs.AutoQTE:AddLeftGroupbox("General Combat")
+local WeaponGroup = Tabs.AutoQTE:AddRightGroupbox("Weapon Specials")
 
-DefenseGroup:AddToggle("MasterQTE", {
+MainQTEGroup:AddToggle("MasterQTE", {
     Text = "Enable Master Auto QTE",
     Default = false,
-    Tooltip = "Bật/Tắt toàn bộ hệ thống QTE",
 })
 
-DefenseGroup:AddToggle("AutoDodge", {
-    Text = "Auto Perfect Dodge",
+MainQTEGroup:AddToggle("AutoDodge", {
+    Text = "Auto Dodge / Block",
     Default = false,
-    Tooltip = "Tự động né đòn hoàn hảo (100% né tránh sát thương)",
 })
 
-DefenseGroup:AddToggle("PreferPerfectDodge", {
-    Text = "Prefer Perfect Dodge over Block",
+MainQTEGroup:AddToggle("PreferPerfectDodge", {
+    Text = "Prefer Perfect Dodge (Yellow Zone)",
     Default = false,
-    Tooltip = "Ưu tiên bắt ô né hoàn hảo thay vì chỉ đỡ đòn",
 })
 
-DefenseGroup:AddSlider("ReactionDelayMs", {
-    Text = "Reaction Delay (ms)",
+MainQTEGroup:AddSlider("ReactionDelayMs", {
+    Text = "Human Reaction Delay (ms)",
     Default = 0,
     Min = 0,
     Max = 200,
     Rounding = 0,
-    Tooltip = "Để 0 để đánh chuẩn xác tuyệt đối tức thì",
 })
 
-DefenseGroup:AddToggle("AutoLockpick", {
-    Text = "Auto Lockpick Chests",
+MainQTEGroup:AddToggle("AutoLockpick", {
+    Text = "Auto Chest Lockpick",
     Default = false,
-    Tooltip = "Tự động mở khóa rương kho báu",
 })
 
 WeaponGroup:AddToggle("AutoSword", {
@@ -1072,14 +1267,143 @@ WeaponGroup:AddToggle("AutoFist", {
 })
 
 -- -----------------------------------------------------------------------------
--- TAB 3: VISUALS & FPS BOOSTER
+-- TAB 3: MOVEMENT CONTROLLER
+-- -----------------------------------------------------------------------------
+local FlyGroup = Tabs.Movement:AddLeftGroupbox("✈️ Flight & NoClip")
+local SpeedGroup = Tabs.Movement:AddRightGroupbox("⚡ Speed & Jump")
+
+FlyGroup:AddToggle("Fly", {
+    Text = "Enable Fly Hack",
+    Default = false,
+    Tooltip = "Bay tự do theo hướng Camera (W/A/S/D + Space / Shift)",
+})
+
+FlyGroup:AddSlider("FlySpeed", {
+    Text = "Flight Horizontal Speed",
+    Default = 100,
+    Min = 20,
+    Max = 300,
+    Rounding = 0,
+})
+
+FlyGroup:AddSlider("FlyUpSpeed", {
+    Text = "Flight Vertical Speed",
+    Default = 60,
+    Min = 10,
+    Max = 200,
+    Rounding = 0,
+})
+
+FlyGroup:AddToggle("NoClip", {
+    Text = "Enable NoClip (Walk Through Walls)",
+    Default = false,
+})
+
+SpeedGroup:AddToggle("Speedhack", {
+    Text = "Speedhack (Linear Velocity)",
+    Default = false,
+})
+
+SpeedGroup:AddSlider("SpeedhackSpeed", {
+    Text = "Speedhack Speed",
+    Default = 50,
+    Min = 16,
+    Max = 250,
+    Rounding = 0,
+})
+
+SpeedGroup:AddToggle("CFrameSpeed", {
+    Text = "CFrame Speed (Direct Bypass)",
+    Default = false,
+})
+
+SpeedGroup:AddSlider("CFrameSpeedMult", {
+    Text = "CFrame Speed Multiplier",
+    Default = 30,
+    Min = 5,
+    Max = 150,
+    Rounding = 0,
+})
+
+SpeedGroup:AddToggle("InfiniteJump", {
+    Text = "Infinite Jump (Hold Space)",
+    Default = false,
+})
+
+SpeedGroup:AddSlider("InfiniteJumpBoost", {
+    Text = "Jump Boost Force",
+    Default = 50,
+    Min = 30,
+    Max = 150,
+    Rounding = 0,
+})
+
+-- -----------------------------------------------------------------------------
+-- TAB 4: TELEPORT SUITE
+-- -----------------------------------------------------------------------------
+local TeleportGroup = Tabs.Teleport:AddLeftGroupbox("🌐 Sky-Tween Teleport")
+local QuickWarpGroup = Tabs.Teleport:AddRightGroupbox("📍 Quick Warps")
+
+local locationNames = {}
+for name, _ in pairs(KeyLocations) do table.insert(locationNames, name) end
+table.sort(locationNames)
+
+TeleportGroup:AddDropdown("SelectedTeleportLoc", {
+    Values = locationNames,
+    Default = 1,
+    Multi = false,
+    Text = "Destination",
+})
+
+TeleportGroup:AddSlider("TeleportHeight", {
+    Text = "Flight Altitude / Height (Y)",
+    Default = 250,
+    Min = 50,
+    Max = 600,
+    Rounding = 0,
+})
+
+TeleportGroup:AddSlider("TeleportSpeed", {
+    Text = "Flight Speed (Studs/s)",
+    Default = 180,
+    Min = 50,
+    Max = 400,
+    Rounding = 0,
+})
+
+TeleportGroup:AddButton({
+    Text = "🚀 Start Teleport",
+    Func = function()
+        local locName = Options.SelectedTeleportLoc and Options.SelectedTeleportLoc.Value
+        local pos = locName and KeyLocations[locName]
+        if pos then
+            teleportToLocation(pos)
+        else
+            Library:Notify("Please select a valid destination!", 3)
+        end
+    end
+})
+
+TeleportGroup:AddButton({
+    Text = "🛑 Cancel Teleport",
+    Func = cancelTeleport
+})
+
+QuickWarpGroup:AddButton("🏛️ Westwood Heart", function() teleportToLocation(KeyLocations["Westwood Heart"]) end)
+QuickWarpGroup:AddButton("🌋 Caldera Town", function() teleportToLocation(KeyLocations["Caldera Town"]) end)
+QuickWarpGroup:AddButton("🌲 Deeproot Town", function() teleportToLocation(KeyLocations["Deeproot Town"]) end)
+QuickWarpGroup:AddButton("🏜️ Desert Oasis", function() teleportToLocation(KeyLocations["Desert Oasis"]) end)
+QuickWarpGroup:AddButton("👻 Soulmaster (Purgatory)", function() teleportToLocation(KeyLocations["Soulmaster (Purgatory)"]) end)
+QuickWarpGroup:AddButton("⛰️ Astraea Riddle (Peak)", function() teleportToLocation(KeyLocations["Astraea Riddle (Peak)"]) end)
+
+-- -----------------------------------------------------------------------------
+-- TAB 5: VISUALS & FPS BOOSTER
 -- -----------------------------------------------------------------------------
 local ESPGroup = Tabs.Visuals:AddLeftGroupbox("👁️ Ingredient ESP")
 local FilterGroup = Tabs.Visuals:AddLeftGroupbox("🎯 Filters & Categories")
 local FPSGroup = Tabs.Visuals:AddRightGroupbox("⚡ FPS Booster")
 local OptGroup = Tabs.Visuals:AddRightGroupbox("🛠️ Optimization & RAM")
 
-local Lighting = game:GetService("Lighting")
 local FPSBooster = {
     originalFogEnd = (Lighting and Lighting.FogEnd) or 100000,
     originalFogStart = (Lighting and Lighting.FogStart) or 0,
@@ -1257,7 +1581,7 @@ OptGroup:AddButton("🌫️ Remove All Fog Permanently", function()
 end)
 
 -- -----------------------------------------------------------------------------
--- TAB 4: SETTINGS / CONFIG
+-- TAB 6: SETTINGS / CONFIG
 -- -----------------------------------------------------------------------------
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
@@ -1285,7 +1609,6 @@ MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", {
 
 Library.ToggleKeybind = Options.MenuKeybind
 
--- Tự động Load cấu hình mặc định (nếu có)
 SaveManager:LoadAutoloadConfig()
 
 -- =============================================================================
@@ -1293,9 +1616,6 @@ SaveManager:LoadAutoloadConfig()
 -- =============================================================================
 shared.ArcaneHub = Library
 
--- Kích hoạt chu trình Auto Farm Menu-Scan nếu được bật
 if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then
     Farmer.runCycle()
 end
-
-Library:Notify("✨ Arcane Lineage Master Hub đã khởi chạy thành công! (Bấm RightControl để ẩn/hiện menu)", 5)
