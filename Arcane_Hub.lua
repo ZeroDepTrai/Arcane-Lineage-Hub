@@ -1049,10 +1049,11 @@ local FilterGroup = Tabs.Visuals:AddLeftGroupbox("🎯 Filters & Categories")
 local FPSGroup = Tabs.Visuals:AddRightGroupbox("⚡ FPS Booster")
 local OptGroup = Tabs.Visuals:AddRightGroupbox("🛠️ Optimization & RAM")
 
+local Lighting = game:GetService("Lighting")
 local FPSBooster = {
-    originalFogEnd = Lighting.FogEnd,
-    originalFogStart = Lighting.FogStart,
-    originalGlobalShadows = Lighting.GlobalShadows,
+    originalFogEnd = (Lighting and Lighting.FogEnd) or 100000,
+    originalFogStart = (Lighting and Lighting.FogStart) or 0,
+    originalGlobalShadows = (Lighting and Lighting.GlobalShadows) or true,
 }
 
 local function applyFPSBoost()
