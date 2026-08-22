@@ -535,6 +535,209 @@ function Farmer.stop()
 end
 
 -- =============================================================================
+-- AUTO FARM LEVEL & MOBS (AUTO STRIKE ENGINE)
+-- =============================================================================
+local LevelFarmer = {
+    running = false,
+}
+
+local function isInCombat()
+    local pgui = PlayerGui
+    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    if combatGui and combatGui.Enabled then
+        local actionBG = combatGui:FindFirstChild("ActionBG")
+        if actionBG and (actionBG.Visible or combatGui:FindFirstChild("Go")) then
+            return true
+        end
+        if combatGui:FindFirstChild("DodgeQTE") and combatGui.DodgeQTE.Visible then
+            return true
+        end
+        return true
+    end
+    local fFolder = workspace:FindFirstChild("Fights")
+    if fFolder and LocalPlayer.Character then
+        for _, fight in ipairs(fFolder:GetChildren()) do
+            if fight:FindFirstChild(LocalPlayer.Name) or fight:FindFirstChild(LocalPlayer.Character.Name) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function executeAutoStrike()
+    local pgui = PlayerGui
+    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    if not combatGui then return end
+
+    local actionBG = combatGui:FindFirstChild("ActionBG")
+    if not actionBG or not actionBG.Visible then return end
+
+    -- 1. Click AttackButton if main menu is open
+    local attackBtn = actionBG:FindFirstChild("AttackButton", true)
+    if attackBtn and attackBtn.Visible then
+        for _, c in ipairs(getconnections(attackBtn.MouseButton1Click)) do c:Fire() end
+        for _, c in ipairs(getconnections(attackBtn.Activated)) do c:Fire() end
+        task.wait(0.15)
+    end
+
+    -- 2. Click Strike in AttacksPage
+    local strikeBtn = actionBG:FindFirstChild("Strike", true)
+    if strikeBtn and strikeBtn.Visible then
+        for _, c in ipairs(getconnections(strikeBtn.MouseButton1Click)) do c:Fire() end
+        for _, c in ipairs(getconnections(strikeBtn.Activated)) do c:Fire() end
+        task.wait(0.15)
+    end
+
+    -- 3. Click first enemy in Enemies page
+    local enemiesFrame = actionBG:FindFirstChild("Enemies", true)
+    if enemiesFrame and enemiesFrame.Visible then
+        local firstEnemyBtn = enemiesFrame:FindFirstChildWhichIsA("TextButton", true) or enemiesFrame:FindFirstChildWhichIsA("ImageButton", true)
+        if firstEnemyBtn then
+            for _, c in ipairs(getconnections(firstEnemyBtn.MouseButton1Click)) do c:Fire() end
+            for _, c in ipairs(getconnections(firstEnemyBtn.Activated)) do c:Fire() end
+            task.wait(0.15)
+        end
+    end
+
+    -- 4. Click Go button if visible
+    local goBtn = combatGui:FindFirstChild("Go", true)
+    if goBtn and goBtn.Visible then
+        for _, c in ipairs(getconnections(goBtn.MouseButton1Click)) do c:Fire() end
+        for _, c in ipairs(getconnections(goBtn.Activated)) do c:Fire() end
+    end
+end
+
+local function isTargetMob(model, targetMode)
+    if not model or not model:IsA("Model") or not model.Parent then return false end
+    if Players:GetPlayerFromCharacter(model) then return false end
+
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
+
+    local n = model.Name:lower()
+    -- Exclude friendly NPCs
+    if n:find("boots") or n:find("inette") or n:find("aberon") or n:find("orkin") or n:find("merchant") or n:find("blacksmith") or n:find("adelma") or n:find("vanio") then
+        return false
+    end
+
+    if targetMode == "All Mobs" then
+        return true
+    elseif targetMode == "Slimes (Caldera)" and n:find("slime") then
+        return true
+    elseif targetMode == "Thieves & Bandits" and (n:find("thief") or n:find("bandit") or n:find("rogue")) then
+        return true
+    elseif targetMode == "Zombie Mushrooms (Deeproot)" and (n:find("mushroom") or n:find("zombie")) then
+        return true
+    elseif targetMode == "Desert Mobs (Desert)" and (n:find("crawler") or n:find("stray") or n:find("sand")) then
+        return true
+    elseif targetMode == "Wolves & Dire Wolves" and n:find("wolf") then
+        return true
+    end
+
+    return false
+end
+
+local function findNearestMob(targetMode, maxRadius)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+
+    local nearestMob = nil
+    local nearestDist = maxRadius or 2500
+
+    local searchContainers = {
+        workspace:FindFirstChild("Living"),
+        workspace:FindFirstChild("NPCs"),
+        workspace
+    }
+
+    for _, container in ipairs(searchContainers) do
+        if container then
+            for _, child in ipairs(container:GetChildren()) do
+                if isTargetMob(child, targetMode) then
+                    local mRoot = child:FindFirstChild("HumanoidRootPart") or child:FindFirstChild("Torso") or child:FindFirstChildWhichIsA("BasePart")
+                    if mRoot then
+                        local dist = (root.Position - mRoot.Position).Magnitude
+                        if dist < nearestDist then
+                            nearestDist = dist
+                            nearestMob = child
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return nearestMob
+end
+
+function LevelFarmer.runCycle()
+    if LevelFarmer.running then return end
+    LevelFarmer.running = true
+
+    task.spawn(function()
+        print("[AutoLevel] ⚔️ Bắt đầu Auto Farm Level (Auto Strike Engine)...")
+        while LevelFarmer.running do
+            if isInCombat() then
+                -- In Combat Mode: Execute Strike on Player Turn
+                local autoStrike = not Toggles.AutoStrikeOnly or Toggles.AutoStrikeOnly.Value
+                if autoStrike then
+                    executeAutoStrike()
+                end
+                local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.5
+                task.wait(combatDelay)
+            else
+                -- In Overworld Mode: Find and engage mobs
+                local targetMode = Options.LevelMobTarget and Options.LevelMobTarget.Value or "All Mobs"
+                local scanRadius = Options.MobFarmRadius and Options.MobFarmRadius.Value or 2500
+                local targetMob = findNearestMob(targetMode, scanRadius)
+
+                if targetMob and targetMob.Parent then
+                    local mRoot = targetMob:FindFirstChild("HumanoidRootPart") or targetMob:FindFirstChild("Torso") or targetMob:FindFirstChildWhichIsA("BasePart")
+                    if mRoot then
+                        local targetPos = mRoot.Position
+                        print(string.format("[AutoLevel] 🎯 Tiếp cận quái '%s' tại (%.1f, %.1f, %.1f)...", targetMob.Name, targetPos.X, targetPos.Y, targetPos.Z))
+
+                        -- Fly smoothly to mob
+                        flyTo(targetPos + Vector3.new(0, 3, 0), 160)
+
+                        -- Touch / Initiate combat
+                        local char = LocalPlayer.Character
+                        local root = char and char:FindFirstChild("HumanoidRootPart")
+                        if root and (root.Position - targetPos).Magnitude < 10 then
+                            local prompt = targetMob:FindFirstChildWhichIsA("ProximityPrompt", true)
+                            if prompt and prompt.Enabled then
+                                fireproximityprompt(prompt)
+                            end
+                            local cd = targetMob:FindFirstChildWhichIsA("ClickDetector", true)
+                            if cd then
+                                fireclickdetector(cd)
+                            end
+                        end
+
+                        -- Wait for combat to initialize
+                        local waitTicks = 0
+                        while LevelFarmer.running and not isInCombat() and waitTicks < 15 do
+                            task.wait(0.2)
+                            waitTicks = waitTicks + 1
+                        end
+                    end
+                else
+                    task.wait(1.5)
+                end
+            end
+            task.wait(0.2)
+        end
+        print("[AutoLevel] ⏹️ Đã dừng Auto Farm Level.")
+    end)
+end
+
+function LevelFarmer.stop()
+    LevelFarmer.running = false
+end
+
+-- =============================================================================
 -- AUTO MINE ORES (FERRUS, AESTIC, LANEUS + AUTO BUY PICKAXE)
 -- =============================================================================
 local Miner = {
@@ -1472,9 +1675,10 @@ local Tabs = {
 -- -----------------------------------------------------------------------------
 -- TAB 1: AUTO FARM (INGREDIENTS & ORE MINING)
 -- -----------------------------------------------------------------------------
-local FarmGroup = Tabs.AutoFarm:AddLeftGroupbox("🌿 Ingredient Auto Hunter")
-local MineGroup = Tabs.AutoFarm:AddLeftGroupbox("⛏️ Auto Mine Ores")
-local HopGroup  = Tabs.AutoFarm:AddRightGroupbox("🌐 Server Hop & Webhook")
+local FarmGroup  = Tabs.AutoFarm:AddLeftGroupbox("🌿 Ingredient Auto Hunter")
+local MineGroup  = Tabs.AutoFarm:AddLeftGroupbox("⛏️ Auto Mine Ores")
+local LevelGroup = Tabs.AutoFarm:AddRightGroupbox("⚔️ Auto Farm Level & Mobs")
+local HopGroup   = Tabs.AutoFarm:AddRightGroupbox("🌐 Server Hop & Webhook")
 
 FarmGroup:AddToggle("AutoFarmCrylight", {
     Text = "Enable Ingredient Auto Farm",
@@ -1585,6 +1789,56 @@ MineGroup:AddSlider("MineTimeout", {
 MineGroup:AddButton({
     Text = "⛏️ Mine Ores Now",
     Func = function() Miner.runCycle() end,
+})
+
+LevelGroup:AddToggle("AutoFarmLevel", {
+    Text = "Enable Auto Farm Level",
+    Default = false,
+    Tooltip = "Tự động tìm quái -> Bay tới vào trận -> Tự động dùng đòn đánh cơ bản (Strike) -> Nhận Exp & Vàng",
+    Callback = function(Value)
+        if Value then LevelFarmer.runCycle() else LevelFarmer.stop() end
+    end
+})
+
+LevelGroup:AddDropdown("LevelMobTarget", {
+    Values = {
+        "All Mobs",
+        "Slimes (Caldera)",
+        "Thieves & Bandits",
+        "Zombie Mushrooms (Deeproot)",
+        "Desert Mobs (Desert)",
+        "Wolves & Dire Wolves"
+    },
+    Default = 1,
+    Multi = false,
+    Text = "Target Mob Category",
+})
+
+LevelGroup:AddToggle("AutoStrikeOnly", {
+    Text = "Auto Use Strike (Basic Attack)",
+    Default = true,
+    Tooltip = "Tự động chọn và thi triển đòn đánh cơ bản Strike mỗi khi tới lượt của bạn",
+})
+
+LevelGroup:AddSlider("MobFarmRadius", {
+    Text = "Mob Scan Radius (Studs)",
+    Default = 2500,
+    Min = 300,
+    Max = 10000,
+    Rounding = 0,
+})
+
+LevelGroup:AddSlider("CombatDelay", {
+    Text = "Turn Action Delay (s)",
+    Default = 0.5,
+    Min = 0.1,
+    Max = 2.0,
+    Rounding = 1,
+})
+
+LevelGroup:AddButton({
+    Text = "⚔️ Hunt Target Mobs Now",
+    Func = function() LevelFarmer.runCycle() end,
 })
 
 HopGroup:AddToggle("AutoServerHop", {
@@ -2062,4 +2316,7 @@ if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then
 end
 if Toggles.AutoMineOre and Toggles.AutoMineOre.Value then
     Miner.runCycle()
+end
+if Toggles.AutoFarmLevel and Toggles.AutoFarmLevel.Value then
+    LevelFarmer.runCycle()
 end
