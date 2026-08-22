@@ -751,6 +751,133 @@ function Miner.stop()
 end
 
 -- =============================================================================
+-- AUTO FARM CHESTS & TREASURES
+-- =============================================================================
+local function isChestObject(instance)
+    if not instance or not instance.Parent then return false end
+    local n = instance.Name:lower()
+    if n:find("chestplate") or n:find("headmain") or n:find("torso") or (instance.Parent and (instance.Parent.Name:lower():find("pup") or instance.Parent.Name:lower():find("darkbeast") or instance.Parent.Name:lower():find("yar'thul"))) then
+        return false
+    end
+    if n == "chest" or n:find("treasure") or n:find("lockbox") or n:find("woodchest") or n:find("ironchest") or n:find("goldchest") or n:find("lockedchest") or n:find("crate") or n:find("vault") then
+        return true
+    end
+    if instance:FindFirstChildWhichIsA("ProximityPrompt", true) then
+        local prompt = instance:FindFirstChildWhichIsA("ProximityPrompt", true)
+        local txt = (prompt.ActionText .. " " .. prompt.ObjectText):lower()
+        if txt:find("chest") or txt:find("lockpick") or txt:find("unlock") or txt:find("open") or txt:find("loot") then
+            return true
+        end
+    end
+    return false
+end
+
+local ChestFarmer = {
+    running = false,
+}
+
+local function findChests()
+    local chests = {}
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if isChestObject(desc) and desc:IsA("Model") or desc:IsA("BasePart") then
+            table.insert(chests, desc)
+        end
+    end
+    return chests
+end
+
+local function openChest(chestInstance)
+    if not chestInstance or not chestInstance.Parent then return false end
+    local startTime = os.clock()
+    local timeout = Options.ChestTimeout and Options.ChestTimeout.Value or 8
+
+    while chestInstance and chestInstance.Parent and (os.clock() - startTime < timeout) and ChestFarmer.running do
+        -- 1. Trigger ProximityPrompt / ClickDetector
+        for _, desc in ipairs(chestInstance:GetDescendants()) do
+            if desc:IsA("ProximityPrompt") and fireproximityprompt then
+                fireproximityprompt(desc)
+            elseif desc:IsA("ClickDetector") and fireclickdetector then
+                fireclickdetector(desc)
+            end
+        end
+        if chestInstance:IsA("BasePart") or chestInstance:IsA("Model") then
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+        end
+
+        -- 2. Solve LockpickQTE if open
+        local combatGui = PlayerGui and PlayerGui:FindFirstChild("Combat")
+        local lockpickQTE = combatGui and combatGui:FindFirstChild("LockpickQTE")
+        if lockpickQTE and lockpickQTE.Visible then
+            handleLockpickQTE(lockpickQTE)
+        end
+
+        task.wait(0.4)
+    end
+    return true
+end
+
+function ChestFarmer.runCycle()
+    if ChestFarmer.running then return end
+    ChestFarmer.running = true
+
+    task.spawn(function()
+        print("[AutoChest] 📦 [BƯỚC 1]: Bắt đầu quét rương kho báu trên toàn bản đồ...")
+        handleAutoStart()
+
+        local chestList = findChests()
+        print(string.format("[AutoChest] 📊 Tìm thấy %d rương hợp lệ trên server.", #chestList))
+
+        if #chestList > 0 then
+            local openedCount = 0
+            for i, chest in ipairs(chestList) do
+                if not ChestFarmer.running then break end
+                if chest and chest.Parent then
+                    local targetPos = chest:IsA("BasePart") and chest.Position or chest:GetPivot().Position
+                    print(string.format("[AutoChest] 🎯 [%d/%d] Đang bay tới rương tại (%.1f, %.1f, %.1f)...", i, #chestList, targetPos.X, targetPos.Y, targetPos.Z))
+
+                    local flew = flyToItem(targetPos)
+                    if flew and chest and chest.Parent then
+                        openChest(chest)
+                        openedCount = openedCount + 1
+                        print(string.format("[AutoChest] ✅ Đã tương tác xong rương [%d/%d]!", i, #chestList))
+                        task.wait(0.5)
+                    end
+                end
+            end
+
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            if root and ChestFarmer.running then
+                local skyHeight = Options.SkyHeight and Options.SkyHeight.Value or 1500
+                local ascendSpeed = Options.AscendSpeed and Options.AscendSpeed.Value or 150
+                smoothTweenTo(CFrame.new(root.Position.X, skyHeight, root.Position.Z), ascendSpeed, function() return ChestFarmer.running end)
+            end
+        else
+            print("[AutoChest] ❌ Không tìm thấy rương nào trên server hiện tại!")
+        end
+
+        disableFlightState()
+
+        if Toggles.AutoServerHop and Toggles.AutoServerHop.Value and ChestFarmer.running then
+            task.wait(1)
+            ServerHopper.hop()
+        end
+    end)
+end
+
+function ChestFarmer.stop()
+    ChestFarmer.running = false
+    if FlightController.currentTween then
+        FlightController.currentTween:Cancel()
+        FlightController.currentTween = nil
+    end
+    disableFlightState()
+    print("[AutoChest] Đã dừng Auto Farm Chests.")
+end
+
+-- =============================================================================
 -- AUTO COMBAT QTE ENGINE (SINGLE-CLICK, 0.25S DEBOUNCED SWEET SPOT ENGINE)
 -- =============================================================================
 local DaggerArcSizes = { 20, 25, 30, 35, 40, 45, 55, 65, 75, 85, 95, 105 }
@@ -1044,6 +1171,7 @@ end
 local function handleLockpickQTE(lockpickQTE)
     if not isQTEActive("Lockpick") or not lockpickQTE or not lockpickQTE.Visible then return end
     local stopBtn = lockpickQTE:FindFirstChild("Stop", true) or lockpickQTE:FindFirstChildWhichIsA("TextButton", true)
+    local pickBtn = lockpickQTE:FindFirstChild("Pick", true) or lockpickQTE:FindFirstChild("Blade", true)
     local indicator = lockpickQTE:FindFirstChild("Indicator", true)
     local target = lockpickQTE:FindFirstChild("Zone", true) or lockpickQTE:FindFirstChild("Window", true) or lockpickQTE:FindFirstChild("Target", true)
 
@@ -1055,6 +1183,8 @@ local function handleLockpickQTE(lockpickQTE)
         if indCenter >= tMin and indCenter <= tMax then
             singleClick(stopBtn)
         end
+    elseif pickBtn and pickBtn:IsA("GuiButton") and pickBtn.Visible then
+        singleClick(pickBtn)
     end
 end
 
@@ -1337,7 +1467,7 @@ local function cancelTeleport()
 end
 
 -- =============================================================================
--- INGREDIENT ESP ENGINE (OOP BILLBOARD ENGINE)
+-- INGREDIENT & CHEST ESP ENGINE (OOP BILLBOARD ENGINE)
 -- =============================================================================
 local ESP_Colors = {
     ["Crylight"]        = Color3.fromRGB(0, 255, 255),
@@ -1357,6 +1487,7 @@ local ESP_Colors = {
 }
 
 local activeESP = {}
+local activeChestESP = {}
 
 local function createESP(instance)
     if activeESP[instance] then return end
@@ -1392,9 +1523,42 @@ local function removeESP(instance)
     end
 end
 
+local function createChestESP(instance)
+    if activeChestESP[instance] then return end
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "Arcane_ChestESP"
+    billboard.AlwaysOnTop = true
+    billboard.Size = UDim2.new(0, 160, 0, 30)
+    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+    billboard.Adornee = instance
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Text = "📦 Chest"
+    label.TextColor3 = Color3.fromRGB(255, 215, 0)
+    label.TextStrokeTransparency = 0.3
+    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 14
+    label.Parent = billboard
+
+    billboard.Parent = PlayerGui
+    activeChestESP[instance] = { billboard = billboard, label = label, instance = instance }
+end
+
+local function removeChestESP(instance)
+    if activeChestESP[instance] then
+        pcall(function() activeChestESP[instance].billboard:Destroy() end)
+        activeChestESP[instance] = nil
+    end
+end
+
 RunService.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
     local localRoot = char and char:FindFirstChild("HumanoidRootPart")
+
+    -- 1. Ingredient ESP Update
     local espEnabled = Toggles.MasterESP and Toggles.MasterESP.Value
     local filterMode = Options.ESPFilterMode and Options.ESPFilterMode.Value or "All"
     local showDist = Toggles.ESPShowDistance and Toggles.ESPShowDistance.Value
@@ -1435,15 +1599,46 @@ RunService.RenderStepped:Connect(function()
             end
         end
     end
+
+    -- 2. Chest ESP Update
+    local chestESPEnabled = Toggles.ChestESP and Toggles.ChestESP.Value
+    local chestShowDist = Toggles.ChestESPShowDist and Toggles.ChestESPShowDist.Value
+    local chestMaxDist = Options.ChestESPMaxDist and Options.ChestESPMaxDist.Value or 10000
+
+    for inst, data in pairs(activeChestESP) do
+        if not inst or not inst.Parent then
+            removeChestESP(inst)
+        else
+            if chestESPEnabled and localRoot then
+                local pos = inst:IsA("BasePart") and inst.Position or inst:GetPivot().Position
+                local dist = (localRoot.Position - pos).Magnitude
+                if dist <= chestMaxDist then
+                    local text = "📦 Chest"
+                    if chestShowDist then text = string.format("📦 Chest [%dm]", math.floor(dist)) end
+                    data.label.Text = text
+                    data.billboard.Enabled = true
+                else
+                    data.billboard.Enabled = false
+                end
+            else
+                data.billboard.Enabled = false
+            end
+        end
+    end
 end)
 
 workspace.DescendantAdded:Connect(function(desc)
     if ESP_Colors[desc.Name] then createESP(desc) end
+    if isChestObject(desc) then createChestESP(desc) end
 end)
-workspace.DescendantRemoving:Connect(removeESP)
+workspace.DescendantRemoving:Connect(function(desc)
+    removeESP(desc)
+    removeChestESP(desc)
+end)
 
 for _, desc in ipairs(workspace:GetDescendants()) do
     if ESP_Colors[desc.Name] then createESP(desc) end
+    if isChestObject(desc) then createChestESP(desc) end
 end
 
 -- =============================================================================
@@ -1469,9 +1664,10 @@ local Tabs = {
 -- -----------------------------------------------------------------------------
 -- TAB 1: AUTO FARM (INGREDIENTS & ORE MINING)
 -- -----------------------------------------------------------------------------
-local FarmGroup = Tabs.AutoFarm:AddLeftGroupbox("🌿 Ingredient Auto Hunter")
-local MineGroup = Tabs.AutoFarm:AddLeftGroupbox("⛏️ Auto Mine Ores")
-local HopGroup  = Tabs.AutoFarm:AddRightGroupbox("🌐 Server Hop & Webhook")
+local FarmGroup  = Tabs.AutoFarm:AddLeftGroupbox("🌿 Ingredient Auto Hunter")
+local MineGroup  = Tabs.AutoFarm:AddLeftGroupbox("⛏️ Auto Mine Ores")
+local ChestGroup = Tabs.AutoFarm:AddLeftGroupbox("📦 Auto Farm Chests")
+local HopGroup   = Tabs.AutoFarm:AddRightGroupbox("🌐 Server Hop & Webhook")
 
 FarmGroup:AddToggle("AutoFarmCrylight", {
     Text = "Enable Ingredient Auto Farm",
@@ -1582,6 +1778,28 @@ MineGroup:AddSlider("MineTimeout", {
 MineGroup:AddButton({
     Text = "⛏️ Mine Ores Now",
     Func = function() Miner.runCycle() end,
+})
+
+ChestGroup:AddToggle("AutoFarmChests", {
+    Text = "Enable Auto Farm Chests",
+    Default = false,
+    Tooltip = "Tự động quét rương trên toàn bản đồ -> Bay tới mở khóa -> Nhặt đồ -> Đổi server",
+    Callback = function(Value)
+        if Value then ChestFarmer.runCycle() else ChestFarmer.stop() end
+    end
+})
+
+ChestGroup:AddSlider("ChestTimeout", {
+    Text = "Chest Open Timeout (s)",
+    Default = 8,
+    Min = 3,
+    Max = 20,
+    Rounding = 0,
+})
+
+ChestGroup:AddButton({
+    Text = "📦 Farm Chests Now",
+    Func = function() ChestFarmer.runCycle() end,
 })
 
 HopGroup:AddToggle("AutoServerHop", {
@@ -1837,7 +2055,8 @@ QuickWarpGroup:AddButton("⚔️ Sanctuary of Blades", function() teleportToLoca
 -- -----------------------------------------------------------------------------
 -- TAB 5: VISUALS & FPS BOOSTER
 -- -----------------------------------------------------------------------------
-local ESPGroup = Tabs.Visuals:AddLeftGroupbox("👁️ Ingredient ESP")
+local ESPGroup      = Tabs.Visuals:AddLeftGroupbox("👁️ Ingredient ESP")
+local ChestESPGroup = Tabs.Visuals:AddLeftGroupbox("📦 Chest & Treasure ESP")
 local FilterGroup = Tabs.Visuals:AddLeftGroupbox("🎯 Filters & Categories")
 local FPSGroup = Tabs.Visuals:AddRightGroupbox("⚡ FPS Booster")
 local OptGroup = Tabs.Visuals:AddRightGroupbox("🛠️ Optimization & RAM")
@@ -2059,4 +2278,7 @@ if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then
 end
 if Toggles.AutoMineOre and Toggles.AutoMineOre.Value then
     Miner.runCycle()
+end
+if Toggles.AutoFarmChests and Toggles.AutoFarmChests.Value then
+    ChestFarmer.runCycle()
 end
