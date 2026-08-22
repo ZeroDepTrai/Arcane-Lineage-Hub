@@ -104,27 +104,36 @@ local function handleDodgeQTE(dodgeQTE)
     end
 end
 
--- 2. XỬ LÝ SWORD QTE (KIẾM)
+-- 2. XỬ LÝ SWORD QTE (KIẾM - QUÉT TẤT CẢ CÁC ĐÒN ĐÁNH 1, 2, 3...)
 local function handleSwordQTE(swordQTE)
     if not Config.AutoSword or not swordQTE or not swordQTE.Visible then return end
     local inset = swordQTE:FindFirstChild("Inset")
     local stopBtn = swordQTE:FindFirstChild("Stop")
     if not inset or not stopBtn then return end
 
-    local indicator = inset:FindFirstChild("Indicator")
     local window = inset:FindFirstChild("Window")
-    if not indicator or not window then return end
+    if not window then return end
 
-    local indCenter = indicator.AbsolutePosition.X + (indicator.AbsoluteSize.X / 2)
     local winMin = window.AbsolutePosition.X
     local winMax = winMin + window.AbsoluteSize.X
 
-    if indCenter >= winMin and indCenter <= winMax then
-        local now = os.clock()
-        if now - AutoQTE.lastSwordHit > 0.2 then
-            AutoQTE.lastSwordHit = now
-            if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
-            safeClick(stopBtn)
+    -- Quét các Indicator được clone (đặt tên là "1", "2", "3", ...)
+    for _, child in ipairs(inset:GetChildren()) do
+        if tonumber(child.Name) and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.5 then
+            local indMin = child.AbsolutePosition.X
+            local indMax = indMin + child.AbsoluteSize.X
+            local indCenter = indMin + (child.AbsoluteSize.X / 2)
+
+            if indCenter >= (winMin + 2) and indCenter <= (winMax - 2) then
+                local now = os.clock()
+                if now - AutoQTE.lastSwordHit > 0.08 then
+                    AutoQTE.lastSwordHit = now
+                    if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
+                    safeClick(stopBtn)
+                    pressKey(Enum.KeyCode.Space)
+                    break
+                end
+            end
         end
     end
 end
