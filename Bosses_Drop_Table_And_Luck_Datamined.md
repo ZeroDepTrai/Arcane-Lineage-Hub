@@ -28,9 +28,9 @@ Max Farm Luck   : ~3.5x - 4.0x (Full Luck Setup + 7 Leafed Everthistle)
 
 ---
 
-## 🐉 2. WORLD BOSSES DROP TABLES (T1 & T2 ORBS SEPARATED)
+## 🐉 2. WORLD BOSSES DROP TABLES (DETAILED T1 & T2 BREAKDOWN)
 
-### 🔥 Yar'Thul, The Blazing Dragon (Mount Thul / Volcano)
+### 🔥 1. Yar'Thul, The Blazing Dragon (Mount Thul / Volcano)
 ```prolog
 ================================================================================
 BOSS: Yar'Thul, The Blazing Dragon | HP: 5,000 (Corrupted: 7,500)
@@ -46,8 +46,9 @@ Chronos                | Artifact |  8.0%  | 12.0%       | 28.0%
 Narthana's Sigil       | Artifact | 10.0%  | 15.0%       | 35.0%
 Shifting Hourglass     | Artifact | 12.0%  | 18.0%       | 42.0%
 -----------------------+----------+--------+-------------+------------------
-Tier 1 Trait Orb       | Orb (T1) | 28.0%  | 42.0%       | 98.0% - 100%
-Tier 2 Trait Orb       | Orb (T2) |  7.0%  | 10.5%       | 24.5% - 28.0%
+Tier 1 Orb (Normal)    | Orb (T1) | 28.0%  | 42.0%       | 98.0% - 100%
+Tier 2 Orb (Normal)    | Orb (T2) |  7.0%  | 10.5%       | 24.5% - 28.0%
+Tier 1 Orb (Corrupted) | Orb (T1) | 35.0%  | 52.5%       | 100.0% (Guaranteed)
 Tier 2 Orb (Corrupted) | Orb (T2) | 28.0%  | 42.0%       | 85.0% - 100%
 Soul Dust / Mem. Frag  | Resource | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 -----------------------+----------+--------+-------------+------------------
@@ -57,7 +58,7 @@ Special: Unlocks quest for MIDAS ENCHANT at NPC Lodyssa (Caldera Inn)
 
 ---
 
-### 🌳 Thorian, The Rotten (Deeproot / Cessgrounds)
+### 🌳 2. Thorian, The Rotten (Deeproot / Cessgrounds)
 ```prolog
 ================================================================================
 BOSS: Thorian, The Rotten           | HP: 3,000 (Corrupted: 4,500)
@@ -72,8 +73,9 @@ Dark Sigil             | Artifact | 10.0%  | 15.0%       | 35.0%
 Metroms Amulet         | Artifact | 10.0%  | 15.0%       | 35.0%
 Stellian Core          | Artifact |  8.0%  | 12.0%       | 28.0%
 -----------------------+----------+--------+-------------+------------------
-Tier 1 Trait Orb       | Orb (T1) | 28.0%  | 42.0%       | 98.0% - 100%
-Tier 2 Trait Orb       | Orb (T2) |  7.0%  | 10.5%       | 24.5% - 28.0%
+Tier 1 Orb (Normal)    | Orb (T1) | 28.0%  | 42.0%       | 98.0% - 100%
+Tier 2 Orb (Normal)    | Orb (T2) |  7.0%  | 10.5%       | 24.5% - 28.0%
+Tier 1 Orb (Corrupted) | Orb (T1) | 35.0%  | 52.5%       | 100.0% (Guaranteed)
 Tier 2 Orb (Corrupted) | Orb (T2) | 28.0%  | 42.0%       | 85.0% - 100%
 Soul Dust / Mem. Frag  | Resource | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 ================================================================================
@@ -81,7 +83,7 @@ Soul Dust / Mem. Frag  | Resource | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 
 ---
 
-### ☀️ Seraphon (Church of Rapheon / Heavens Point)
+### ☀️ 3. Seraphon (Church of Rapheon / Heavens Point)
 ```prolog
 ================================================================================
 BOSS: Seraphon                      | HP: 4,500 (Corrupted: 6,750)
@@ -96,8 +98,9 @@ Focused Mind           | Gear     | 20.0%  | 30.0%       | 70.0%
 Heaven's Authority     | Artifact |  6.0%  |  9.0%       | 22.0%
 Stellian Core          | Artifact | 10.0%  | 15.0%       | 35.0%
 -----------------------+----------+--------+-------------+------------------
-Tier 1 Trait Orb       | Orb (T1) | 30.0%  | 45.0%       | 100.0% (Guaranteed)
-Tier 2 Trait Orb       | Orb (T2) | 10.0%  | 15.0%       | 35.0%
+Tier 1 Orb (Normal)    | Orb (T1) | 30.0%  | 45.0%       | 100.0% (Guaranteed)
+Tier 2 Orb (Normal)    | Orb (T2) | 10.0%  | 15.0%       | 35.0%
+Tier 1 Orb (Corrupted) | Orb (T1) | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 Tier 2 Orb (Corrupted) | Orb (T2) | 35.0%  | 52.5%       | 100.0% (Guaranteed)
 Void Key (Corrupted)   | Raid Key | 25.0%  | 37.5%       | 87.5% - 100%
 -----------------------+----------+--------+-------------+------------------
@@ -107,7 +110,7 @@ Special: Rapheon's Blessing (BLESSED ENCHANT) at Covenant Rank 20
 
 ---
 
-### 🌑 Arkhaia (Cult of Thanasius / Temple of Norn)
+### 🌑 4. Arkhaia (Cult of Thanasius / Temple of Norn)
 ```prolog
 ================================================================================
 BOSS: Arkhaia                       | HP: 7,000 (Corrupted: 10,500)
@@ -123,8 +126,9 @@ Arkhaia's Visage       | Artifact |  6.0%  |  9.0%       | 22.0%
 Dark Sigil             | Artifact | 10.0%  | 15.0%       | 35.0%
 Metroms Amulet         | Artifact | 10.0%  | 15.0%       | 35.0%
 -----------------------+----------+--------+-------------+------------------
-Tier 1 Trait Orb       | Orb (T1) | 30.0%  | 45.0%       | 100.0% (Guaranteed)
-Tier 2 Trait Orb       | Orb (T2) | 10.0%  | 15.0%       | 35.0%
+Tier 1 Orb (Normal)    | Orb (T1) | 30.0%  | 45.0%       | 100.0% (Guaranteed)
+Tier 2 Orb (Normal)    | Orb (T2) | 10.0%  | 15.0%       | 35.0%
+Tier 1 Orb (Corrupted) | Orb (T1) | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 Tier 2 Orb (Corrupted) | Orb (T2) | 35.0%  | 52.5%       | 100.0% (Guaranteed)
 Void Key (Corrupted)   | Raid Key | 25.0%  | 37.5%       | 87.5% - 100%
 -----------------------+----------+--------+-------------+------------------
@@ -134,7 +138,7 @@ Special: Arkhaia's Curse (SPECTRAL ENCHANT) at Covenant Rank 20
 
 ---
 
-### 🌌 Metrom's Vessel (Endgame Raid Boss — The Void)
+### 🌌 5. Metrom's Vessel (Endgame Raid Boss — The Void)
 ```prolog
 ================================================================================
 BOSS: Metrom's Vessel               | HP: 10,000 (Corrupted: 15,000)
@@ -147,14 +151,15 @@ Vainglorious Locket    | Gear     | 20.0%  | 30.0%       | 70.0%
 Chaos Orb              | Artifact | 10.0%  | 15.0%       | 35.0%
 Lost Scroll: M. Grasp  | Scroll   |  5.0%  |  7.5%       | 18.0% - 20%
 -----------------------+----------+--------+-------------+------------------
-Tier 2 Trait Orb (x2)  | Orb (T2) | 50.0%  | 75.0%       | 100.0% (Guaranteed)
+Tier 2 Orb (Normal x2) | Orb (T2) | 50.0%  | 75.0%       | 100.0% (Guaranteed)
+Tier 2 Orb (Corrupt x3)| Orb (T2) | 100.0% | 100.0%      | 100.0% (Guaranteed)
 Pure Arcanium Shards   | Shard    | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 ================================================================================
 ```
 
 ---
 
-### 🗿 Handaconda (Amoran Chasm / Endgame Secret Boss)
+### 🗿 6. Handaconda (Amoran Chasm / Endgame Secret Boss)
 ```prolog
 ================================================================================
 BOSS: Handaconda                    | HP: 9,000 (Corrupted: 27,000 - 3x HP)
@@ -171,8 +176,9 @@ Open Hand              | Gear     | 20.0%  | 30.0%       | 70.0%
 Paranoxian Crux        | Artifact | 10.0%  | 15.0%       | 35.0%
 Ancient Insignia       | Artifact | 10.0%  | 15.0%       | 35.0%
 -----------------------+----------+--------+-------------+------------------
-Tier 1 Trait Orb       | Orb (T1) | 30.0%  | 45.0%       | 100.0% (Guaranteed)
-Tier 2 Trait Orb       | Orb (T2) | 10.0%  | 15.0%       | 35.0%
+Tier 1 Orb (Normal)    | Orb (T1) | 30.0%  | 45.0%       | 100.0% (Guaranteed)
+Tier 2 Orb (Normal)    | Orb (T2) | 10.0%  | 15.0%       | 35.0%
+Tier 1 Orb (Corrupted) | Orb (T1) | 40.0%  | 60.0%       | 100.0% (Guaranteed)
 Tier 2 Orb (Corrupted) | Orb (T2) | 35.0%  | 52.5%       | 100.0% (Guaranteed)
 -----------------------+----------+--------+-------------+------------------
 Special: Unlocks HIEMAL ENCHANT via NPC Thurisaz (Corrupted State Defeat)
@@ -181,29 +187,29 @@ Special: Unlocks HIEMAL ENCHANT via NPC Thurisaz (Corrupted State Defeat)
 
 ---
 
-## 👾 3. MINI-BOSSES DROP TABLE
+## 👾 3. MINI-BOSSES DROP TABLE (T1 & T2 ORBS BREAKDOWN)
 
 ```prolog
 ================================================================================
                              MINI-BOSS DROP SUMMARY
 ================================================================================
-MINI-BOSS      | LOCATION         | HP       | EXCLUSIVE DROPS & GEARS
+MINI-BOSS      | LOCATION         | HP       | ORB DROPS & EXCLUSIVE GEARS
 ---------------+------------------+----------+----------------------------------
-Slime King     | Caldera Forest   | 400 HP   | • Gelat Band (Summon Slime 35 HP)
+Slime King     | Caldera Forest   | 400 HP   | • Tier 1 Orb: 25% (T2: 0%)
+               |                  |          | • Gelat Band (Summon Slime 35 HP)
                |                  |          | • Slime Shield (Unique Weapon)
-               |                  |          | • Tier 1 Trait Orbs (~25%)
 ---------------+------------------+----------+----------------------------------
-Carnis         | Deeproot Depths  | 380 HP   | • Tear Blood Crystal (+5% Def/Crit)
-               |                  |          | • Tier 1 Trait Orbs (~25%)
+Carnis         | Deeproot Depths  | 380 HP   | • Tier 1 Orb: 25% (T2: 0%)
+               |                  |          | • Tear Blood Crystal (+5% Def/Crit)
 ---------------+------------------+----------+----------------------------------
-Pterathanaian  | Deeproot Depths  | 2,500 HP | • Ptera's Heart (Auto Poison Field)
-               |                  |          | • DeathBeak Dagger (Crit Projectile)
-               |                  |          | • Tier 1 & 2 Trait Orbs (~35%)
+Pterathanaian  | Deeproot Depths  | 2,500 HP | • Tier 1 Orb: 35% | Tier 2: 8%
+               |                  |          | • Corrupted Tier 2 Orb: 25%
+               |                  |          | • Ptera's Heart & DeathBeak Dagger
 ---------------+------------------+----------+----------------------------------
-Magma Golem    | Volcano          | 600 HP   | • Blazing Brand (Summon Thorns + Burn)
-               |                  |          | • Tier 1 Trait Orbs (~20%)
+Magma Golem    | Volcano          | 600 HP   | • Tier 1 Orb: 20% (T2: 0%)
+               |                  |          | • Blazing Brand (Summon Thorns)
 ---------------+------------------+----------+----------------------------------
-Lava Crab      | Volcano          | 450 HP   | • Molten Carapace (+30% Def under 40%)
-               |                  |          | • Tier 1 Trait Orbs (~20%)
+Lava Crab      | Volcano          | 450 HP   | • Tier 1 Orb: 20% (T2: 0%)
+               |                  |          | • Molten Carapace (+30% Def)
 ================================================================================
 ```
