@@ -42,9 +42,15 @@ local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
--- =============================================================================
--- HÀM TIỆN ÍCH (UTILITIES)
--- =============================================================================
+local function singleClick(button)
+    if not button then return end
+    if firesignal then
+        if button:IsA("TextButton") or button:IsA("ImageButton") then
+            firesignal(button.MouseButton1Click)
+        end
+    end
+end
+
 local function safeClick(button)
     if not button then return end
     if firesignal then
@@ -110,12 +116,15 @@ local function handleDodgeQTE(dodgeQTE)
     end
 end
 
--- 2. XỬ LÝ SWORD QTE (KIẾM - INSTANCE-TRACKED, TRANSPARENCY-FILTERED SWEET SPOT ENGINE)
+-- 2. XỬ LÝ SWORD QTE (KIẾM - SINGLE-CLICK, 0.25S DEBOUNCED SWEET SPOT ENGINE)
 local function handleSwordQTE(swordQTE)
     if not Config.AutoSword or not swordQTE or not swordQTE.Visible then
         AutoQTE.swordHitTable = {}
         return
     end
+
+    local now = os.clock()
+    if now - AutoQTE.lastSwordHit < 0.25 then return end
 
     local inset = swordQTE:FindFirstChild("Inset")
     local stopBtn = swordQTE:FindFirstChild("Stop")
@@ -126,14 +135,13 @@ local function handleSwordQTE(swordQTE)
 
     local winLeft = window.AbsolutePosition.X
     local winWidth = window.AbsoluteSize.X
-    local winRight = winLeft + winWidth
 
     local candidate = nil
     local lowestIdx = math.huge
 
     for _, child in ipairs(inset:GetChildren()) do
         local idx = tonumber(child.Name)
-        if idx and not AutoQTE.swordHitTable[child] and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.5 then
+        if idx and not AutoQTE.swordHitTable[child] and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.4 then
             if idx < lowestIdx then
                 lowestIdx = idx
                 candidate = child
@@ -147,14 +155,14 @@ local function handleSwordQTE(swordQTE)
     local indWidth = candidate.AbsoluteSize.X
     local indCenter = indLeft + (indWidth / 2)
 
-    local sweetSpotMin = winLeft + (winWidth * 0.35)
-    local sweetSpotMax = winRight - (winWidth * 0.20)
+    local sweetSpotMin = winLeft + (winWidth * 0.40)
+    local sweetSpotMax = winLeft + (winWidth * 0.70)
 
     if indCenter >= sweetSpotMin and indCenter <= sweetSpotMax then
+        AutoQTE.lastSwordHit = now
         AutoQTE.swordHitTable[candidate] = true
         if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
-        safeClick(stopBtn)
-        pressKey(Enum.KeyCode.Space)
+        singleClick(stopBtn)
     end
 end
 

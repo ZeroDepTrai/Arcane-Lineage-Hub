@@ -7,7 +7,7 @@
       Smooth anti-jitter 3-phase Sky-Tween flight (default 1500 Y), Auto-Harvest, Auto-ServerHop,
       Adaptable Multi-Item Discord Webhook Notifications.
     • [Whole-Region Fake Crylight Blacklist]: Complete 2000+ studs bounding box & path filter for Desert Sanctum.
-    • [Auto Combat QTE]: Perfect Dodge 100%, Sword (100% instance-tracked, transparency-filtered sweet-spot precision),
+    • [Auto Combat QTE]: Perfect Dodge 100%, Sword (100% single-click, 0.25s debounced sweet-spot precision),
       Dagger (100% dynamic arc-size weakpoint precision tracking), Hammer (PID Bang-Bang),
       Axe (Threshold Equilibrium), Fist/Cestus (Sequential combos),
       Spear (Active Button Clicker), Chest Lockpicking.
@@ -62,6 +62,15 @@ local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
 -- =============================================================================
 -- HÀM TIỆN ÍCH DÙNG CHUNG (UTILITIES)
 -- =============================================================================
+local function singleClick(button)
+    if not button then return end
+    if firesignal then
+        if button:IsA("TextButton") or button:IsA("ImageButton") then
+            firesignal(button.MouseButton1Click)
+        end
+    end
+end
+
 local function safeClick(button)
     if not button then return end
     if firesignal then
@@ -522,7 +531,7 @@ function Farmer.stop()
 end
 
 -- =============================================================================
--- AUTO COMBAT QTE ENGINE (INSTANCE-TRACKED SWEET SPOT & DYNAMIC TOLERANCE)
+-- AUTO COMBAT QTE ENGINE (SINGLE-CLICK, 0.25S DEBOUNCED SWEET SPOT ENGINE)
 -- =============================================================================
 local DaggerArcSizes = { 20, 25, 30, 35, 40, 45, 55, 65, 75, 85, 95, 105 }
 
@@ -564,17 +573,20 @@ local function handleDodgeQTE(dodgeQTE)
             AutoQTE.lastDodgeHit = now
             local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
             if delayMs > 0 then task.wait(delayMs / 1000) end
-            safeClick(stopBtn)
+            singleClick(stopBtn)
         end
     end
 end
 
--- 2. SWORD QTE (INSTANCE-TRACKED, TRANSPARENCY-FILTERED SWEET SPOT ENGINE)
+-- 2. SWORD QTE (SINGLE-CLICK, 0.25S DEBOUNCED SWEET SPOT ENGINE)
 local function handleSwordQTE(swordQTE)
     if not Toggles.AutoSword or not Toggles.AutoSword.Value or not swordQTE or not swordQTE.Visible then
         AutoQTE.swordHitTable = {}
         return
     end
+
+    local now = os.clock()
+    if now - AutoQTE.lastSwordHit < 0.25 then return end
 
     local inset = swordQTE:FindFirstChild("Inset")
     local stopBtn = swordQTE:FindFirstChild("Stop")
@@ -585,15 +597,13 @@ local function handleSwordQTE(swordQTE)
 
     local winLeft = window.AbsolutePosition.X
     local winWidth = window.AbsoluteSize.X
-    local winRight = winLeft + winWidth
 
-    -- Tìm indicator nhỏ nhất chưa từng được bấm và đang di chuyển (chưa bị làm mờ)
     local candidate = nil
     local lowestIdx = math.huge
 
     for _, child in ipairs(inset:GetChildren()) do
         local idx = tonumber(child.Name)
-        if idx and not AutoQTE.swordHitTable[child] and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.5 then
+        if idx and not AutoQTE.swordHitTable[child] and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.4 then
             if idx < lowestIdx then
                 lowestIdx = idx
                 candidate = child
@@ -607,16 +617,16 @@ local function handleSwordQTE(swordQTE)
     local indWidth = candidate.AbsoluteSize.X
     local indCenter = indLeft + (indWidth / 2)
 
-    -- Vùng an toàn 100% trúng: Khi tâm indicator lọt vào khoảng 35% đến 75% bên trong ô Window
-    local sweetSpotMin = winLeft + (winWidth * 0.35)
-    local sweetSpotMax = winRight - (winWidth * 0.20)
+    -- Vùng an toàn 100% trúng: Khi tâm indicator lọt vào khoảng 40% đến 70% bên trong ô Window
+    local sweetSpotMin = winLeft + (winWidth * 0.40)
+    local sweetSpotMax = winLeft + (winWidth * 0.70)
 
     if indCenter >= sweetSpotMin and indCenter <= sweetSpotMax then
+        AutoQTE.lastSwordHit = now
         AutoQTE.swordHitTable[candidate] = true
         local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
         if delayMs > 0 then task.wait(delayMs / 1000) end
-        safeClick(stopBtn)
-        pressKey(Enum.KeyCode.Space)
+        singleClick(stopBtn)
     end
 end
 
@@ -653,7 +663,7 @@ local function handleDaggerQTE(daggerQTE)
                 AutoQTE.hitWeakpoints[wp] = true
                 local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
                 if delayMs > 0 then task.wait(delayMs / 1000) end
-                if stopBtn then safeClick(stopBtn) else pressKey(Enum.KeyCode.Space) end
+                if stopBtn then singleClick(stopBtn) else pressKey(Enum.KeyCode.Space) end
                 break
             end
         end
@@ -721,7 +731,7 @@ local function handleAxeQTE(axeQTE)
         local now = os.clock()
         if now - AutoQTE.lastAxePress > 0.05 then
             AutoQTE.lastAxePress = now
-            if spaceHint then safeClick(spaceHint) end
+            if spaceHint then singleClick(spaceHint) end
             pressKey(Enum.KeyCode.Space)
         end
     end
@@ -762,19 +772,19 @@ local function handleFistQTE(fistQTE)
         if rot == 90 or name:find("up") then
             pressKey(Enum.KeyCode.Up)
             pressKey(Enum.KeyCode.W)
-            if otherControls and otherControls:FindFirstChild("Up") then safeClick(otherControls.Up) end
+            if otherControls and otherControls:FindFirstChild("Up") then singleClick(otherControls.Up) end
         elseif rot == 180 or name:find("right") then
             pressKey(Enum.KeyCode.Right)
             pressKey(Enum.KeyCode.D)
-            if otherControls and otherControls:FindFirstChild("Right") then safeClick(otherControls.Right) end
+            if otherControls and otherControls:FindFirstChild("Right") then singleClick(otherControls.Right) end
         elseif rot == 270 or name:find("down") then
             pressKey(Enum.KeyCode.Down)
             pressKey(Enum.KeyCode.S)
-            if otherControls and otherControls:FindFirstChild("Down") then safeClick(otherControls.Down) end
+            if otherControls and otherControls:FindFirstChild("Down") then singleClick(otherControls.Down) end
         elseif rot == 0 or name:find("left") then
             pressKey(Enum.KeyCode.Left)
             pressKey(Enum.KeyCode.A)
-            if otherControls and otherControls:FindFirstChild("Left") then safeClick(otherControls.Left) end
+            if otherControls and otherControls:FindFirstChild("Left") then singleClick(otherControls.Left) end
         end
     end
 end
@@ -788,7 +798,7 @@ local function handleSpearQTE(spearQTE)
             if tap:IsA("GuiObject") and tap.Visible then
                 local btn = tap:FindFirstChild("InputButton") or tap:FindFirstChildWhichIsA("TextButton", true) or tap:FindFirstChildWhichIsA("ImageButton", true)
                 if btn and (btn.Active == nil or btn.Active == true) then
-                    safeClick(btn)
+                    singleClick(btn)
                     break
                 end
             end
@@ -809,7 +819,7 @@ local function handleLockpickQTE(lockpickQTE)
         local tMax = tMin + target.AbsoluteSize.X
 
         if indCenter >= tMin and indCenter <= tMax then
-            safeClick(stopBtn)
+            singleClick(stopBtn)
         end
     end
 end
