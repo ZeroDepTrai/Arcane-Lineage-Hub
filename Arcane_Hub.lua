@@ -12,7 +12,8 @@
     • [Movement Suite with Keybinds]: Fly Hack (X), NoClip (V), Velocity Speedhack (B),
       CFrame Speed Bypass (N), Infinite Jump Boost (J) with LinoriaLib Keybind Pickers.
     • [Teleport Suite]: Smooth Anti-Jitter Sky-Tween (default 1500 Y) to ALL 35+ Class Trainers,
-      Towns, NPCs, and Landmarks with full cancel support and height/speed sliders.
+      Towns, Church (Heavens Point), Desert (Waving Sands), Deeproot (Old Ruins), Merchants,
+      and Landmarks with full cancel support and height/speed sliders.
     • [Ingredient ESP]: Custom BillboardGui OOP Engine with Distance, Persistent Mode, Whitelist filter.
     • [FPS Booster & Optimization]: Remove Fog, Atmosphere, Shadows, Foliage, Materials, Instant Clean RAM.
     • [Config & Theme System]: SaveManager & ThemeManager (Full save/load configurations).
@@ -904,14 +905,18 @@ end)
 -- =============================================================================
 local KeyLocations = {
     -- Towns & Major Hubs
-    ["🏛️ Westwood Heart"] = Vector3.new(8421.9, 822.5, -5864.5),
-    ["🌋 Caldera Town"] = Vector3.new(5035.6, 658.1, -4407.9),
-    ["🌲 Deeproot Town"] = Vector3.new(2790.2, 620.0, -3850.0),
-    ["🏜️ Desert Oasis"] = Vector3.new(10810.7, 1576.1, -3449.6),
-    ["⛰️ Astraea Peak (Light Place)"] = Vector3.new(-177.6, 2767.7, -2868.4),
-    ["🌑 Dark Place Gate"] = Vector3.new(7876.1, 1321.0, 9077.4),
-    ["🌌 Void Rift"] = Vector3.new(987.7, 22.5, 609.6),
-    ["🏠 Memori's House"] = Vector3.new(11799.2, 1103.0, -1738.1),
+    ["🏛️ Westwood Heart"] = Vector3.new(8327.3, 825.1, -5557.4),
+    ["🌋 Caldera Town"] = Vector3.new(5091.2, 662.6, -4293.1),
+    ["🌲 Deeproot Town (Old Ruins)"] = Vector3.new(2815.3, 634.6, -3924.6),
+    ["🏜️ Desert (Waving Sands)"] = Vector3.new(2433.7, 685.4, -3495.1),
+    ["⚔️ Sanctuary of Blades"] = Vector3.new(2086.0, 386.8, -2978.3),
+    ["⛪ Church (Heavens Point)"] = Vector3.new(831.6, 3436.9, -5602.3),
+    ["🏛️ Forgotten Sanctum (Endgame)"] = Vector3.new(10831.2, 1581.7, -3463.6),
+    ["🌑 Dark Place Gate"] = Vector3.new(7855.1, 1290.3, 7930.9),
+    ["🌌 Void Rift"] = Vector3.new(991.0, 41.4, 615.6),
+    ["🏠 Memori's House"] = Vector3.new(11851.5, 1064.9, -1776.8),
+    ["❄️ Icerift Approach"] = Vector3.new(5328.2, 742.7, -6530.2),
+    ["🌋 Volcano"] = Vector3.new(98.9, 577.0, -4115.9),
 
     -- Base Class Trainers
     ["⚔️ Trainer: Thorin (Warrior)"] = Vector3.new(4253.1, 653.8, -3369.2),
@@ -1430,7 +1435,7 @@ SpeedGroup:AddSlider("InfiniteJumpBoost", {
 })
 
 -- -----------------------------------------------------------------------------
--- TAB 4: TELEPORT SUITE (ALL TRAINERS, TOWNS, MERCHANTS, LANDMARKS)
+-- TAB 4: TELEPORT SUITE (ALL TRAINERS, TOWNS, CHURCH, DESERT, MERCHANTS)
 -- -----------------------------------------------------------------------------
 local TeleportGroup = Tabs.Teleport:AddLeftGroupbox("🌐 Sky-Tween Teleport")
 local QuickWarpGroup = Tabs.Teleport:AddRightGroupbox("📍 Quick Warps")
@@ -1482,10 +1487,10 @@ TeleportGroup:AddButton({
 
 QuickWarpGroup:AddButton("🏛️ Westwood Heart", function() teleportToLocation(KeyLocations["🏛️ Westwood Heart"]) end)
 QuickWarpGroup:AddButton("🌋 Caldera Town", function() teleportToLocation(KeyLocations["🌋 Caldera Town"]) end)
-QuickWarpGroup:AddButton("🌲 Deeproot Town", function() teleportToLocation(KeyLocations["🌲 Deeproot Town"]) end)
-QuickWarpGroup:AddButton("🏜️ Desert Oasis", function() teleportToLocation(KeyLocations["🏜️ Desert Oasis"]) end)
-QuickWarpGroup:AddButton("⛰️ Astraea Peak", function() teleportToLocation(KeyLocations["⛰️ Astraea Peak (Light Place)"]) end)
-QuickWarpGroup:AddButton("🌑 Dark Place Gate", function() teleportToLocation(KeyLocations["🌑 Dark Place Gate"]) end)
+QuickWarpGroup:AddButton("🌲 Deeproot Town", function() teleportToLocation(KeyLocations["🌲 Deeproot Town (Old Ruins)"]) end)
+QuickWarpGroup:AddButton("🏜️ Desert (Waving Sands)", function() teleportToLocation(KeyLocations["🏜️ Desert (Waving Sands)"]) end)
+QuickWarpGroup:AddButton("⛪ Church", function() teleportToLocation(KeyLocations["⛪ Church (Heavens Point)"]) end)
+QuickWarpGroup:AddButton("⚔️ Sanctuary of Blades", function() teleportToLocation(KeyLocations["⚔️ Sanctuary of Blades"]) end)
 
 -- -----------------------------------------------------------------------------
 -- TAB 5: VISUALS & FPS BOOSTER
