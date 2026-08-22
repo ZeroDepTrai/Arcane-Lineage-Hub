@@ -151,7 +151,9 @@ local function handleSwordQTE(swordQTE)
     end
 end
 
--- 3. XỬ LÝ DAGGER QTE (DAO GĂM)
+local DaggerArcSizes = { 20, 25, 30, 35, 40, 45, 55, 65, 75, 85, 95, 105 }
+
+-- 3. XỬ LÝ DAGGER QTE (DAO GĂM - DYNAMIC ARC-SIZE WEAKPOINT PRECISION TRACKING)
 local function handleDaggerQTE(daggerQTE)
     if not Config.AutoDagger or not daggerQTE or not daggerQTE.Visible then
         AutoQTE.hitWeakpoints = {}
@@ -171,7 +173,16 @@ local function handleDaggerQTE(daggerQTE)
             if diff < 0 then diff = diff + 360 end
             if diff > 180 then diff = diff - 360 end
 
-            if math.abs(diff) <= 7 then
+            local arcIndex = 1
+            if wp:IsA("ImageLabel") then
+                local col = math.floor(wp.ImageRectOffset.X / 256)
+                local row = math.floor(wp.ImageRectOffset.Y / 256)
+                arcIndex = (row * 4) + col + 1
+            end
+            local arcSize = DaggerArcSizes[arcIndex] or 25
+            local maxTolerance = (arcSize * 0.5) * 0.85
+
+            if math.abs(diff) <= maxTolerance then
                 AutoQTE.hitWeakpoints[wp] = true
                 if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
                 if stopBtn then safeClick(stopBtn) else pressKey(Enum.KeyCode.Space) end

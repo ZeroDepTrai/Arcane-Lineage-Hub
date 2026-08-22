@@ -7,7 +7,7 @@
       Smooth anti-jitter 3-phase Sky-Tween flight (default 1500 Y), Auto-Harvest, Auto-ServerHop,
       Adaptable Multi-Item Discord Webhook Notifications.
     • [Auto Combat QTE]: Perfect Dodge 100%, Sword (100% single-hit target tracking in middle-window sweet spot),
-      Dagger (100% precision bullseye angle tracking), Hammer (PID Bang-Bang),
+      Dagger (100% dynamic arc-size weakpoint precision tracking), Hammer (PID Bang-Bang),
       Axe (Threshold Equilibrium), Fist/Cestus (Sequential combos),
       Spear (Active Button Clicker), Chest Lockpicking.
     • [Spelldraw / Blackjack AI Advisor]: Real-time score reader & optimal probability recommendation (Hit / Stand / Double).
@@ -511,8 +511,10 @@ function Farmer.stop()
 end
 
 -- =============================================================================
--- AUTO COMBAT QTE ENGINE (EXACT TARGET TRACKING IN SWEET SPOT)
+-- AUTO COMBAT QTE ENGINE (DYNAMIC WEAKPOINT & SWEET SPOT STATE MACHINES)
 -- =============================================================================
+local DaggerArcSizes = { 20, 25, 30, 35, 40, 45, 55, 65, 75, 85, 95, 105 }
+
 local AutoQTE = {
     lastDodgeHit = 0,
     lastSwordHit = 0,
@@ -589,7 +591,7 @@ local function handleSwordQTE(swordQTE)
     local winLeft = window.AbsolutePosition.X
     local winWidth = window.AbsoluteSize.X
 
-    -- Sweet spot: Khi tâm indicator nằm trong vùng từ 35% đến 65% của ô Window
+    -- Sweet spot: Khi tâm indicator nằm trong khoảng từ 35% đến 65% của ô Window
     local sweetSpotMin = winLeft + (winWidth * 0.35)
     local sweetSpotMax = winLeft + (winWidth * 0.65)
 
@@ -601,7 +603,7 @@ local function handleSwordQTE(swordQTE)
     end
 end
 
--- 3. DAGGER QTE (BULLSEYE PRECISION WEAKPOINT TRACKING)
+-- 3. DAGGER QTE (DYNAMIC ARC-SIZE WEAKPOINT PRECISION TRACKING)
 local function handleDaggerQTE(daggerQTE)
     if not Toggles.AutoDagger or not Toggles.AutoDagger.Value or not daggerQTE or not daggerQTE.Visible then
         AutoQTE.hitWeakpoints = {}
@@ -621,7 +623,16 @@ local function handleDaggerQTE(daggerQTE)
             if diff < 0 then diff = diff + 360 end
             if diff > 180 then diff = diff - 360 end
 
-            if math.abs(diff) <= 7 then
+            local arcIndex = 1
+            if wp:IsA("ImageLabel") then
+                local col = math.floor(wp.ImageRectOffset.X / 256)
+                local row = math.floor(wp.ImageRectOffset.Y / 256)
+                arcIndex = (row * 4) + col + 1
+            end
+            local arcSize = DaggerArcSizes[arcIndex] or 25
+            local maxTolerance = (arcSize * 0.5) * 0.85
+
+            if math.abs(diff) <= maxTolerance then
                 AutoQTE.hitWeakpoints[wp] = true
                 local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
                 if delayMs > 0 then task.wait(delayMs / 1000) end
