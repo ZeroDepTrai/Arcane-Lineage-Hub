@@ -665,31 +665,60 @@ local function allocateStats()
     local currentStats = getCurrentStats()
     local targets = {
         Strength = Options.TargetStrength and Options.TargetStrength.Value or 20,
+        Arcane = Options.TargetArcane and Options.TargetArcane.Value or 0,
         Endurance = Options.TargetEndurance and Options.TargetEndurance.Value or 20,
         Speed = Options.TargetSpeed and Options.TargetSpeed.Value or 10,
-        Arcane = Options.TargetArcane and Options.TargetArcane.Value or 0,
         Luck = Options.TargetLuck and Options.TargetLuck.Value or 10,
     }
 
-    local RS = game:GetService("ReplicatedStorage")
-    local remotes = RS:FindFirstChild("Remotes")
-    local info = remotes and remotes:FindFirstChild("Information")
-    local statRemote = info and info:FindFirstChild("StatAllocation")
-    if not statRemote then return end
+    local pgui = PlayerGui
+    local statAlloc = pgui.HUD:FindFirstChild("StatAllocateOLD", true)
+    
+    local strCur = currentStats["Strength"] or 0
+    local arcCur = currentStats["Arcane"] or 0
+    local endCur = currentStats["Endurance"] or 0
+    local spdCur = currentStats["Speed"] or 0
+    local lckCur = currentStats["Luck"] or 0
 
-    local statOrder = { "Strength", "Endurance", "Speed", "Arcane", "Luck" }
-    for _, stat in ipairs(statOrder) do
-        local cur = currentStats[stat] or 0
-        local tgt = targets[stat] or 0
-        while cur < tgt do
-            pcall(function()
-                statRemote:FireServer(stat)
-            end)
-            cur = cur + 1
-            task.wait(0.08)
+    local strAdd = math.max(0, (targets.Strength or 0) - strCur)
+    local arcAdd = math.max(0, (targets.Arcane or 0) - arcCur)
+    local endAdd = math.max(0, (targets.Endurance or 0) - endCur)
+    local spdAdd = math.max(0, (targets.Speed or 0) - spdCur)
+    local lckAdd = math.max(0, (targets.Luck or 0) - lckCur)
+
+    local totalAdd = strAdd + arcAdd + endAdd + spdAdd + lckAdd
+    if totalAdd > 0 then
+        -- Cách 1: Click các nút Up trên giao diện StatAllocateOLD
+        if statAlloc and statAlloc.Visible then
+            local function clickStatUp(btnName, count)
+                local btn = statAlloc:FindFirstChild(btnName, true)
+                if btn then
+                    for _ = 1, count do
+                        safeClickButton(btn)
+                        task.wait(0.05)
+                    end
+                end
+            end
+            if strAdd > 0 then clickStatUp("StrengthUp", strAdd) end
+            if arcAdd > 0 then clickStatUp("ArcaneUp", arcAdd) end
+            if endAdd > 0 then clickStatUp("EnduranceUp", endAdd) end
+            if spdAdd > 0 then clickStatUp("SpeedUp", spdAdd) end
+            if lckAdd > 0 then clickStatUp("LuckUp", lckAdd) end
+
+            local finishBtn = statAlloc:FindFirstChild("Finish", true)
+            if finishBtn then safeClickButton(finishBtn) end
         end
+
+        -- Cách 2: Gọi Remote chuẩn 5 tham số của game
+        local RS = game:GetService("ReplicatedStorage")
+        local statRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Information") and RS.Remotes.Information:FindFirstChild("StatAllocation")
+        if statRemote then
+            pcall(function()
+                statRemote:FireServer(strAdd, arcAdd, endAdd, spdAdd, lckAdd)
+            end)
+        end
+        print(string.format("[AutoFarmLevel] 📊 Đã phân bổ Stats: Str+%d, Arc+%d, End+%d, Spd+%d, Luck+%d", strAdd, arcAdd, endAdd, spdAdd, lckAdd))
     end
-    print("[AutoFarmLevel] 📊 Đã hoàn tất phân bổ chỉ số theo Target Stats.")
 end
 
 local function isInSoulCorridor()
@@ -740,7 +769,7 @@ local function humanoidMeditateAndLevelUp()
     end
 
     local matPos = nearestMat:GetPivot().Position
-    local targetCF = CFrame.new(matPos.X, matPos.Y + 2.0, matPos.Z)
+    local targetCF = CFrame.new(matPos.X, matPos.Y + 1.2, matPos.Z)
 
     print(string.format("[AutoFarmLevel] 🧘 Đang bay tới Chiếu Thiền tại (%.1f, %.1f, %.1f)...", matPos.X, matPos.Y, matPos.Z))
 
@@ -765,16 +794,14 @@ local function humanoidMeditateAndLevelUp()
 
     noclipConn:Disconnect()
     hum.PlatformStand = false
+    hum:ChangeState(Enum.HumanoidStateType.Landed)
     hum:ChangeState(Enum.HumanoidStateType.Running)
-    task.wait(0.5)
+    root.CFrame = targetCF
+    task.wait(0.8)
 
-    -- 2. Kích hoạt Thiền duy nhất 1 lần (Không spam phím M tránh bị hủy ngồi thiền)
-    print("[AutoFarmLevel] 🧘 Bắt đầu ngồi thiền nhập định vào Soul Corridor...")
-    local medHandler = char:FindFirstChild("MeditateHandler")
-    local medRemote = medHandler and medHandler:FindFirstChild("Meditate")
-    if medRemote then
-        pcall(function() medRemote:FireServer() end)
-    end
+    -- 2. Bấm phím M chuẩn 100% người thật qua VirtualInputManager (Duy nhất 1 lần)
+    print("[AutoFarmLevel] 🧘 Bắt đầu bấm phím M ngồi thiền vào Soul Corridor...")
+    simulateKeyPress(Enum.KeyCode.M, 0.12)
 
     -- Theo dõi trạng thái chuyển cảnh (Chờ tối đa 8.5s cho animation ngồi và fade màn hình)
     local waited = 0
@@ -904,13 +931,9 @@ local function humanoidMeditateAndLevelUp()
         end
         task.wait(1.0)
 
-        -- 6. Thoát khỏi Soul Corridor trở lại Overworld duy nhất 1 lần
-        print("[AutoFarmLevel] 🧘 Thoát thiền để trở về Overworld...")
-        local currentMedHandler = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("MeditateHandler")
-        local currentMedRemote = currentMedHandler and currentMedHandler:FindFirstChild("Meditate")
-        if currentMedRemote then
-            pcall(function() currentMedRemote:FireServer() end)
-        end
+        -- 6. Giả lập bấm phím M để thoát khỏi Soul Corridor trở lại Overworld
+        print("[AutoFarmLevel] 🧘 Bấm phím M thoát thiền để trở về Overworld...")
+        simulateKeyPress(Enum.KeyCode.M, 0.12)
 
         local exitWaited = 0
         while isInSoulCorridor() and exitWaited < 8.5 do
