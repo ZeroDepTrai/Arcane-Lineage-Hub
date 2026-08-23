@@ -2377,13 +2377,12 @@ local SuperTrainers = {
 }
 
 local MajorBosses = {
-    ["🐉 Boss: Yar'thul, the Blazing Dragon (Mount Thul)"] = Vector3.new(-615.0, 644.4, -4235.4),
-    ["🐍 Boss: Handaconda (Deep Desert Room)"] = Vector3.new(3134.1, 191.5, -456.8),
-    ["💀 Boss: Thorian, the Rotten (Deep Forest)"] = Vector3.new(8330.7, 615.5, -694.5),
-    ["🦅 Boss: Arkhaia (Desert World Boss)"] = Vector3.new(14706.4, 532.8, 7253.2),
-    ["✨ Boss: Seraphon (Light Boss / Heavens Point)"] = Vector3.new(630.2, 3429.2, -5720.4),
-    ["🌑 Boss: Momma Darkbeast (Darkbeast Lair)"] = Vector3.new(8121.4, 584.4, -2135.1),
-    ["👁️ Boss: Metrom's Vessel (Raid Boss Dungeon)"] = Vector3.new(-2139.8, 202.6, 4269.3),
+    ["🐉 Boss: Yar'thul, the Blazing Dragon (Mount Thul Door)"] = Vector3.new(40.5, 581.6, -4113.5),
+    ["💀 Boss: Thorian, the Rotten (Cessgrounds Door)"]         = Vector3.new(8327.2, 628.7, -722.5),
+    ["✨ Boss: Seraphon (Light Boss / Illustris Door)"]          = Vector3.new(710.5, 3449.1, -5678.1),
+    ["🦅 Boss: Arkhaia (Temple of Norn Door)"]                 = Vector3.new(14710.9, 550.7, 7133.7),
+    ["🐍 Boss: Handaconda (Desert Room Entrance)"]              = Vector3.new(3134.1, 179.1, -852.2),
+    ["👁️ Boss: Metrom's Vessel (Dungeon Entrance Spawn)"]      = Vector3.new(-3369.4, 129.8, 4266.4),
 }
 
 local KeyLocations = {
@@ -3072,7 +3071,7 @@ SpeedGroup:AddSlider("InfiniteJumpBoost", {
 -- TAB 4: TELEPORT SUITE (BASE TRAINERS, SUPER TRAINERS, MAJOR BOSSES, TOWNS & WARPS)
 -- -----------------------------------------------------------------------------
 local BaseGroup = Tabs.Teleport:AddLeftGroupbox("⚔️ Base Class Trainers (7)")
-local BossGroup = Tabs.Teleport:AddLeftGroupbox("🐉 Major Bosses & Arenas (7)")
+local BossGroup = Tabs.Teleport:AddLeftGroupbox("🐉 Major Bosses & Arenas (6)")
 local SuperGroup = Tabs.Teleport:AddRightGroupbox("🌟 Super Class Trainers (18)")
 local TownWarpGroup = Tabs.Teleport:AddRightGroupbox("🏛️ Towns, Quests & Quick Warps")
 
@@ -3165,16 +3164,19 @@ TownWarpGroup:AddButton({
     end
 })
 
-TownWarpGroup:AddLabel("--- Quick Warps ---")
+TownWarpGroup:AddLabel("--- Town Quick Warps ---")
 TownWarpGroup:AddButton("🏛️ Westwood", function() teleportToLocation(KeyLocations["🏛️ Westwood Heart"] or KeyLocations["🏛️ Westwood"]) end)
 TownWarpGroup:AddButton("🌋 Caldera", function() teleportToLocation(KeyLocations["🌋 Caldera Town"] or KeyLocations["🌋 Caldera"]) end)
 TownWarpGroup:AddButton("🏜️ Desert", function() teleportToLocation(KeyLocations["🏜️ Desert (Waving Sands)"] or KeyLocations["🏜️ Desert"]) end)
 TownWarpGroup:AddButton("⛪ Church", function() teleportToLocation(KeyLocations["⛪ Church (Heavens Point)"] or KeyLocations["⛪ Church"]) end)
 TownWarpGroup:AddButton("⚔️ Sanctuary", function() teleportToLocation(KeyLocations["⚔️ Sanctuary of Blades"] or KeyLocations["⚔️ Sanctuary"]) end)
-TownWarpGroup:AddButton("🐉 Yar'thul Dragon", function() teleportToLocation(MajorBosses["🐉 Boss: Yar'thul, the Blazing Dragon (Mount Thul)"]) end)
-TownWarpGroup:AddButton("💀 Thorian Rotten", function() teleportToLocation(MajorBosses["💀 Boss: Thorian, the Rotten (Deep Forest)"]) end)
-TownWarpGroup:AddButton("🦅 Arkhaia Boss", function() teleportToLocation(MajorBosses["🦅 Boss: Arkhaia (Desert World Boss)"]) end)
-TownWarpGroup:AddButton("🌑 Momma Darkbeast", function() teleportToLocation(MajorBosses["🌑 Boss: Momma Darkbeast (Darkbeast Lair)"]) end)
+TownWarpGroup:AddLabel("--- Boss Quick Warps ---")
+TownWarpGroup:AddButton("🐉 Yar'thul (Mount Thul Door)", function() teleportToLocation(MajorBosses["🐉 Boss: Yar'thul, the Blazing Dragon (Mount Thul Door)"]) end)
+TownWarpGroup:AddButton("💀 Thorian (Cessgrounds Door)", function() teleportToLocation(MajorBosses["💀 Boss: Thorian, the Rotten (Cessgrounds Door)"]) end)
+TownWarpGroup:AddButton("✨ Seraphon (Illustris Door)", function() teleportToLocation(MajorBosses["✨ Boss: Seraphon (Light Boss / Illustris Door)"]) end)
+TownWarpGroup:AddButton("🦅 Arkhaia (Temple of Norn Door)", function() teleportToLocation(MajorBosses["🦅 Boss: Arkhaia (Temple of Norn Door)"]) end)
+TownWarpGroup:AddButton("🐍 Handaconda (Desert Room)", function() teleportToLocation(MajorBosses["🐍 Boss: Handaconda (Desert Room Entrance)"]) end)
+TownWarpGroup:AddButton("👁️ Metrom (Dungeon Entrance)", function() teleportToLocation(MajorBosses["👁️ Boss: Metrom's Vessel (Dungeon Entrance Spawn)"]) end)
 
 -- -----------------------------------------------------------------------------
 -- TAB 5: VISUALS & FPS BOOSTER
