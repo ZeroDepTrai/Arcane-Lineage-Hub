@@ -427,44 +427,42 @@ local function flyToItem(targetPosition, cancelCheckFn)
     local cancelFn = cancelCheckFn or function() return Farmer.running or Miner.running end
     if not cancelFn() then return false end
 
-    enableFlightState()
-
     local currentPos = root.Position
     local distance = (currentPos - targetPosition).Magnitude
-    local cruiseSpeed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 180
 
-    -- 1. BAY GẦN (DƯỚI 90 STUDS): LƯỚT VÒM CAO TRÁNH VA CHẠM ĐỊA HÌNH & CHẾT VOID
-    if distance < 90 then
-        local safeY = math.max(currentPos.Y, targetPosition.Y) + 12
-        local midCF = CFrame.new(currentPos.X, safeY, currentPos.Z)
-        local targetHighCF = CFrame.new(targetPosition.X, safeY, targetPosition.Z)
-        local finalCF = CFrame.new(targetPosition.X, targetPosition.Y + 2.5, targetPosition.Z)
-
-        smoothTweenTo(midCF, cruiseSpeed, cancelFn, true)
-        smoothTweenTo(targetHighCF, cruiseSpeed, cancelFn, true)
-        local res = smoothTweenTo(finalCF, cruiseSpeed, cancelFn, false)
-        return res
+    -- 1. KHOẢNG CÁCH GẦN (DƯỚI 60 STUDS): DỊCH CHUYỂN TỨC THÌ (INSTANT TP)
+    -- Loại bỏ hoàn toàn va chạm địa hình, không rớt void, không delay, an toàn 100% không bị anti-cheat
+    if distance < 60 then
+        root.CFrame = CFrame.lookAt(Vector3.new(targetPosition.X, targetPosition.Y + 2.5, targetPosition.Z), targetPosition)
+        task.wait(0.15)
+        return true
     end
 
-    -- 2. BAY XA: SKY-TWEEN 3 PHA LIÊN TỤC (GIỮ NGUYÊN FLIGHT STATE KHÔNG RƠI TỰ DO GIỮA CÁC PHA)
+    -- 2. KHOẢNG CÁCH XA (>= 60 STUDS): SKY-TWEEN 3 PHA LIÊN TỤC (GIỮ NGUYÊN FLIGHT STATE)
+    enableFlightState()
+
+    local cruiseSpeed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 180
     local skyHeight = Options.SkyHeight and Options.SkyHeight.Value or 1500
     local ascendSpeed = Options.AscendSpeed and Options.AscendSpeed.Value or 150
     local descendSpeed = Options.DescendSpeed and Options.DescendSpeed.Value or 150
 
     local skyY = math.max(skyHeight, currentPos.Y + 200, targetPosition.Y + 200)
 
+    -- Pha 1: Bay thẳng đứng lên trời
     local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), ascendSpeed, cancelFn, true)
     if not s1 or not cancelFn() then
         disableFlightState()
         return false
     end
 
+    -- Pha 2: Lướt ngang trên tầng không
     local s2 = smoothTweenTo(CFrame.new(targetPosition.X, skyY, targetPosition.Z), cruiseSpeed, cancelFn, true)
     if not s2 or not cancelFn() then
         disableFlightState()
         return false
     end
 
+    -- Pha 3: Hạ cánh xuống vị trí mục tiêu
     local s3 = smoothTweenTo(CFrame.new(targetPosition.X, targetPosition.Y + 2.5, targetPosition.Z), descendSpeed, cancelFn, false)
     return s3
 end
@@ -1699,7 +1697,54 @@ local function equipPickaxe()
         return true
     end
 
-    -- 1. Thử kéo từ Backpack vào tay trước
+    -- 1. ƯU TIÊN GỌI HÀM :Equip() CHÍNH THỨC TỪ ENVIRONMENT CỦA INVENTORY SCRIPT
+    local pgui = PlayerGui
+    local inv = pgui and pgui:FindFirstChild("Inventory")
+    local invScript = inv and inv:FindFirstChildWhichIsA("LocalScript", true)
+
+    if invScript and getsenv and getupvalues then
+        pcall(function()
+            local env = getsenv(invScript)
+            if env and env.newTile then
+                local uvs = getupvalues(env.newTile)
+                local itemDict = uvs[6]
+                if itemDict then
+                    for k, v in pairs(itemDict) do
+                        if (v.Tool and v.Tool:lower():find("pickaxe")) or (v.ItemData and v.ItemData.Name:lower():find("pickaxe")) then
+                            v:Equip()
+                            task.wait(0.3)
+                            break
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    if hasPickaxeEquipped() then return true end
+
+    -- 2. DỰ PHÒNG: Gửi Remote InventoryManage Equip & Use
+    local RS = game:GetService("ReplicatedStorage")
+    local invManage = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Information") and RS.Remotes.Information:FindFirstChild("InventoryManage")
+
+    if inv then
+        for _, desc in ipairs(inv:GetDescendants()) do
+            if desc:IsA("TextButton") and desc.Text:lower():find("pickaxe") then
+                local uniqueId = tonumber(desc.Name) or desc.Name
+                if invManage then
+                    pcall(function() invManage:FireServer("Equip", "Pickaxe", uniqueId) end)
+                    pcall(function() invManage:FireServer("Use", "Pickaxe", uniqueId) end)
+                end
+                if firesignal then
+                    pcall(function() firesignal(desc.MouseButton1Click) end)
+                end
+                task.wait(0.3)
+                break
+            end
+        end
+    end
+
+    -- 3. DỰ PHÒNG: Kéo Tool từ Backpack
     local bp = LocalPlayer:FindFirstChild("Backpack")
     local hum = char:FindFirstChildOfClass("Humanoid")
     if bp and hum then
@@ -1707,30 +1752,7 @@ local function equipPickaxe()
         if bpPick and bpPick:IsA("Tool") then
             hum:EquipTool(bpPick)
             task.wait(0.2)
-            if hasPickaxeEquipped() then return true end
         end
-    end
-
-    -- 2. Chỉ gửi Remote Equip nếu thật sự chưa cầm trên tay
-    local RS = game:GetService("ReplicatedStorage")
-    local invManage = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Information") and RS.Remotes.Information:FindFirstChild("InventoryManage")
-
-    local pgui = PlayerGui
-    local inv = pgui and pgui:FindFirstChild("Inventory")
-    local pickaxeUniqueId = nil
-
-    if inv then
-        for _, desc in ipairs(inv:GetDescendants()) do
-            if desc:IsA("TextButton") and desc.Text:lower():find("pickaxe") then
-                pickaxeUniqueId = tonumber(desc.Name) or desc.Name
-                break
-            end
-        end
-    end
-
-    if pickaxeUniqueId and invManage then
-        pcall(function() invManage:FireServer("Equip", "Pickaxe", pickaxeUniqueId) end)
-        task.wait(0.3)
     end
 
     return hasPickaxeEquipped()
@@ -1784,6 +1806,7 @@ local function mineOreNode(oreModel)
     if not oreModel or not oreModel.Parent or not oreModel:IsDescendantOf(workspace) then return false end
     local startTime = os.clock()
     local timeout = Options.MineTimeout and Options.MineTimeout.Value or 15
+    local swingDelay = (Options.MineSwingDelay and Options.MineSwingDelay.Value) or 0.18
 
     -- Đảm bảo cuốc được trang bị 1 lần trước khi đập
     equipPickaxe()
@@ -1793,7 +1816,7 @@ local function mineOreNode(oreModel)
     local orePart = oreModel:FindFirstChild("Ore") or oreModel:FindFirstChildWhichIsA("BasePart")
     if not orePart then return false end
 
-    print(string.format("[AutoMine] ⛏️ Bắt đầu vung cuốc đập mỏ %s...", oreModel.Name))
+    print(string.format("[AutoMine] ⛏️ Bắt đầu vung cuốc đập mỏ %s (Tốc độ: %.2fs/hit)...", oreModel.Name, swingDelay))
 
     while (os.clock() - startTime < timeout) and Miner.running do
         -- 1. KIỂM TRA ĐIỀU KIỆN MỎ QUẶNG ĐÃ VỠ HOÀN TOÀN
@@ -1825,11 +1848,11 @@ local function mineOreNode(oreModel)
 
         if VirtualInputManager then
             VirtualInputManager:SendMouseButtonEvent(500, 500, 0, true, game, 0)
-            task.wait(0.08)
+            task.wait(0.04)
             VirtualInputManager:SendMouseButtonEvent(500, 500, 0, false, game, 0)
         end
 
-        task.wait(0.4)
+        task.wait(swingDelay)
     end
     return true
 end
@@ -2946,6 +2969,15 @@ MineGroup:AddSlider("MineTimeout", {
     Min = 3,
     Max = 30,
     Rounding = 0,
+})
+
+MineGroup:AddSlider("MineSwingDelay", {
+    Text = "Mining Swing Delay (s)",
+    Default = 0.18,
+    Min = 0.08,
+    Max = 0.5,
+    Rounding = 2,
+    Tooltip = "Thời gian nghỉ giữa mỗi lần vung cuốc đập mỏ quặng (mặc định 0.18s siêu nhanh)",
 })
 
 MineGroup:AddButton({
