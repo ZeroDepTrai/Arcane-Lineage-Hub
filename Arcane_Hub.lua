@@ -687,103 +687,7 @@ local function allocateStats()
     print("[AutoFarmLevel] 📊 Đã hoàn tất phân bổ chỉ số theo Target Stats.")
 end
 
-local function performMeditationAndLevelUp()
-    local char = LocalPlayer.Character
-    local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return false end
-
-    -- 1. Tìm Chiếu Thiền gần nhất
-    local mats = workspace:FindFirstChild("Mats")
-    local nearestMat = nil
-    local nearestDist = math.huge
-    if mats then
-        for _, mat in ipairs(mats:GetChildren()) do
-            local pos = mat:GetPivot().Position
-            local d = (pos - root.Position).Magnitude
-            if d < nearestDist then
-                nearestDist = d
-                nearestMat = mat
-            end
-        end
-    end
-
-    if not nearestMat then
-        print("[AutoFarmLevel] ❌ Không tìm thấy MeditationMat trên bản đồ.")
-        return false
-    end
-
-    local matPos = nearestMat:GetPivot().Position
-    local targetCF = CFrame.new(matPos.X, matPos.Y + 2.5, matPos.Z)
-    local distance = (root.Position - targetCF.Position).Magnitude
-
-    print(string.format("[AutoFarmLevel] 🧘 Đang bay chớp nhoáng tới Chiếu Thiền tại (%.1f, %.1f, %.1f)...", matPos.X, matPos.Y, matPos.Z))
-
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then hum.PlatformStand = true end
-
-    local noclipConn = RunService.Stepped:Connect(function()
-        local c = LocalPlayer.Character
-        if c then
-            for _, p in ipairs(c:GetDescendants()) do
-                if p:IsA("BasePart") then p.CanCollide = false end
-            end
-            local r = c:FindFirstChild("HumanoidRootPart")
-            if r then r.AssemblyLinearVelocity = Vector3.zero end
-        end
-    end)
-
-    local speed = 220
-    local duration = math.max(0.1, distance / speed)
-    local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), { CFrame = targetCF })
-    tween:Play()
-    tween.Completed:Wait()
-
-    noclipConn:Disconnect()
-    if hum then
-        hum.PlatformStand = false
-        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    end
-
-    task.wait(0.2)
-
-    -- 2. Kích hoạt ProximityPrompt
-    local prox = nearestMat:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prox and fireproximityprompt then
-        fireproximityprompt(prox)
-        print("[AutoFarmLevel] ✨ Đã kích hoạt Chiếu Thiền!")
-    end
-
-    task.wait(1.5)
-
-    -- 3. Đổi cấp qua Aretim / Remote
-    local RS = game:GetService("ReplicatedStorage")
-    local remotes = RS:FindFirstChild("Remotes")
-    local dataRemotes = remotes and remotes:FindFirstChild("Data")
-    local lvlRemote = dataRemotes and dataRemotes:FindFirstChild("LevelUp")
-    if lvlRemote then
-        pcall(function()
-            lvlRemote:FireServer()
-            print("[AutoFarmLevel] 🆙 Đã gửi yêu cầu đổi cấp qua Aretim.")
-        end)
-    end
-
-    task.wait(0.8)
-
-    -- 4. Tự động cộng điểm stats
-    allocateStats()
-    task.wait(0.5)
-
-    -- 5. Quay lại bãi ngầm an toàn
-    local mode = Options.FarmLevelMode and Options.FarmLevelMode.Value or "Level 1 - 20 (Underground)"
-    if mode:find("Level 1 - 20") then
-        local spot = LevelFarmer.farmSpotLv1_20
-        ensureUndergroundPlatform(spot)
-        teleportToUndergroundSpot(spot)
-        print("[AutoFarmLevel] 🛡️ Đã quay lại bãi farm ngầm an toàn.")
-    end
-
-    return true
-end
+-- Auto Meditate function disabled for anticheat safety
 
 local function safeClickButton(btn)
     if not btn or not btn:IsA("GuiButton") then return false end
@@ -990,19 +894,9 @@ function LevelFarmer.runCycle()
                     task.wait(0.2)
                 end
             else
-                -- Tự động kiểm tra Essence và đi thiền đổi cấp nếu đầy
-                if Toggles.AutoMeditate and Toggles.AutoMeditate.Value then
-                    local curEssence = getCurrentEssence()
-                    local threshold = Options.EssenceThreshold and Options.EssenceThreshold.Value or 40
-                    if curEssence >= threshold then
-                        print(string.format("[AutoFarmLevel] 🔮 Essence đạt mốc (%d >= %d) -> Bắt đầu chu trình đổi cấp...", curEssence, threshold))
-                        performMeditationAndLevelUp()
-                    end
-                end
-
-                -- If out of combat and in Level 1 - 20 mode, check if we drifted or need repositioning
-                local currentMode = Options.FarmLevelMode and Options.FarmLevelMode.Value or "Level 1 - 20 (Underground)"
-                if currentMode:find("Level 1 - 20") then
+                -- Giữ vị trí ngầm an toàn tuyệt đối, không spam di chuyển ra ngoài
+                local currentMode = (Options and Options.FarmLevelMode and Options.FarmLevelMode.Value) or "Level 1 - 20 (Underground)"
+                if tostring(currentMode):find("Level 1 - 20") then
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
                     if root then
@@ -1010,12 +904,12 @@ function LevelFarmer.runCycle()
                         ensureUndergroundPlatform(spot)
                         local dist = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(spot.X, 0, spot.Z)).Magnitude
                         local yDiff = math.abs(root.Position.Y - (spot.Y + 4.0))
-                        if dist > 8 or yDiff > 6 then
+                        if dist > 12 or yDiff > 8 then
                             teleportToUndergroundSpot(spot)
                         end
                     end
                 end
-                task.wait(0.4)
+                task.wait(0.5)
             end
             task.wait(0.1)
         end
@@ -2102,20 +1996,7 @@ LevelGroup:AddDropdown("FarmLevelMode", {
     Tooltip = "Level 1-20: Tween xuống lòng đất an toàn, tránh người chơi khác nhìn thấy\nLevel 20-50: Tùy chọn nâng cao tiếp theo",
 })
 
-LevelGroup:AddToggle("AutoMeditate", {
-    Text = "Auto Meditate & Level Up (Essence Cap)",
-    Default = true,
-    Tooltip = "Khi tích lũy đủ Essence (Cap), tự động bay chớp nhoáng tới chiếu thiền đổi cấp qua Aretim rồi quay lại bãi ngầm",
-})
-
-LevelGroup:AddSlider("EssenceThreshold", {
-    Text = "Essence Meditate Threshold",
-    Default = 40,
-    Min = 10,
-    Max = 300,
-    Rounding = 0,
-    Tooltip = "Số lượng Essence tích lũy để kích hoạt đi thiền đổi cấp",
-})
+-- Auto Meditate UI removed for anticheat safety
 
 LevelGroup:AddToggle("AutoAllocateStats", {
     Text = "Auto Allocate Stats",
