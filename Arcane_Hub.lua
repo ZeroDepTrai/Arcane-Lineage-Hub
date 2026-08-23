@@ -3705,7 +3705,7 @@ task.spawn(function()
                             if realItemName and ItemRegistry then
                                 local regData = ItemRegistry:GetItem(realItemName)
                                 if regData then
-                                    local descText = (regData.GearDesc and (regData.GearDesc .. "\n\n") or "") .. (regData.ToolTip or "")
+                                    local descText = (regData.GearDesc and (regData.GearDesc .. " | ") or "") .. (regData.ToolTip or "")
                                     descLbl.Text = "✨ " .. descText
                                 end
                             end
@@ -3915,7 +3915,7 @@ task.spawn(function()
                             if realItemName and ItemRegistry then
                                 local regData = ItemRegistry:GetItem(realItemName)
                                 if regData then
-                                    local descText = (regData.GearDesc and (regData.GearDesc .. "\n\n") or "") .. (regData.ToolTip or "")
+                                    local descText = (regData.GearDesc and (regData.GearDesc .. " | ") or "") .. (regData.ToolTip or "")
                                     descLbl.Text = "✨ " .. descText
                                 end
                             end
