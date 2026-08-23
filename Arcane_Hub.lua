@@ -795,9 +795,9 @@ local function humanoidMeditateAndLevelUp()
 
         local aretimModel = workspace:FindFirstChild("NPCs") and workspace.NPCs:FindFirstChild("Aretim")
         local aretimPos = aretimModel and aretimModel:GetPivot().Position or LevelFarmer.aretimPos
-        local aretimTargetCF = CFrame.new(aretimPos.X, aretimPos.Y + 2.0, aretimPos.Z - 4.0)
+        local aretimTargetCF = CFrame.lookAt(Vector3.new(aretimPos.X, aretimPos.Y + 1.5, aretimPos.Z - 4.0), aretimPos)
 
-        print(string.format("[AutoFarmLevel] 🚶 Đang bay tới đứng trước mặt NPC Aretim tại (%.1f, %.1f, %.1f)...", aretimPos.X, aretimPos.Y, aretimPos.Z))
+        print(string.format("[AutoFarmLevel] 🚶 Đang bay tới gặp NPC Aretim tại (%.1f, %.1f, %.1f)...", aretimPos.X, aretimPos.Y, aretimPos.Z))
         
         scHum.PlatformStand = true
         local noclipCorridor = RunService.Stepped:Connect(function()
@@ -819,57 +819,74 @@ local function humanoidMeditateAndLevelUp()
         noclipCorridor:Disconnect()
         scHum.PlatformStand = false
         scHum:ChangeState(Enum.HumanoidStateType.Running)
-        
-        -- Đảm bảo đứng vững vàng và chính xác sát mặt Aretim
         scRoot.CFrame = aretimTargetCF
-        task.wait(1.0)
-        print("[AutoFarmLevel] 🧍 Đã đứng sát trước mặt NPC Aretim. Khoảng cách: " .. string.format("%.1f studs", (scRoot.Position - aretimPos).Magnitude))
+        task.wait(0.6)
 
-        -- 4. Tương tác hội thoại với Aretim và chờ mở Menu Thăng Cấp
-        local aretimProx = aretimModel and aretimModel:FindFirstChildWhichIsA("ProximityPrompt", true)
-        if aretimProx and fireproximityprompt then
-            fireproximityprompt(aretimProx)
-            print("[AutoFarmLevel] 💬 Đã bấm nói chuyện với NPC Aretim.")
-        end
-
+        -- 4. Kích hoạt hội thoại và xác nhận NPCDialogue thực sự hiển thị
         local pgui = PlayerGui
         local diag = pgui:FindFirstChild("NPCDialogue")
+        local diagOpened = false
         local diagStart = os.clock()
-        while (not diag or not diag.Enabled) and (os.clock() - diagStart < 4.0) do
+
+        print("[AutoFarmLevel] 💬 Đang kích hoạt hội thoại với Aretim...")
+        while (os.clock() - diagStart < 6.0) do
+            diag = pgui:FindFirstChild("NPCDialogue")
+            if diag and diag.Enabled then
+                diagOpened = true
+                print("[AutoFarmLevel] 💬 Giao diện hội thoại Aretim đã mở thành công!")
+                break
+            end
+
+            scRoot.CFrame = aretimTargetCF
+            local aretimProx = aretimModel and aretimModel:FindFirstChildWhichIsA("ProximityPrompt", true)
             if aretimProx and fireproximityprompt then
                 fireproximityprompt(aretimProx)
             end
             task.wait(0.5)
-            diag = pgui:FindFirstChild("NPCDialogue")
         end
-        task.wait(0.5)
 
-        -- Tự động chọn thăng tối đa level ('Show me as much light as I can handle')
-        if diag and diag.Enabled then
+        -- 5. Tự động chọn lựa chọn thăng cấp tối đa
+        if diagOpened and diag and diag.Enabled then
+            task.wait(0.5)
             local optionsFrame = diag:FindFirstChild("Options", true)
             if optionsFrame then
                 local clicked = false
+                -- Ưu tiên 1: Tăng nhiều cấp (Show me as much light as I can handle. (+ X LVLS))
                 for _, opt in ipairs(optionsFrame:GetChildren()) do
                     if opt:IsA("TextButton") and opt.Visible then
                         local txt = opt.Text:lower()
-                        if txt:find("as much light") or txt:find("lvls") then
-                            print(string.format("[AutoFarmLevel] 🆙 Đang chọn thăng tối đa: '%s'", opt.Text))
+                        if (txt:find("as much light") or txt:find("lvls")) and not txt:find("+ 0 lvls") then
+                            print(string.format("[AutoFarmLevel] 🆙 Đang bấm thăng tối đa: '%s'", opt.Text))
                             safeClickButton(opt)
                             clicked = true
                             break
                         end
                     end
                 end
+                -- Ưu tiên 2: Tăng 1 cấp (+LVL)
                 if not clicked then
                     for _, opt in ipairs(optionsFrame:GetChildren()) do
-                        if opt:IsA("TextButton") and opt.Visible and opt.Text:lower():find("+lvl") then
-                            print(string.format("[AutoFarmLevel] 🆙 Đang chọn thăng cấp: '%s'", opt.Text))
+                        if opt:IsA("TextButton") and opt.Visible and opt.Text:lower():find("+lvl") and not opt.Text:lower():find("+ 0") then
+                            print(string.format("[AutoFarmLevel] 🆙 Đang bấm thăng 1 cấp: '%s'", opt.Text))
+                            safeClickButton(opt)
+                            clicked = true
+                            break
+                        end
+                    end
+                end
+                -- Nếu không đủ Essence để tăng: đóng hội thoại bằng 'Not yet.'
+                if not clicked then
+                    for _, opt in ipairs(optionsFrame:GetChildren()) do
+                        if opt:IsA("TextButton") and opt.Visible and opt.Text:lower():find("not yet") then
+                            print("[AutoFarmLevel] ℹ️ Chưa đủ Essence để thăng cấp, đóng hội thoại.")
                             safeClickButton(opt)
                             break
                         end
                     end
                 end
             end
+        else
+            warn("[AutoFarmLevel] ⚠️ Không mở được NPCDialogue với Aretim.")
         end
         task.wait(1.5)
 
