@@ -417,26 +417,39 @@ local Farmer = {
     running = false,
 }
 
-local function flyToItem(targetPosition)
+local function flyToItem(targetPosition, cancelCheckFn)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return false end
 
-    local skyHeight = Options.SkyHeight and Options.SkyHeight.Value or 1500
-    local ascendSpeed = Options.AscendSpeed and Options.AscendSpeed.Value or 150
-    local cruiseSpeed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 180
-    local descendSpeed = Options.DescendSpeed and Options.DescendSpeed.Value or 150
+    local cancelFn = cancelCheckFn or function() return Farmer.running or Miner.running end
+    if not cancelFn() then return false end
 
     local currentPos = root.Position
+    local distance = (currentPos - targetPosition).Magnitude
+
+    local cruiseSpeed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 180
+
+    -- TỐI ƯU HÓA PROXIMITY GLIDE: Nếu item ở gần (dưới 110 studs), lướt thẳng mượt mà không cần bay lên trời cao 1500 Y
+    if distance < 110 then
+        local glideCF = CFrame.new(targetPosition.X, targetPosition.Y + 3.5, targetPosition.Z)
+        return smoothTweenTo(glideCF, cruiseSpeed, cancelFn)
+    end
+
+    -- Nếu item ở xa (khác khu vực): Bay Sky-Tween 3 pha an toàn
+    local skyHeight = Options.SkyHeight and Options.SkyHeight.Value or 1500
+    local ascendSpeed = Options.AscendSpeed and Options.AscendSpeed.Value or 150
+    local descendSpeed = Options.DescendSpeed and Options.DescendSpeed.Value or 150
+
     local skyY = math.max(skyHeight, currentPos.Y + 200, targetPosition.Y + 200)
 
-    local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), ascendSpeed, function() return Farmer.running end)
-    if not s1 or not Farmer.running then return false end
+    local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), ascendSpeed, cancelFn)
+    if not s1 or not cancelFn() then return false end
 
-    local s2 = smoothTweenTo(CFrame.new(targetPosition.X, skyY, targetPosition.Z), cruiseSpeed, function() return Farmer.running end)
-    if not s2 or not Farmer.running then return false end
+    local s2 = smoothTweenTo(CFrame.new(targetPosition.X, skyY, targetPosition.Z), cruiseSpeed, cancelFn)
+    if not s2 or not cancelFn() then return false end
 
-    local s3 = smoothTweenTo(CFrame.new(targetPosition.X, targetPosition.Y + 3.5, targetPosition.Z), descendSpeed, function() return Farmer.running end)
+    local s3 = smoothTweenTo(CFrame.new(targetPosition.X, targetPosition.Y + 3.5, targetPosition.Z), descendSpeed, cancelFn)
     return s3
 end
 
@@ -476,6 +489,36 @@ function Farmer.runCycle()
             print("[AutoFarm] ✨ Phát hiện nguyên liệu mục tiêu! Đang tự động bấm Play để vào game thu hoạch...")
             handleAutoStart()
 
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local curPos = root and root.Position or Vector3.zero
+
+            -- Sắp xếp Nearest Neighbor để gom cụm lụm sạch các item gần nhau trước
+            local sortedHarvestList = {}
+            local remainingList = {}
+            for _, itm in ipairs(harvestList) do table.insert(remainingList, itm) end
+
+            while #remainingList > 0 do
+                local nearestIdx = 1
+                local nearestDist = math.huge
+                for idx, itmData in ipairs(remainingList) do
+                    local itmInst = itmData.instance
+                    if itmInst and itmInst.Parent then
+                        local d = (curPos - itmInst:GetPivot().Position).Magnitude
+                        if d < nearestDist then
+                            nearestDist = d
+                            nearestIdx = idx
+                        end
+                    end
+                end
+                local bestItem = table.remove(remainingList, nearestIdx)
+                table.insert(sortedHarvestList, bestItem)
+                if bestItem.instance and bestItem.instance.Parent then
+                    curPos = bestItem.instance:GetPivot().Position
+                end
+            end
+            harvestList = sortedHarvestList
+
             local harvestedCounts = {}
             local totalHarvested = 0
             for i, itemData in ipairs(harvestList) do
@@ -484,16 +527,16 @@ function Farmer.runCycle()
                 local itemName = itemData.name
                 if item and item.Parent then
                     local targetPos = item:GetPivot().Position
-                    print(string.format("[AutoFarm] 🎯 [%d/%d] Đang bay tới %s tại (%.1f, %.1f, %.1f)...", i, #harvestList, itemName, targetPos.X, targetPos.Y, targetPos.Z))
+                    print(string.format("[AutoFarm] 🎯 [%d/%d] Đang thu hoạch %s tại (%.1f, %.1f, %.1f)...", i, #harvestList, itemName, targetPos.X, targetPos.Y, targetPos.Z))
 
-                    local flew = flyToItem(targetPos)
+                    local flew = flyToItem(targetPos, function() return Farmer.running end)
                     if flew and item and item.Parent then
                         local picked = harvestItem(item)
                         if picked then
                             totalHarvested = totalHarvested + 1
                             harvestedCounts[itemName] = (harvestedCounts[itemName] or 0) + 1
                         end
-                        task.wait(0.4)
+                        task.wait(0.3)
                     end
                 end
             end
@@ -1643,6 +1686,36 @@ function Miner.runCycle()
         print(string.format("[AutoMine] 📊 Tìm thấy %d mỏ quặng hợp lệ.", #oreList))
 
         if #oreList > 0 then
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local curPos = root and root.Position or Vector3.zero
+
+            -- Sắp xếp Nearest Neighbor gom mỏ quặng gần nhau
+            local sortedOreList = {}
+            local remainingOres = {}
+            for _, o in ipairs(oreList) do table.insert(remainingOres, o) end
+
+            while #remainingOres > 0 do
+                local nearestIdx = 1
+                local nearestDist = math.huge
+                for idx, oData in ipairs(remainingOres) do
+                    local oInst = oData.instance
+                    if oInst and oInst.Parent then
+                        local d = (curPos - oInst:GetPivot().Position).Magnitude
+                        if d < nearestDist then
+                            nearestDist = d
+                            nearestIdx = idx
+                        end
+                    end
+                end
+                local bestOre = table.remove(remainingOres, nearestIdx)
+                table.insert(sortedOreList, bestOre)
+                if bestOre.instance and bestOre.instance.Parent then
+                    curPos = bestOre.instance:GetPivot().Position
+                end
+            end
+            oreList = sortedOreList
+
             local minedCount = 0
             for i, oreData in ipairs(oreList) do
                 if not Miner.running then break end
@@ -1652,14 +1725,14 @@ function Miner.runCycle()
                     local targetPos = ore:GetPivot().Position
                     print(string.format("[AutoMine] 🎯 [%d/%d] Đang bay tới mỏ %s tại (%.1f, %.1f, %.1f)...", i, #oreList, oreName, targetPos.X, targetPos.Y, targetPos.Z))
 
-                    local flew = flyToItem(targetPos)
+                    local flew = flyToItem(targetPos, function() return Miner.running end)
                     if flew and ore and ore.Parent then
                         local done = mineOreNode(ore)
                         if done then
                             minedCount = minedCount + 1
                             print(string.format("[AutoMine] ✅ Đã đào xong mỏ %s!", oreName))
                         end
-                        task.wait(0.5)
+                        task.wait(0.4)
                     end
                 end
             end
@@ -2236,26 +2309,7 @@ end)
 -- =============================================================================
 -- TELEPORT SUITE (ALL 35+ CLASS TRAINERS, TOWNS, MERCHANTS, AND LANDMARKS)
 -- =============================================================================
-local KeyLocations = {
-    -- 🏛️ Towns & Major Hubs
-    ["🏛️ Westwood Heart"] = Vector3.new(8327.3, 825.1, -5557.4),
-    ["🏛️ Westwood"] = Vector3.new(8327.3, 825.1, -5557.4),
-    ["🌋 Caldera Town"] = Vector3.new(5091.2, 662.6, -4293.1),
-    ["🌋 Caldera"] = Vector3.new(5091.2, 662.6, -4293.1),
-    ["🏜️ Desert (Waving Sands)"] = Vector3.new(2815.3, 634.6, -3924.6),
-    ["🏜️ Desert"] = Vector3.new(2815.3, 634.6, -3924.6),
-    ["⚔️ Sanctuary of Blades"] = Vector3.new(2086.0, 386.8, -2978.3),
-    ["⚔️ Sanctuary"] = Vector3.new(2086.0, 386.8, -2978.3),
-    ["⛪ Church (Heavens Point)"] = Vector3.new(831.6, 3436.9, -5602.3),
-    ["⛪ Church"] = Vector3.new(831.6, 3436.9, -5602.3),
-    ["🏛️ Forgotten Sanctum (Endgame)"] = Vector3.new(10831.2, 1581.7, -3463.6),
-    ["🌑 Dark Place Gate"] = Vector3.new(7855.1, 1290.3, 7930.9),
-    ["🌌 Void Rift"] = Vector3.new(991.0, 41.4, 615.6),
-    ["🏠 Memori's House"] = Vector3.new(11851.5, 1064.9, -1776.8),
-    ["❄️ Icerift Approach"] = Vector3.new(5328.2, 742.7, -6530.2),
-    ["🌋 Volcano (Mount Thul)"] = Vector3.new(98.9, 577.0, -4115.9),
-
-    -- ⚔️ Base Class Trainers (7)
+local BaseTrainers = {
     ["⚔️ Base: Ysa (Warrior - Sword)"] = Vector3.new(5100.6, 658.2, -4072.0),
     ["🔮 Base: Arandor (Wizard - Magic / Staff)"] = Vector3.new(5840.1, 727.0, -4790.1),
     ["🗡️ Base: Boots (Thief - Dagger)"] = Vector3.new(4945.6, 658.6, -4121.4),
@@ -2263,8 +2317,9 @@ local KeyLocations = {
     ["🛡️ Base: Tivek (Slayer - Spear)"] = Vector3.new(4473.3, 650.1, -5730.3),
     ["🪓 Base: Geron (Marauder - Axe)"] = Vector3.new(4448.3, 652.1, -3359.3),
     ["🛡️ Base: Lagolt (Sentry - Greatsword)"] = Vector3.new(4651.7, 718.7, -5574.9),
+}
 
-    -- 🌟 Super Class Trainers (18)
+local SuperTrainers = {
     ["✨ Super: Dernon (Paladin - Warrior)"] = Vector3.new(2813.0, 615.7, -3866.6),
     ["⚔️ Super: Leoran (Blade Dancer - Warrior)"] = Vector3.new(4995.5, 754.4, -6194.1),
     ["⚡ Super: Kayrein (Berserker - Warrior)"] = Vector3.new(11342.1, 1500.1, -3656.7),
@@ -2283,6 +2338,36 @@ local KeyLocations = {
     ["🦁 Super: Ardentis (Lionheart - Sentry/Marauder)"] = Vector3.new(474.5, 581.5, -4816.9),
     ["🏰 Super: Nevithas (Citadel - Sentry/Marauder)"] = Vector3.new(71.9, 2765.7, -3266.4),
     ["⚖️ Super: Kether (Arbiter - Sentry/Marauder)"] = Vector3.new(7821.2, 1279.8, 8480.1),
+}
+
+local MajorBosses = {
+    ["🐉 Boss: Yar'thul, the Blazing Dragon (Mount Thul)"] = Vector3.new(-615.0, 644.4, -4235.4),
+    ["🐍 Boss: Handaconda (Deep Desert Room)"] = Vector3.new(3134.1, 191.5, -456.8),
+    ["💀 Boss: Thorian, the Rotten (Deep Forest)"] = Vector3.new(8330.7, 615.5, -694.5),
+    ["🦅 Boss: Arkhaia (Desert World Boss)"] = Vector3.new(14706.4, 532.8, 7253.2),
+    ["✨ Boss: Seraphon (Light Boss / Heavens Point)"] = Vector3.new(630.2, 3429.2, -5720.4),
+    ["🌑 Boss: Momma Darkbeast (Darkbeast Lair)"] = Vector3.new(8121.4, 584.4, -2135.1),
+    ["👁️ Boss: Metrom's Vessel (Raid Boss Dungeon)"] = Vector3.new(-2139.8, 202.6, 4269.3),
+}
+
+local KeyLocations = {
+    -- 🏛️ Towns & Major Hubs
+    ["🏛️ Westwood Heart"] = Vector3.new(8327.3, 825.1, -5557.4),
+    ["🏛️ Westwood"] = Vector3.new(8327.3, 825.1, -5557.4),
+    ["🌋 Caldera Town"] = Vector3.new(5091.2, 662.6, -4293.1),
+    ["🌋 Caldera"] = Vector3.new(5091.2, 662.6, -4293.1),
+    ["🏜️ Desert (Waving Sands)"] = Vector3.new(2815.3, 634.6, -3924.6),
+    ["🏜️ Desert"] = Vector3.new(2815.3, 634.6, -3924.6),
+    ["⚔️ Sanctuary of Blades"] = Vector3.new(2086.0, 386.8, -2978.3),
+    ["⚔️ Sanctuary"] = Vector3.new(2086.0, 386.8, -2978.3),
+    ["⛪ Church (Heavens Point)"] = Vector3.new(831.6, 3436.9, -5602.3),
+    ["⛪ Church"] = Vector3.new(831.6, 3436.9, -5602.3),
+    ["🏛️ Forgotten Sanctum (Endgame)"] = Vector3.new(10831.2, 1581.7, -3463.6),
+    ["🌑 Dark Place Gate"] = Vector3.new(7855.1, 1290.3, 7930.9),
+    ["🌌 Void Rift"] = Vector3.new(991.0, 41.4, 615.6),
+    ["🏠 Memori's House"] = Vector3.new(11851.5, 1064.9, -1776.8),
+    ["❄️ Icerift Approach"] = Vector3.new(5328.2, 742.7, -6530.2),
+    ["🌋 Volcano (Mount Thul)"] = Vector3.new(98.9, 577.0, -4115.9),
 
     -- 📜 Sub Class Trainers (5)
     ["🎶 Sub: Cantia (Bard)"] = Vector3.new(2845.8, 624.1, -3222.9),
@@ -2390,10 +2475,13 @@ end
 -- INGREDIENT ESP ENGINE (OOP BILLBOARD ENGINE)
 -- =============================================================================
 local ESP_Colors = {
-    ["Crylight"]        = Color3.fromRGB(0, 255, 255),
-    ["Cryastem"]        = Color3.fromRGB(0, 180, 255),
-    ["Hightail"]        = Color3.fromRGB(255, 140, 0),
-    ["Everthistle"]     = Color3.fromRGB(180, 0, 255),
+    ["Crylight"]              = Color3.fromRGB(0, 255, 255),
+    ["Cryastem"]              = Color3.fromRGB(0, 180, 255),
+    ["Hightail"]              = Color3.fromRGB(255, 140, 0),
+    ["Everthistle"]           = Color3.fromRGB(180, 0, 255),
+    ["7 Leafed Everthistle"]  = Color3.fromRGB(50, 255, 120),
+    ["7-Leafed Everthistle"]  = Color3.fromRGB(50, 255, 120),
+    ["7 Leaf Thistle"]        = Color3.fromRGB(50, 255, 120),
     ["Carnastool"]      = Color3.fromRGB(255, 60, 60),
     ["Driproot"]        = Color3.fromRGB(50, 205, 50),
     ["Cursed Shroom"]   = Color3.fromRGB(128, 0, 128),
@@ -2536,7 +2624,7 @@ FarmGroup:AddToggle("AutoFarmCrylight", {
 FarmGroup:AddDropdown("FarmItemsWhitelist", {
     Values = {
         "Crylight", "Cryastem", "Hightail", "Everthistle",
-        "Carnastool", "Driproot", "Cursed Shroom", "Cursed Shroom 2",
+        "7 Leafed Everthistle", "Carnastool", "Driproot", "Cursed Shroom", "Cursed Shroom 2",
         "Mushrooms", "Bones", "Branch Pile"
     },
     Default = { "Crylight" },
@@ -2945,61 +3033,112 @@ SpeedGroup:AddSlider("InfiniteJumpBoost", {
 })
 
 -- -----------------------------------------------------------------------------
--- TAB 4: TELEPORT SUITE (ALL TRAINERS, TOWNS, CHURCH, DESERT, MERCHANTS)
+-- TAB 4: TELEPORT SUITE (BASE TRAINERS, SUPER TRAINERS, MAJOR BOSSES, TOWNS & WARPS)
 -- -----------------------------------------------------------------------------
-local TeleportGroup = Tabs.Teleport:AddLeftGroupbox("🌐 Sky-Tween Teleport")
-local QuickWarpGroup = Tabs.Teleport:AddRightGroupbox("📍 Quick Warps")
+local BaseGroup = Tabs.Teleport:AddLeftGroupbox("⚔️ Base Class Trainers (7)")
+local BossGroup = Tabs.Teleport:AddLeftGroupbox("🐉 Major Bosses & Arenas (7)")
+local SuperGroup = Tabs.Teleport:AddRightGroupbox("🌟 Super Class Trainers (18)")
+local TownWarpGroup = Tabs.Teleport:AddRightGroupbox("🏛️ Towns, Quests & Quick Warps")
 
-local locationNames = {}
-for name, _ in pairs(KeyLocations) do table.insert(locationNames, name) end
-table.sort(locationNames)
+-- 1. BASE CLASS TRAINERS (7)
+local baseNames = {}
+for name, _ in pairs(BaseTrainers) do table.insert(baseNames, name) end
+table.sort(baseNames)
 
-TeleportGroup:AddDropdown("SelectedTeleportLoc", {
-    Values = locationNames,
+BaseGroup:AddDropdown("SelectedBaseTrainer", {
+    Values = baseNames,
     Default = 1,
     Multi = false,
-    Text = "Select Destination",
+    Text = "Select Base Trainer",
 })
 
-TeleportGroup:AddSlider("TeleportHeight", {
-    Text = "Flight Altitude / Height (Y)",
-    Default = 1500,
-    Min = 500,
-    Max = 3000,
-    Rounding = 0,
-})
-
-TeleportGroup:AddSlider("TeleportSpeed", {
-    Text = "Flight Speed (Studs/s)",
-    Default = 200,
-    Min = 50,
-    Max = 500,
-    Rounding = 0,
-})
-
-TeleportGroup:AddButton({
-    Text = "🚀 Start Teleport",
+BaseGroup:AddButton({
+    Text = "🚀 Teleport to Base Trainer",
     Func = function()
-        local locName = Options.SelectedTeleportLoc and Options.SelectedTeleportLoc.Value
-        local pos = locName and KeyLocations[locName]
-        if pos then
-            teleportToLocation(pos)
-        else
-            Library:Notify("Please select a valid destination!", 3)
-        end
+        local name = Options.SelectedBaseTrainer and Options.SelectedBaseTrainer.Value
+        local pos = name and BaseTrainers[name]
+        if pos then teleportToLocation(pos) else Library:Notify("Select valid trainer!", 3) end
     end
 })
 
-TeleportGroup:AddButton({
+-- 2. MAJOR BOSSES & ARENAS (7)
+local bossNames = {}
+for name, _ in pairs(MajorBosses) do table.insert(bossNames, name) end
+table.sort(bossNames)
+
+BossGroup:AddDropdown("SelectedMajorBoss", {
+    Values = bossNames,
+    Default = 1,
+    Multi = false,
+    Text = "Select Major Boss",
+})
+
+BossGroup:AddButton({
+    Text = "🐉 Teleport to Boss Arena",
+    Func = function()
+        local name = Options.SelectedMajorBoss and Options.SelectedMajorBoss.Value
+        local pos = name and MajorBosses[name]
+        if pos then teleportToLocation(pos) else Library:Notify("Select valid boss!", 3) end
+    end
+})
+
+BossGroup:AddButton({
     Text = "🛑 Cancel Teleport",
     Func = cancelTeleport
 })
 
-QuickWarpGroup:AddButton("🏛️ Westwood Heart", function() teleportToLocation(KeyLocations["🏛️ Westwood Heart"] or KeyLocations["🏛️ Westwood"]) end)
-QuickWarpGroup:AddButton("🌋 Caldera Town", function() teleportToLocation(KeyLocations["🌋 Caldera Town"] or KeyLocations["🌋 Caldera"]) end)
-QuickWarpGroup:AddButton("🏜️ Desert", function() teleportToLocation(KeyLocations["🏜️ Desert (Waving Sands)"] or KeyLocations["🏜️ Desert"]) end)
-QuickWarpGroup:AddButton("⛪ Church", function() teleportToLocation(KeyLocations["⛪ Church (Heavens Point)"] or KeyLocations["⛪ Church"]) end)
-QuickWarpGroup:AddButton("⚔️ Sanctuary of Blades", function() teleportToLocation(KeyLocations["⚔️ Sanctuary of Blades"] or KeyLocations["⚔️ Sanctuary"]) end)
+-- 3. SUPER CLASS TRAINERS (18)
+local superNames = {}
+for name, _ in pairs(SuperTrainers) do table.insert(superNames, name) end
+table.sort(superNames)
+
+SuperGroup:AddDropdown("SelectedSuperTrainer", {
+    Values = superNames,
+    Default = 1,
+    Multi = false,
+    Text = "Select Super Trainer",
+})
+
+SuperGroup:AddButton({
+    Text = "🚀 Teleport to Super Trainer",
+    Func = function()
+        local name = Options.SelectedSuperTrainer and Options.SelectedSuperTrainer.Value
+        local pos = name and SuperTrainers[name]
+        if pos then teleportToLocation(pos) else Library:Notify("Select valid trainer!", 3) end
+    end
+})
+
+-- 4. TOWNS, SERVICES & QUICK WARPS
+local townLocNames = {}
+for name, _ in pairs(KeyLocations) do table.insert(townLocNames, name) end
+table.sort(townLocNames)
+
+TownWarpGroup:AddDropdown("SelectedTownLoc", {
+    Values = townLocNames,
+    Default = 1,
+    Multi = false,
+    Text = "Towns & Landmarks",
+})
+
+TownWarpGroup:AddButton({
+    Text = "🚀 Teleport to Location",
+    Func = function()
+        local name = Options.SelectedTownLoc and Options.SelectedTownLoc.Value
+        local pos = name and KeyLocations[name]
+        if pos then teleportToLocation(pos) else Library:Notify("Select valid location!", 3) end
+    end
+})
+
+TownWarpGroup:AddLabel("--- Quick Warps ---")
+TownWarpGroup:AddButton("🏛️ Westwood", function() teleportToLocation(KeyLocations["🏛️ Westwood Heart"] or KeyLocations["🏛️ Westwood"]) end)
+TownWarpGroup:AddButton("🌋 Caldera", function() teleportToLocation(KeyLocations["🌋 Caldera Town"] or KeyLocations["🌋 Caldera"]) end)
+TownWarpGroup:AddButton("🏜️ Desert", function() teleportToLocation(KeyLocations["🏜️ Desert (Waving Sands)"] or KeyLocations["🏜️ Desert"]) end)
+TownWarpGroup:AddButton("⛪ Church", function() teleportToLocation(KeyLocations["⛪ Church (Heavens Point)"] or KeyLocations["⛪ Church"]) end)
+TownWarpGroup:AddButton("⚔️ Sanctuary", function() teleportToLocation(KeyLocations["⚔️ Sanctuary of Blades"] or KeyLocations["⚔️ Sanctuary"]) end)
+TownWarpGroup:AddButton("🐉 Yar'thul Dragon", function() teleportToLocation(MajorBosses["🐉 Boss: Yar'thul, the Blazing Dragon (Mount Thul)"]) end)
+TownWarpGroup:AddButton("💀 Thorian Rotten", function() teleportToLocation(MajorBosses["💀 Boss: Thorian, the Rotten (Deep Forest)"]) end)
+TownWarpGroup:AddButton("🦅 Arkhaia Boss", function() teleportToLocation(MajorBosses["🦅 Boss: Arkhaia (Desert World Boss)"]) end)
+TownWarpGroup:AddButton("🌑 Momma Darkbeast", function() teleportToLocation(MajorBosses["🌑 Boss: Momma Darkbeast (Darkbeast Lair)"]) end)
 
 -- -----------------------------------------------------------------------------
 -- TAB 5: VISUALS & FPS BOOSTER
@@ -3127,7 +3266,7 @@ FilterGroup:AddDropdown("ESPFilterMode", {
 FilterGroup:AddDropdown("ESPWhitelist", {
     Values = {
         "Crylight", "Cryastem", "Hightail", "Everthistle",
-        "Carnastool", "Driproot", "Cursed Shroom", "Cursed Shroom 2",
+        "7 Leafed Everthistle", "Carnastool", "Driproot", "Cursed Shroom", "Cursed Shroom 2",
         "Mushrooms", "Bones", "Branch Pile", "Ferrus", "Aestic", "Laneus"
     },
     Default = { "Crylight", "Cryastem", "Everthistle", "Hightail" },
@@ -3191,6 +3330,12 @@ OptGroup:AddButton("🌫️ Remove All Fog Permanently", function()
     Library:Notify("All Fog & Haze removed!", 3)
 end)
 
+OptGroup:AddToggle("BypassNoPainHP", {
+    Text = "Reveal 'I Feel No Pain' Real HP",
+    Default = true,
+    Tooltip = "Hiển thị chỉ số máu và thanh HP thực tế khi đang chịu hiệu ứng ẩn máu từ Trial 'I Feel No Pain!'",
+})
+
 -- -----------------------------------------------------------------------------
 -- TAB 6: SETTINGS / CONFIG
 -- -----------------------------------------------------------------------------
@@ -3232,6 +3377,43 @@ local AntiAFK = {
 }
 
 local function initAntiAFK()
+
+-- =============================================================================
+-- QOL: HIỂN THỊ MÁU THẬT KHI CHỊU TRIAL 'I FEEL NO PAIN!'
+-- =============================================================================
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        if Toggles.BypassNoPainHP and Toggles.BypassNoPainHP.Value then
+            pcall(function()
+                local char = LocalPlayer.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    local pgui = PlayerGui
+                    local hud = pgui and pgui:FindFirstChild("HUD")
+                    local holder = hud and (hud:FindFirstChild("Holder") or hud:FindFirstChild("HolderOLD"))
+                    local hpOutline = holder and holder:FindFirstChild("HPOutline", true)
+                    if hpOutline then
+                        local countLabel = hpOutline:FindFirstChild("Count", true)
+                        if countLabel and countLabel:IsA("TextLabel") then
+                            if countLabel.Text == "???" or countLabel.Text:find("%?") then
+                                countLabel.Text = string.format("%.1f/%.1f", hum.Health, hum.MaxHealth)
+                            end
+                        end
+                        local healthBar = hpOutline:FindFirstChild("Health", true)
+                        if healthBar and healthBar:IsA("GuiObject") then
+                            if healthBar.ImageColor3 == Color3.fromRGB(150, 0, 255) or healthBar.Size.X.Scale < 0.05 then
+                                local ratio = math.clamp(hum.Health / math.max(1, hum.MaxHealth), 0, 1)
+                                healthBar.Size = UDim2.new(ratio, 0, 0.7, 0)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
     if AntiAFK.initialized then return end
     AntiAFK.initialized = true
 
@@ -3289,6 +3471,43 @@ end
 shared.ArcaneHub = Library
 
 initAntiAFK()
+
+-- =============================================================================
+-- QOL: HIỂN THỊ MÁU THẬT KHI CHỊU TRIAL 'I FEEL NO PAIN!'
+-- =============================================================================
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        if Toggles.BypassNoPainHP and Toggles.BypassNoPainHP.Value then
+            pcall(function()
+                local char = LocalPlayer.Character
+                local hum = char and char:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    local pgui = PlayerGui
+                    local hud = pgui and pgui:FindFirstChild("HUD")
+                    local holder = hud and (hud:FindFirstChild("Holder") or hud:FindFirstChild("HolderOLD"))
+                    local hpOutline = holder and holder:FindFirstChild("HPOutline", true)
+                    if hpOutline then
+                        local countLabel = hpOutline:FindFirstChild("Count", true)
+                        if countLabel and countLabel:IsA("TextLabel") then
+                            if countLabel.Text == "???" or countLabel.Text:find("%?") then
+                                countLabel.Text = string.format("%.1f/%.1f", hum.Health, hum.MaxHealth)
+                            end
+                        end
+                        local healthBar = hpOutline:FindFirstChild("Health", true)
+                        if healthBar and healthBar:IsA("GuiObject") then
+                            if healthBar.ImageColor3 == Color3.fromRGB(150, 0, 255) or healthBar.Size.X.Scale < 0.05 then
+                                local ratio = math.clamp(hum.Health / math.max(1, hum.MaxHealth), 0, 1)
+                                healthBar.Size = UDim2.new(ratio, 0, 0.7, 0)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
 
 if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then
     Farmer.runCycle()
