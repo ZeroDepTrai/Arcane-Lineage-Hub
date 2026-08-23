@@ -567,16 +567,18 @@ local function teleportToUndergroundSpot(targetSpot)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
-    if not root or not hum then return false end
+    if not root or not hum then
+        warn("[AutoFarmLevel] ❌ Không tìm thấy HumanoidRootPart hoặc Humanoid!")
+        return false
+    end
 
     ensureUndergroundPlatform(targetSpot)
 
     local targetCF = CFrame.new(targetSpot.X, targetSpot.Y + 4.0, targetSpot.Z)
     local distance = (root.Position - targetCF.Position).Magnitude
+    print(string.format("[AutoFarmLevel] 🚀 Bắt đầu bay xuống bãi ngầm tại (%.1f, %.1f, %.1f) - Khoảng cách: %.1f studs...", targetCF.X, targetCF.Y, targetCF.Z, distance))
 
     if distance > 2 then
-        print(string.format("[AutoFarmLevel] 🚀 Đang bay mượt mà xuống bãi ngầm tại (%.1f, %.1f, %.1f) - Khoảng cách: %.1f studs...", targetCF.X, targetCF.Y, targetCF.Z, distance))
-
         hum.PlatformStand = true
         local noclipConn = RunService.Stepped:Connect(function()
             local c = LocalPlayer.Character
@@ -961,19 +963,16 @@ local function executeCombatTurn()
 end
 
 function LevelFarmer.runCycle()
-    if LevelFarmer.running then return end
     LevelFarmer.running = true
 
     task.spawn(function()
-        local mode = Options.FarmLevelMode and Options.FarmLevelMode.Value or "Level 1 - 20 (Underground)"
-        print(string.format("[AutoFarmLevel] ⚔️ Bắt đầu Auto Farm Level - Chế độ: %s", mode))
+        local mode = (Options and Options.FarmLevelMode and Options.FarmLevelMode.Value) or "Level 1 - 20 (Underground)"
+        print(string.format("[AutoFarmLevel] ⚔️ Bắt đầu Auto Farm Level - Chế độ: %s", tostring(mode)))
 
-        -- If Level 1 - 20, ensure we are at the underground spot first
-        if mode:find("Level 1 - 20") then
-            local spot = LevelFarmer.farmSpotLv1_20
-            ensureUndergroundPlatform(spot)
-            teleportToUndergroundSpot(spot)
-        end
+        -- Luôn luôn đảm bảo platform và bay xuống bãi ngầm an toàn ngay lập tức
+        local spot = LevelFarmer.farmSpotLv1_20
+        ensureUndergroundPlatform(spot)
+        teleportToUndergroundSpot(spot)
 
         while LevelFarmer.running do
             if isInCombat() then
