@@ -785,16 +785,21 @@ local function humanoidMeditateAndLevelUp()
 
     if isInSoulCorridor() then
         print("[AutoFarmLevel] 🌌 Đã vào Hành Lang Linh Hồn (Soul Corridor) thành công!")
-        task.wait(0.8)
+        task.wait(1.0)
 
-        -- 3. Di chuyển tới gặp NPC Aretim
+        -- 3. Di chuyển tới gặp NPC Aretim (Cập nhật lại tham chiếu nhân vật tại Soul Corridor)
+        local scChar = LocalPlayer.Character
+        local scRoot = scChar and scChar:FindFirstChild("HumanoidRootPart")
+        local scHum = scChar and scChar:FindFirstChildOfClass("Humanoid")
+        if not scRoot or not scHum then return false end
+
         local aretimModel = workspace:FindFirstChild("NPCs") and workspace.NPCs:FindFirstChild("Aretim")
         local aretimPos = aretimModel and aretimModel:GetPivot().Position or LevelFarmer.aretimPos
         local aretimTargetCF = CFrame.new(aretimPos.X, aretimPos.Y + 2.0, aretimPos.Z - 4.0)
 
-        print(string.format("[AutoFarmLevel] 🚶 Đang tới gặp NPC Aretim tại (%.1f, %.1f, %.1f)...", aretimPos.X, aretimPos.Y, aretimPos.Z))
+        print(string.format("[AutoFarmLevel] 🚶 Đang bay tới đứng trước mặt NPC Aretim tại (%.1f, %.1f, %.1f)...", aretimPos.X, aretimPos.Y, aretimPos.Z))
         
-        hum.PlatformStand = true
+        scHum.PlatformStand = true
         local noclipCorridor = RunService.Stepped:Connect(function()
             local c = LocalPlayer.Character
             if c then
@@ -806,28 +811,41 @@ local function humanoidMeditateAndLevelUp()
             end
         end)
 
-        local dCorridor = (root.Position - aretimTargetCF.Position).Magnitude
-        local tCorridor = TweenService:Create(root, TweenInfo.new(math.max(0.1, dCorridor / 160), Enum.EasingStyle.Linear), { CFrame = aretimTargetCF })
+        local dCorridor = (scRoot.Position - aretimTargetCF.Position).Magnitude
+        local tCorridor = TweenService:Create(scRoot, TweenInfo.new(math.max(0.1, dCorridor / 140), Enum.EasingStyle.Linear), { CFrame = aretimTargetCF })
         tCorridor:Play()
         tCorridor.Completed:Wait()
 
         noclipCorridor:Disconnect()
-        hum.PlatformStand = false
-        hum:ChangeState(Enum.HumanoidStateType.Running)
-        task.wait(0.6)
+        scHum.PlatformStand = false
+        scHum:ChangeState(Enum.HumanoidStateType.Running)
+        
+        -- Đảm bảo đứng vững vàng và chính xác sát mặt Aretim
+        scRoot.CFrame = aretimTargetCF
+        task.wait(1.0)
+        print("[AutoFarmLevel] 🧍 Đã đứng sát trước mặt NPC Aretim. Khoảng cách: " .. string.format("%.1f studs", (scRoot.Position - aretimPos).Magnitude))
 
-        -- 4. Tương tác hội thoại với Aretim để mở Menu Thăng Cấp
+        -- 4. Tương tác hội thoại với Aretim và chờ mở Menu Thăng Cấp
         local aretimProx = aretimModel and aretimModel:FindFirstChildWhichIsA("ProximityPrompt", true)
         if aretimProx and fireproximityprompt then
             fireproximityprompt(aretimProx)
-            print("[AutoFarmLevel] 💬 Đã tương tác với NPC Aretim.")
+            print("[AutoFarmLevel] 💬 Đã bấm nói chuyện với NPC Aretim.")
         end
-        task.wait(1.5)
 
-        -- Tự động chọn thăng tối đa level ('Show me as much light as I can handle')
         local pgui = PlayerGui
         local diag = pgui:FindFirstChild("NPCDialogue")
-        if diag then
+        local diagStart = os.clock()
+        while (not diag or not diag.Enabled) and (os.clock() - diagStart < 4.0) do
+            if aretimProx and fireproximityprompt then
+                fireproximityprompt(aretimProx)
+            end
+            task.wait(0.5)
+            diag = pgui:FindFirstChild("NPCDialogue")
+        end
+        task.wait(0.5)
+
+        -- Tự động chọn thăng tối đa level ('Show me as much light as I can handle')
+        if diag and diag.Enabled then
             local optionsFrame = diag:FindFirstChild("Options", true)
             if optionsFrame then
                 local clicked = false
@@ -835,7 +853,7 @@ local function humanoidMeditateAndLevelUp()
                     if opt:IsA("TextButton") and opt.Visible then
                         local txt = opt.Text:lower()
                         if txt:find("as much light") or txt:find("lvls") then
-                            print(string.format("[AutoFarmLevel] 🆙 Đang bấm thăng cấp: '%s'", opt.Text))
+                            print(string.format("[AutoFarmLevel] 🆙 Đang chọn thăng tối đa: '%s'", opt.Text))
                             safeClickButton(opt)
                             clicked = true
                             break
@@ -845,7 +863,7 @@ local function humanoidMeditateAndLevelUp()
                 if not clicked then
                     for _, opt in ipairs(optionsFrame:GetChildren()) do
                         if opt:IsA("TextButton") and opt.Visible and opt.Text:lower():find("+lvl") then
-                            print(string.format("[AutoFarmLevel] 🆙 Đang bấm thăng cấp: '%s'", opt.Text))
+                            print(string.format("[AutoFarmLevel] 🆙 Đang chọn thăng cấp: '%s'", opt.Text))
                             safeClickButton(opt)
                             break
                         end
