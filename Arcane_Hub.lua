@@ -372,7 +372,7 @@ local function disableFlightState()
     end
 end
 
-local function smoothTweenTo(targetCFrame, speed, cancelCheckFn)
+local function smoothTweenTo(targetCFrame, speed, cancelCheckFn, keepFlightState)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -406,7 +406,9 @@ local function smoothTweenTo(targetCFrame, speed, cancelCheckFn)
     end
 
     FlightController.currentTween = nil
-    disableFlightState()
+    if not keepFlightState then
+        disableFlightState()
+    end
     return true
 end
 
@@ -425,31 +427,45 @@ local function flyToItem(targetPosition, cancelCheckFn)
     local cancelFn = cancelCheckFn or function() return Farmer.running or Miner.running end
     if not cancelFn() then return false end
 
+    enableFlightState()
+
     local currentPos = root.Position
     local distance = (currentPos - targetPosition).Magnitude
-
     local cruiseSpeed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 180
 
-    -- TỐI ƯU HÓA PROXIMITY GLIDE: Nếu item ở gần (dưới 110 studs), lướt thẳng mượt mà không cần bay lên trời cao 1500 Y
-    if distance < 110 then
-        local glideCF = CFrame.new(targetPosition.X, targetPosition.Y + 3.5, targetPosition.Z)
-        return smoothTweenTo(glideCF, cruiseSpeed, cancelFn)
+    -- 1. BAY GẦN (DƯỚI 90 STUDS): LƯỚT VÒM CAO TRÁNH VA CHẠM ĐỊA HÌNH & CHẾT VOID
+    if distance < 90 then
+        local safeY = math.max(currentPos.Y, targetPosition.Y) + 12
+        local midCF = CFrame.new(currentPos.X, safeY, currentPos.Z)
+        local targetHighCF = CFrame.new(targetPosition.X, safeY, targetPosition.Z)
+        local finalCF = CFrame.new(targetPosition.X, targetPosition.Y + 2.5, targetPosition.Z)
+
+        smoothTweenTo(midCF, cruiseSpeed, cancelFn, true)
+        smoothTweenTo(targetHighCF, cruiseSpeed, cancelFn, true)
+        local res = smoothTweenTo(finalCF, cruiseSpeed, cancelFn, false)
+        return res
     end
 
-    -- Nếu item ở xa (khác khu vực): Bay Sky-Tween 3 pha an toàn
+    -- 2. BAY XA: SKY-TWEEN 3 PHA LIÊN TỤC (GIỮ NGUYÊN FLIGHT STATE KHÔNG RƠI TỰ DO GIỮA CÁC PHA)
     local skyHeight = Options.SkyHeight and Options.SkyHeight.Value or 1500
     local ascendSpeed = Options.AscendSpeed and Options.AscendSpeed.Value or 150
     local descendSpeed = Options.DescendSpeed and Options.DescendSpeed.Value or 150
 
     local skyY = math.max(skyHeight, currentPos.Y + 200, targetPosition.Y + 200)
 
-    local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), ascendSpeed, cancelFn)
-    if not s1 or not cancelFn() then return false end
+    local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), ascendSpeed, cancelFn, true)
+    if not s1 or not cancelFn() then
+        disableFlightState()
+        return false
+    end
 
-    local s2 = smoothTweenTo(CFrame.new(targetPosition.X, skyY, targetPosition.Z), cruiseSpeed, cancelFn)
-    if not s2 or not cancelFn() then return false end
+    local s2 = smoothTweenTo(CFrame.new(targetPosition.X, skyY, targetPosition.Z), cruiseSpeed, cancelFn, true)
+    if not s2 or not cancelFn() then
+        disableFlightState()
+        return false
+    end
 
-    local s3 = smoothTweenTo(CFrame.new(targetPosition.X, targetPosition.Y + 3.5, targetPosition.Z), descendSpeed, cancelFn)
+    local s3 = smoothTweenTo(CFrame.new(targetPosition.X, targetPosition.Y + 2.5, targetPosition.Z), descendSpeed, cancelFn, false)
     return s3
 end
 
@@ -1663,54 +1679,61 @@ local function hasPickaxe()
     return false
 end
 
+local function hasPickaxeEquipped()
+    local char = LocalPlayer.Character
+    if not char then return false end
+    for _, item in ipairs(char:GetChildren()) do
+        if item:IsA("Tool") or item.Name:lower():find("pickaxe") then
+            return true
+        end
+    end
+    return false
+end
+
 local function equipPickaxe()
     local char = LocalPlayer.Character
     if not char then return false end
 
-    local RS = game:GetService("ReplicatedStorage")
-    local invManage = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Information") and RS.Remotes.Information:FindFirstChild("InventoryManage")
-
-    local pgui = PlayerGui
-    local inv = pgui and pgui:FindFirstChild("Inventory")
-    local pickaxeUniqueId = nil
-    local pickaxeBtn = nil
-
-    if inv then
-        for _, desc in ipairs(inv:GetDescendants()) do
-            if desc:IsA("TextButton") and desc.Text:lower():find("pickaxe") then
-                pickaxeUniqueId = tonumber(desc.Name) or desc.Name
-                pickaxeBtn = desc
-                break
-            end
-        end
+    -- NẾU ĐÃ CẦM TRÊN TAY RỒI THÌ RETURN NGAY, TRÁNH GỬI LỆNH LẠI GÂY TOGGLE UNEQUIP!
+    if hasPickaxeEquipped() then
+        return true
     end
 
-    -- Đồng bộ cả 2 lệnh Equip & Use lên Server để cấp quyền sử dụng cuốc thật sự
-    if pickaxeUniqueId and invManage then
-        pcall(function() invManage:FireServer("Equip", "Pickaxe", pickaxeUniqueId) end)
-        task.wait(0.1)
-        pcall(function() invManage:FireServer("Use", "Pickaxe", pickaxeUniqueId) end)
-    end
-
-    if pickaxeBtn then
-        if firesignal then
-            pcall(function() firesignal(pickaxeBtn.MouseButton1Click) end)
-            pcall(function() firesignal(pickaxeBtn.MouseButton1Down) end)
-        end
-        safeClickButton(pickaxeBtn)
-    end
-
+    -- 1. Thử kéo từ Backpack vào tay trước
     local bp = LocalPlayer:FindFirstChild("Backpack")
     local hum = char:FindFirstChildOfClass("Humanoid")
     if bp and hum then
         local bpPick = bp:FindFirstChild("Pickaxe") or bp:FindFirstChildWhichIsA("Tool")
         if bpPick and bpPick:IsA("Tool") then
             hum:EquipTool(bpPick)
+            task.wait(0.2)
+            if hasPickaxeEquipped() then return true end
         end
     end
 
-    task.wait(0.3)
-    return char:FindFirstChild("Pickaxe") ~= nil
+    -- 2. Chỉ gửi Remote Equip nếu thật sự chưa cầm trên tay
+    local RS = game:GetService("ReplicatedStorage")
+    local invManage = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Information") and RS.Remotes.Information:FindFirstChild("InventoryManage")
+
+    local pgui = PlayerGui
+    local inv = pgui and pgui:FindFirstChild("Inventory")
+    local pickaxeUniqueId = nil
+
+    if inv then
+        for _, desc in ipairs(inv:GetDescendants()) do
+            if desc:IsA("TextButton") and desc.Text:lower():find("pickaxe") then
+                pickaxeUniqueId = tonumber(desc.Name) or desc.Name
+                break
+            end
+        end
+    end
+
+    if pickaxeUniqueId and invManage then
+        pcall(function() invManage:FireServer("Equip", "Pickaxe", pickaxeUniqueId) end)
+        task.wait(0.3)
+    end
+
+    return hasPickaxeEquipped()
 end
 
 local function buyPickaxe()
@@ -1762,7 +1785,7 @@ local function mineOreNode(oreModel)
     local startTime = os.clock()
     local timeout = Options.MineTimeout and Options.MineTimeout.Value or 15
 
-    -- Đảm bảo cuốc được trang bị với đầy đủ quyền từ Server
+    -- Đảm bảo cuốc được trang bị 1 lần trước khi đập
     equipPickaxe()
 
     local char = LocalPlayer.Character
@@ -1773,20 +1796,20 @@ local function mineOreNode(oreModel)
     print(string.format("[AutoMine] ⛏️ Bắt đầu vung cuốc đập mỏ %s...", oreModel.Name))
 
     while (os.clock() - startTime < timeout) and Miner.running do
-        -- 1. KIỂM TRA ĐIỀU KIỆN MỎ QUẶNG ĐÃ VỠ HOÀN TOÀN (DỪNG ĐẬP NGAY LẬP TỨC 0ms)
+        -- 1. KIỂM TRA ĐIỀU KIỆN MỎ QUẶNG ĐÃ VỠ HOÀN TOÀN
         if not oreModel or not oreModel.Parent or not oreModel:IsDescendantOf(workspace) then
             print(string.format("[AutoMine] ✅ Mỏ %s đã bị phá hủy hoàn toàn!", oreModel and oreModel.Name or "Ore"))
             break
         end
 
         local currentOrePart = oreModel:FindFirstChild("Ore") or oreModel:FindFirstChildWhichIsA("BasePart")
-        if not currentOrePart or not currentOrePart.Parent or currentOrePart.Transparency >= 0.9 or not currentOrePart:IsDescendantOf(workspace) then
+        if not currentOrePart or not currentOrePart.Parent or not currentOrePart:IsDescendantOf(workspace) then
             print(string.format("[AutoMine] ✅ Quặng trong mỏ %s đã được khai thác xong!", oreModel.Name))
             break
         end
 
-        -- 2. Đảm bảo nhân vật luôn cầm Cuốc
-        if not (char and char:FindFirstChild("Pickaxe")) then
+        -- 2. Chỉ trang bị lại nếu nhân vật vô tình bị rớt cuốc
+        if not hasPickaxeEquipped() then
             equipPickaxe()
         end
 
@@ -1806,7 +1829,7 @@ local function mineOreNode(oreModel)
             VirtualInputManager:SendMouseButtonEvent(500, 500, 0, false, game, 0)
         end
 
-        task.wait(0.35)
+        task.wait(0.4)
     end
     return true
 end
