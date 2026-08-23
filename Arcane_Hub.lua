@@ -695,54 +695,92 @@ end
 local function allocateStats()
     if not (Toggles.AutoAllocateStats and Toggles.AutoAllocateStats.Value) then return end
 
-    local currentStats = getCurrentStats()
-    local targets = {
-        Strength = Options.TargetStrength and Options.TargetStrength.Value or 20,
-        Arcane = Options.TargetArcane and Options.TargetArcane.Value or 0,
-        Endurance = Options.TargetEndurance and Options.TargetEndurance.Value or 20,
-        Speed = Options.TargetSpeed and Options.TargetSpeed.Value or 10,
-        Luck = Options.TargetLuck and Options.TargetLuck.Value or 10,
-    }
-
     local pgui = PlayerGui
     local statAlloc = pgui.HUD:FindFirstChild("StatAllocateOLD", true)
     
-    local strCur = currentStats["Strength"] or 0
-    local arcCur = currentStats["Arcane"] or 0
-    local endCur = currentStats["Endurance"] or 0
-    local spdCur = currentStats["Speed"] or 0
-    local lckCur = currentStats["Luck"] or 0
+    -- Chờ giao diện StatAllocateOLD xuất hiện sau khi tăng cấp (Game có độ trễ 2.5s)
+    local waitStart = os.clock()
+    while (not statAlloc or not statAlloc.Visible) and (os.clock() - waitStart < 5.0) do
+        task.wait(0.4)
+        statAlloc = pgui.HUD:FindFirstChild("StatAllocateOLD", true)
+    end
 
-    local strAdd = math.max(0, (targets.Strength or 0) - strCur)
-    local arcAdd = math.max(0, (targets.Arcane or 0) - arcCur)
-    local endAdd = math.max(0, (targets.Endurance or 0) - endCur)
-    local spdAdd = math.max(0, (targets.Speed or 0) - spdCur)
-    local lckAdd = math.max(0, (targets.Luck or 0) - lckCur)
+    if not statAlloc or not statAlloc.Visible then
+        print("[AutoFarmLevel] ℹ️ Không có giao diện StatAllocateOLD mở hoặc không có điểm cần cộng.")
+        return
+    end
+
+    -- Đọc điểm khả dụng (Stat Points: X)
+    local statPointsText = statAlloc.StatPoints and statAlloc.StatPoints.Text or ""
+    local availPoints = tonumber(statPointsText:match("(%d+)")) or 0
+    print(string.format("[AutoFarmLevel] 📊 Phát hiện bảng Stat Points khả dụng: %d điểm", availPoints))
+    if availPoints <= 0 then return end
+
+    -- Đọc chỉ số hiện tại trực tiếp từ giao diện StatAllocateOLD
+    local function parseStatCount(labelName)
+        local lbl = statAlloc:FindFirstChild(labelName, true)
+        if lbl and lbl:IsA("TextLabel") then
+            local num = tonumber(lbl.Text:match("^%s*(%d+)"))
+            if num then return num end
+        end
+        return 0
+    end
+
+    local strCur = parseStatCount("StrengthCount")
+    local arcCur = parseStatCount("ArcaneCount")
+    local endCur = parseStatCount("EnduranceCount")
+    local spdCur = parseStatCount("SpeedCount")
+    local lckCur = parseStatCount("LuckCount")
+
+    local strTarget = Options.TargetStrength and Options.TargetStrength.Value or 20
+    local arcTarget = Options.TargetArcane and Options.TargetArcane.Value or 0
+    local endTarget = Options.TargetEndurance and Options.TargetEndurance.Value or 20
+    local spdTarget = Options.TargetSpeed and Options.TargetSpeed.Value or 10
+    local lckTarget = Options.TargetLuck and Options.TargetLuck.Value or 10
+
+    -- Tính toán số điểm cần cộng theo Target
+    local strAdd = math.min(availPoints, math.max(0, strTarget - strCur))
+    availPoints = availPoints - strAdd
+
+    local endAdd = math.min(availPoints, math.max(0, endTarget - endCur))
+    availPoints = availPoints - endAdd
+
+    local spdAdd = math.min(availPoints, math.max(0, spdTarget - spdCur))
+    availPoints = availPoints - spdAdd
+
+    local arcAdd = math.min(availPoints, math.max(0, arcTarget - arcCur))
+    availPoints = availPoints - arcAdd
+
+    local lckAdd = math.min(availPoints, math.max(0, lckTarget - lckCur))
+    availPoints = availPoints - lckAdd
 
     local totalAdd = strAdd + arcAdd + endAdd + spdAdd + lckAdd
     if totalAdd > 0 then
-        -- Cách 1: Click các nút Up trên giao diện StatAllocateOLD
-        if statAlloc and statAlloc.Visible then
-            local function clickStatUp(btnName, count)
-                local btn = statAlloc:FindFirstChild(btnName, true)
-                if btn then
-                    for _ = 1, count do
-                        safeClickButton(btn)
-                        task.wait(0.05)
-                    end
+        -- 1. Click các nút Up trên bảng
+        local function clickStatUp(btnName, count)
+            local btn = statAlloc:FindFirstChild(btnName, true)
+            if btn then
+                for _ = 1, count do
+                    safeClickButton(btn)
+                    task.wait(0.04)
                 end
             end
-            if strAdd > 0 then clickStatUp("StrengthUp", strAdd) end
-            if arcAdd > 0 then clickStatUp("ArcaneUp", arcAdd) end
-            if endAdd > 0 then clickStatUp("EnduranceUp", endAdd) end
-            if spdAdd > 0 then clickStatUp("SpeedUp", spdAdd) end
-            if lckAdd > 0 then clickStatUp("LuckUp", lckAdd) end
-
-            local finishBtn = statAlloc:FindFirstChild("Finish", true)
-            if finishBtn then safeClickButton(finishBtn) end
         end
 
-        -- Cách 2: Gọi Remote chuẩn 5 tham số của game
+        if strAdd > 0 then clickStatUp("StrengthUp", strAdd) end
+        if arcAdd > 0 then clickStatUp("ArcaneUp", arcAdd) end
+        if endAdd > 0 then clickStatUp("EnduranceUp", endAdd) end
+        if spdAdd > 0 then clickStatUp("SpeedUp", spdAdd) end
+        if lckAdd > 0 then clickStatUp("LuckUp", lckAdd) end
+
+        task.wait(0.4)
+        local finishBtn = statAlloc:FindFirstChild("Finish", true)
+        if finishBtn then
+            safeClickButton(finishBtn)
+            print(string.format("[AutoFarmLevel] ✅ Đã phân bổ Stats: Str+%d, Arc+%d, End+%d, Spd+%d, Luck+%d và bấm Finish.", strAdd, arcAdd, endAdd, spdAdd, lckAdd))
+        end
+
+        -- 2. Dự phòng gọi Remote đồng bộ server
         local RS = game:GetService("ReplicatedStorage")
         local statRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Information") and RS.Remotes.Information:FindFirstChild("StatAllocation")
         if statRemote then
@@ -750,7 +788,16 @@ local function allocateStats()
                 statRemote:FireServer(strAdd, arcAdd, endAdd, spdAdd, lckAdd)
             end)
         end
-        print(string.format("[AutoFarmLevel] 📊 Đã phân bổ Stats: Str+%d, Arc+%d, End+%d, Spd+%d, Luck+%d", strAdd, arcAdd, endAdd, spdAdd, lckAdd))
+    end
+
+    -- Chờ bảng StatAllocateOLD đóng hoàn toàn
+    local closeWait = os.clock()
+    while statAlloc.Visible and os.clock() - closeWait < 3.0 do
+        local finishBtn = statAlloc:FindFirstChild("Finish", true)
+        if finishBtn and statAlloc.Visible then
+            safeClickButton(finishBtn)
+        end
+        task.wait(0.5)
     end
 end
 
@@ -950,18 +997,8 @@ local function humanoidMeditateAndLevelUp()
         end
         task.wait(1.5)
 
-        -- 5. Tự động phân bổ điểm Stats theo cấu hình và bấm Finish
+        -- 5. Tự động phân bổ điểm Stats theo cấu hình và hoàn tất
         allocateStats()
-        task.wait(0.8)
-
-        local statAlloc = pgui.HUD and pgui.HUD:FindFirstChild("StatAllocateOLD", true)
-        if statAlloc then
-            local finishBtn = statAlloc:FindFirstChild("Finish")
-            if finishBtn then
-                safeClickButton(finishBtn)
-                print("[AutoFarmLevel] ✅ Đã bấm Finish phân bổ Stats.")
-            end
-        end
         task.wait(1.0)
 
         -- 6. Giả lập bấm phím M để thoát khỏi Soul Corridor trở lại Overworld
