@@ -1043,11 +1043,10 @@ function LevelFarmer.runCycle()
                         LevelFarmer.lastEssence = curEssence
                         LevelFarmer.stableEssenceCount = 0
                     elseif curEssence == LevelFarmer.lastEssence and curEssence >= 10 then
-                        -- Essence không thay đổi sau trận -> Tăng bộ đếm phát hiện Cap
+                        -- Essence không tăng thêm sau trận -> Đã đạt mốc Cap tối đa của level hiện tại
                         LevelFarmer.stableEssenceCount = LevelFarmer.stableEssenceCount + 1
-                        local threshold = (Options and Options.EssenceThreshold and Options.EssenceThreshold.Value) or 40
-                        if LevelFarmer.stableEssenceCount >= 2 or curEssence >= threshold then
-                            print(string.format("[AutoFarmLevel] 🔮 Phát hiện Essence đã đầy Cap (%d Essence) -> Chuẩn bị đi thiền...", curEssence))
+                        if LevelFarmer.stableEssenceCount >= 2 then
+                            print(string.format("[AutoFarmLevel] 🔮 Phát hiện Essence đã chạm Cap tối đa (%d Essence) -> Bắt đầu chu trình đi thiền...", curEssence))
                             humanoidMeditateAndLevelUp()
                         end
                     end
@@ -2156,18 +2155,9 @@ LevelGroup:AddDropdown("FarmLevelMode", {
 })
 
 LevelGroup:AddToggle("AutoMeditate", {
-    Text = "Auto Meditate & Level Up (Essence Cap)",
+    Text = "Auto Meditate & Level Up (Auto Cap Detect)",
     Default = true,
-    Tooltip = "Khi phát hiện Essence dừng tăng (chạm Cap) hoặc đạt mốc cài đặt, tự động bay thiền mô phỏng phím M gặp Aretim để lên cấp rồi trở về",
-})
-
-LevelGroup:AddSlider("EssenceThreshold", {
-    Text = "Essence Cap Threshold (Fallback)",
-    Default = 40,
-    Min = 10,
-    Max = 300,
-    Rounding = 0,
-    Tooltip = "Mốc Essence tối đa để kích hoạt đi thiền nếu bộ đếm delta chưa phát hiện",
+    Tooltip = "Tự động phát hiện khi Essence dừng tăng (đạt Cap level) -> Tự động đi thiền mô phỏng phím M gặp Aretim để thăng cấp rồi trở về",
 })
 
 LevelGroup:AddToggle("AutoAllocateStats", {
