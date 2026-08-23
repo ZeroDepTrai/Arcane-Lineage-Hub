@@ -1145,12 +1145,9 @@ function LevelFarmer.runCycle()
                         LevelFarmer.essenceBeforeCombat = newEssence
                         print(string.format("[AutoFarmLevel] 📈 Đã nhận thưởng (+%d Essence, Tổng: %d) -> Tiếp tục farm trận mới...", newEssence - initialEssence, newEssence))
                     elseif newEssence == initialEssence and newEssence >= 10 then
-                        -- Sau 4.5s vẫn không có thêm Essence -> Đã chạm Cap
-                        LevelFarmer.zeroGainFightCount = LevelFarmer.zeroGainFightCount + 1
-                        print(string.format("[AutoFarmLevel] ⚠️ Trận này không nhận thêm Essence (Lần %d/2 không có EXP)", LevelFarmer.zeroGainFightCount))
-
-                        if LevelFarmer.zeroGainFightCount >= 2 and (Toggles.AutoMeditate and Toggles.AutoMeditate.Value) then
-                            print(string.format("[AutoFarmLevel] 🔮 Xác nhận 2 trận liên tiếp chạm Cap tối đa (%d Essence) -> Bắt đầu quy trình đi thiền...", newEssence))
+                        -- Sau 4.5s polling xác nhận không nhận thêm Essence -> Đã chính thức chạm Cap tối đa!
+                        if Toggles.AutoMeditate and Toggles.AutoMeditate.Value then
+                            print(string.format("[AutoFarmLevel] 🔮 Xác nhận Essence đã chạm Cap tối đa (%d Essence) -> Bắt đầu chu trình đi thiền ngay...", newEssence))
                             humanoidMeditateAndLevelUp()
                         end
                     end
