@@ -3661,21 +3661,55 @@ task.spawn(function()
                         end)
                     end
 
-                    for _, btn in ipairs(inv:GetDescendants()) do
-                        if btn:IsA("TextButton") and (btn.Text:find("Unidentified") or btn.Text == "Unidentified Gear") then
-                            local itemId = btn.Name
-                            local itemObj = itemDict and itemDict[itemId]
-                            local itemData = itemObj and (itemObj.ItemData or itemObj)
-                            local realName = itemData and (itemData.Name or itemData.Tool)
+                    local ItemRegistry = nil
+                    pcall(function() ItemRegistry = require(RS.ItemRegistry) end)
 
-                            if realName then
-                                local fullLabel = realName
-                                if ItemModifiers and itemData.Config then
-                                    pcall(function()
-                                        fullLabel = ItemModifiers.LabelFor(realName, itemData.Config)
-                                    end)
+                    for _, btn in ipairs(inv:GetDescendants()) do
+                        if btn:IsA("TextButton") and itemDict and itemDict[btn.Name] then
+                            local itemObj = itemDict[btn.Name]
+                            local itemData = itemObj and (itemObj.ItemData or itemObj)
+                            if itemData and itemData.Config and itemData.Config.Unidentified then
+                                local realName = itemData.Name or itemData.Tool
+                                if realName then
+                                    local fakeConfig = {}
+                                    for ck, cv in pairs(itemData.Config) do
+                                        if ck ~= "Unidentified" then fakeConfig[ck] = cv end
+                                    end
+                                    local fullLabel = realName
+                                    if ItemModifiers then
+                                        pcall(function()
+                                            fullLabel = ItemModifiers.LabelFor(realName, fakeConfig)
+                                        end)
+                                    end
+                                    btn.Text = "✨ " .. fullLabel
                                 end
-                                btn.Text = "✨ " .. fullLabel
+                            end
+                        end
+                    end
+
+                    -- Giải mã luôn ToolTip khi di chuột vào món đồ chưa giám định
+                    local tooltip = inv:FindFirstChild("ToolTip", true)
+                    if tooltip and tooltip.Visible then
+                        local textLbl = tooltip:FindFirstChildWhichIsA("TextLabel", true)
+                        if textLbl and textLbl.Text:find("You have no idea what this does") then
+                            textLbl.Text = "✨ [Real Item Revealed by Arcane Hub]"
+                        end
+                    end
+
+                    local advTooltip = inv:FindFirstChild("AdvancedTooltip", true)
+                    if advTooltip and advTooltip.Visible then
+                        local descLbl = advTooltip:FindFirstChild("Desc")
+                        if descLbl and descLbl:IsA("TextLabel") and descLbl.Text:find("You have no idea what this does") then
+                            local nameLbl = advTooltip:FindFirstChild("ItemName")
+                            local realItemName = nameLbl and nameLbl.Text:gsub("✨ ", "")
+                            if realItemName and ItemRegistry then
+                                local regData = ItemRegistry:GetItem(realItemName)
+                                if regData then
+                                    local descText = (regData.GearDesc and (regData.GearDesc .. "
+
+") or "") .. (regData.ToolTip or "")
+                                    descLbl.Text = "✨ " .. descText
+                                end
                             end
                         end
                     end
@@ -3839,21 +3873,55 @@ task.spawn(function()
                         end)
                     end
 
-                    for _, btn in ipairs(inv:GetDescendants()) do
-                        if btn:IsA("TextButton") and (btn.Text:find("Unidentified") or btn.Text == "Unidentified Gear") then
-                            local itemId = btn.Name
-                            local itemObj = itemDict and itemDict[itemId]
-                            local itemData = itemObj and (itemObj.ItemData or itemObj)
-                            local realName = itemData and (itemData.Name or itemData.Tool)
+                    local ItemRegistry = nil
+                    pcall(function() ItemRegistry = require(RS.ItemRegistry) end)
 
-                            if realName then
-                                local fullLabel = realName
-                                if ItemModifiers and itemData.Config then
-                                    pcall(function()
-                                        fullLabel = ItemModifiers.LabelFor(realName, itemData.Config)
-                                    end)
+                    for _, btn in ipairs(inv:GetDescendants()) do
+                        if btn:IsA("TextButton") and itemDict and itemDict[btn.Name] then
+                            local itemObj = itemDict[btn.Name]
+                            local itemData = itemObj and (itemObj.ItemData or itemObj)
+                            if itemData and itemData.Config and itemData.Config.Unidentified then
+                                local realName = itemData.Name or itemData.Tool
+                                if realName then
+                                    local fakeConfig = {}
+                                    for ck, cv in pairs(itemData.Config) do
+                                        if ck ~= "Unidentified" then fakeConfig[ck] = cv end
+                                    end
+                                    local fullLabel = realName
+                                    if ItemModifiers then
+                                        pcall(function()
+                                            fullLabel = ItemModifiers.LabelFor(realName, fakeConfig)
+                                        end)
+                                    end
+                                    btn.Text = "✨ " .. fullLabel
                                 end
-                                btn.Text = "✨ " .. fullLabel
+                            end
+                        end
+                    end
+
+                    -- Giải mã luôn ToolTip khi di chuột vào món đồ chưa giám định
+                    local tooltip = inv:FindFirstChild("ToolTip", true)
+                    if tooltip and tooltip.Visible then
+                        local textLbl = tooltip:FindFirstChildWhichIsA("TextLabel", true)
+                        if textLbl and textLbl.Text:find("You have no idea what this does") then
+                            textLbl.Text = "✨ [Real Item Revealed by Arcane Hub]"
+                        end
+                    end
+
+                    local advTooltip = inv:FindFirstChild("AdvancedTooltip", true)
+                    if advTooltip and advTooltip.Visible then
+                        local descLbl = advTooltip:FindFirstChild("Desc")
+                        if descLbl and descLbl:IsA("TextLabel") and descLbl.Text:find("You have no idea what this does") then
+                            local nameLbl = advTooltip:FindFirstChild("ItemName")
+                            local realItemName = nameLbl and nameLbl.Text:gsub("✨ ", "")
+                            if realItemName and ItemRegistry then
+                                local regData = ItemRegistry:GetItem(realItemName)
+                                if regData then
+                                    local descText = (regData.GearDesc and (regData.GearDesc .. "
+
+") or "") .. (regData.ToolTip or "")
+                                    descLbl.Text = "✨ " .. descText
+                                end
                             end
                         end
                     end
