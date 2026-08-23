@@ -2059,7 +2059,7 @@ local function handleFistQTE(fistQTE)
     end
 end
 
--- 7. SPEAR QTE (INSTANT TAPS & HIGH-SPEED SLIDER DRAG SOLVER)
+-- 7. SPEAR QTE (PERFECT PRECISION FOR BASE & SUPER CLASS / INSANE+ TRAINER)
 local function handleSpearQTE(spearQTE)
     if not isQTEActive("Spear") or not spearQTE or not spearQTE.Visible then return end
     local container = spearQTE:FindFirstChild("Container")
@@ -2078,7 +2078,9 @@ local function handleSpearQTE(spearQTE)
     for _, entry in ipairs(circles) do
         local circle = entry.obj
         local btn = circle:FindFirstChild("InputButton", true) or circle:FindFirstChildWhichIsA("ImageButton", true) or circle:FindFirstChildWhichIsA("TextButton", true)
-        if btn and (btn.Active == nil or btn.Active == true) then
+        
+        -- Chỉ xử lý vòng tròn đang Active (nằm đầu hàng đợi queue)
+        if btn and btn.Active == true then
             local btnCenterX = btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2
             local btnCenterY = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2
             local startInput = {
@@ -2086,12 +2088,11 @@ local function handleSpearQTE(spearQTE)
                 Position = Vector3.new(btnCenterX, btnCenterY, 0)
             }
 
-            -- 1. Kích hoạt Tap / Activated
+            -- 1. Kích hoạt Tap Event (Instant Trigger cho TapTemplate)
             if firesignal then
                 pcall(function() firesignal(btn.Activated) end)
                 pcall(function() firesignal(btn.MouseButton1Click) end)
                 pcall(function() firesignal(btn.MouseButton1Down) end)
-                pcall(function() firesignal(btn.MouseButton1Up) end)
                 pcall(function() firesignal(btn.InputBegan, startInput) end)
             end
 
@@ -2113,32 +2114,53 @@ local function handleSpearQTE(spearQTE)
                 end)
             end
 
-            -- 2. Giải phóng ngay lập tức các dạng Kéo Slider (Line & Curve Drag) qua InputChanged quét đa hướng
-            for _, angleDeg in ipairs({ 0, 45, 90, 135, 180, 225, 270, 315 }) do
-                local rad = math.rad(angleDeg)
-                local movePos = Vector3.new(btnCenterX + math.cos(rad) * 450, btnCenterY + math.sin(rad) * 450, 0)
-                local moveInput = {
-                    UserInputType = Enum.UserInputType.MouseMovement,
-                    Position = movePos
+            -- 2. Giải phóng chuẩn xác Line & Curve Slider cho cấp độ Insane & Super Class
+            local isLine = circle:FindFirstChild("Goal_Line") ~= nil
+            local isCurve = circle:FindFirstChild("Goal_Curve") ~= nil
+
+            if isLine or isCurve or circle.Rotation ~= 0 then
+                local rot = circle.Rotation
+                local sweepDistances = { 100, 250, 450, 650, 900 }
+                local angles = { rot, rot + 90, rot + 180, rot + 270, rot + 45, rot + 135, rot + 225, rot + 315 }
+
+                for _, dist in ipairs(sweepDistances) do
+                    for _, ang in ipairs(angles) do
+                        local rad = math.rad(ang)
+                        local moveInput = {
+                            UserInputType = Enum.UserInputType.MouseMovement,
+                            Position = Vector3.new(btnCenterX + math.cos(rad) * dist, btnCenterY + math.sin(rad) * dist, 0)
+                        }
+                        if firesignal then
+                            pcall(function() firesignal(UserInputService.InputChanged, moveInput) end)
+                        end
+                        if getconnections then
+                            pcall(function()
+                                for _, c in ipairs(getconnections(UserInputService.InputChanged)) do
+                                    if c.Function then c.Function(moveInput) elseif c.Fire then c:Fire(moveInput) end
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+
+            -- 3. Đồng bộ Gamepad Keycode bypass (Hỗ trợ hoàn hảo Super Class Trainer)
+            for _, kc in ipairs({ Enum.KeyCode.ButtonA, Enum.KeyCode.ButtonB, Enum.KeyCode.ButtonX, Enum.KeyCode.ButtonY }) do
+                local keyInput = {
+                    KeyCode = kc,
+                    UserInputType = Enum.UserInputType.Gamepad1
                 }
                 if firesignal then
-                    pcall(function() firesignal(UserInputService.InputChanged, moveInput) end)
+                    pcall(function() firesignal(UserInputService.InputBegan, keyInput, false) end)
                 end
                 if getconnections then
                     pcall(function()
-                        for _, c in ipairs(getconnections(UserInputService.InputChanged)) do
-                            if c.Function then c.Function(moveInput) elseif c.Fire then c:Fire(moveInput) end
+                        for _, c in ipairs(getconnections(UserInputService.InputBegan)) do
+                            if c.Function then c.Function(keyInput, false) elseif c.Fire then c:Fire(keyInput, false) end
                         end
                     end)
                 end
             end
-
-            -- 3. Dự phòng VirtualInputManager kéo chuột tốc độ cao
-            pcall(function()
-                VirtualInputManager:SendMouseButtonEvent(btnCenterX, btnCenterY, 0, true, game, 0)
-                VirtualInputManager:SendMouseMoveEvent(btnCenterX + 300, btnCenterY + 300, game)
-                VirtualInputManager:SendMouseButtonEvent(btnCenterX + 300, btnCenterY + 300, 0, false, game, 0)
-            end)
 
             singleClick(btn)
             break
