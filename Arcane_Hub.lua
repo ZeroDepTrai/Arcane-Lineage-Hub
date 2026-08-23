@@ -2060,7 +2060,7 @@ local function handleFistQTE(fistQTE)
     end
 end
 
--- 7. SPEAR QTE (PERFECT STUTTER-FREE ACTIVE NODE SOLVER)
+-- 7. SPEAR QTE (PERFECT STUTTER-FREE DUAL HARDWARE & SOFTWARE SOLVER)
 local function handleSpearQTE(spearQTE)
     if not isQTEActive("Spear") or not spearQTE or not spearQTE.Visible then return end
     local container = spearQTE:FindFirstChild("Container")
@@ -2080,7 +2080,7 @@ local function handleSpearQTE(spearQTE)
         local circle = entry.obj
         local btn = circle:FindFirstChild("InputButton", true) or circle:FindFirstChildWhichIsA("ImageButton", true) or circle:FindFirstChildWhichIsA("TextButton", true)
 
-        -- CHỈ XỬ LÝ DUY NHẤT VÒNG TRÒN ĐANG CÓ TRẠNG THÁI ACTIVE == TRUE TỪ GAME
+        -- Chỉ xử lý vòng tròn đang có trạng thái Active == true từ game
         if btn and btn.Active == true and btn.ImageTransparency < 0.8 then
             AutoQTE.spearSolvedTable[circle] = true
 
@@ -2111,7 +2111,11 @@ local function handleSpearQTE(spearQTE)
                 end)
             end
 
-            -- 2. Giải phóng Line & Curve Slider
+            -- 2. Giả lập Hardware Mouse Down & Drag di chuyển chuột thực tế (Khắc phục hoàn toàn khi chuột để im)
+            pcall(function()
+                VirtualInputManager:SendMouseButtonEvent(btnCenterX, btnCenterY, 0, true, game, 0)
+            end)
+
             local isLine = circle:FindFirstChild("Goal_Line") ~= nil
             local isCurve = circle:FindFirstChild("Goal_Curve") ~= nil
 
@@ -2122,13 +2126,19 @@ local function handleSpearQTE(spearQTE)
                 local dy = math.sin(rad)
 
                 local dragPoints = {
-                    Vector3.new(btnCenterX + dx * 1000, btnCenterY + dy * 1000, 0),
-                    Vector3.new(btnCenterX - dx * 1000, btnCenterY - dy * 1000, 0),
-                    Vector3.new(btnCenterX - dy * 1000, btnCenterY + dx * 1000, 0),
-                    Vector3.new(btnCenterX + dy * 1000, btnCenterY - dx * 1000, 0)
+                    Vector3.new(btnCenterX + dx * 800, btnCenterY + dy * 800, 0),
+                    Vector3.new(btnCenterX - dx * 800, btnCenterY - dy * 800, 0),
+                    Vector3.new(btnCenterX - dy * 800, btnCenterY + dx * 800, 0),
+                    Vector3.new(btnCenterX + dy * 800, btnCenterY - dx * 800, 0)
                 }
 
                 for _, movePos in ipairs(dragPoints) do
+                    -- Hardware Mouse Move (Kích hoạt luồng chuột thật trong engine game)
+                    pcall(function()
+                        VirtualInputManager:SendMouseMoveEvent(movePos.X, movePos.Y, game)
+                    end)
+
+                    -- Software Signal
                     local moveInput = {
                         UserInputType = Enum.UserInputType.MouseMovement,
                         Position = movePos
@@ -2221,7 +2231,12 @@ RunService.RenderStepped:Connect(function()
     if spearQTE and spearQTE.Visible then
         handleSpearQTE(spearQTE)
     else
-        AutoQTE.spearSolvedTable = {}
+        if next(AutoQTE.spearSolvedTable) ~= nil then
+            AutoQTE.spearSolvedTable = {}
+            pcall(function()
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+            end)
+        end
     end
     if lockpickQTE and lockpickQTE.Visible then handleLockpickQTE(lockpickQTE) end
 end)
