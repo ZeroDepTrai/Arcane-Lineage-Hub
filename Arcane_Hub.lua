@@ -1667,6 +1667,8 @@ local function equipPickaxe()
     local char = LocalPlayer.Character
     if not char then return false end
     if char:FindFirstChild("Pickaxe") then return true end
+
+    -- 1. Kiểm tra trong Backpack
     local hum = char:FindFirstChildOfClass("Humanoid")
     local bp = LocalPlayer:FindFirstChild("Backpack")
     if bp and hum then
@@ -1674,10 +1676,34 @@ local function equipPickaxe()
         if pick and pick:IsA("Tool") then
             hum:EquipTool(pick)
             task.wait(0.3)
-            return true
+            if char:FindFirstChild("Pickaxe") then return true end
         end
     end
-    return false
+
+    -- 2. Trang bị từ Inventory qua Remote InventoryManage
+    local pgui = PlayerGui
+    local inv = pgui and pgui:FindFirstChild("Inventory")
+    local RS = game:GetService("ReplicatedStorage")
+    local invManage = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Information") and RS.Remotes.Information:FindFirstChild("InventoryManage")
+
+    if inv then
+        for _, desc in ipairs(inv:GetDescendants()) do
+            if desc:IsA("TextButton") and desc.Text:lower():find("pickaxe") then
+                local uniqueId = tonumber(desc.Name) or desc.Name
+                if invManage then
+                    pcall(function() invManage:FireServer("Equip", "Pickaxe", uniqueId) end)
+                end
+                if firesignal then
+                    pcall(function() firesignal(desc.MouseButton1Click) end)
+                    pcall(function() firesignal(desc.MouseButton1Down) end)
+                end
+                task.wait(0.4)
+                break
+            end
+        end
+    end
+
+    return char:FindFirstChild("Pickaxe") ~= nil
 end
 
 local function buyPickaxe()
@@ -1701,8 +1727,24 @@ local function buyPickaxe()
                 fireclickdetector(desc)
             end
         end
-        task.wait(1)
-        Library:Notify("✅ Pickaxe interaction dispatched!", 3)
+        task.wait(0.4)
+
+        -- Bấm nút Confirm mua hàng trong PlayerGui.Chat hoặc Prompt Dialog
+        local pgui = PlayerGui
+        for _, desc in ipairs(pgui:GetDescendants()) do
+            if desc:IsA("TextButton") and (desc.Text == "Confirm" or desc.Text == "Buy" or desc.Text == "Yes" or desc.Text == "YES") then
+                if firesignal then
+                    pcall(function() firesignal(desc.MouseButton1Click) end)
+                    pcall(function() firesignal(desc.MouseButton1Down) end)
+                end
+                safeClickButton(desc)
+                print("[AutoMine] ✅ Đã bấm nút Confirm mua Cuốc thành công!")
+                break
+            end
+        end
+        task.wait(0.8)
+        equipPickaxe()
+        Library:Notify("✅ Pickaxe bought and equipped!", 3)
         return true
     end
     return false
@@ -1711,32 +1753,40 @@ end
 local function mineOreNode(oreModel)
     if not oreModel or not oreModel.Parent then return false end
     local startTime = os.clock()
-    local timeout = Options.MineTimeout and Options.MineTimeout.Value or 12
+    local timeout = Options.MineTimeout and Options.MineTimeout.Value or 15
     equipPickaxe()
 
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local orePart = oreModel:FindFirstChild("Ore") or oreModel:FindFirstChildWhichIsA("BasePart")
+
+    print(string.format("[AutoMine] ⛏️ Bắt đầu vung cuốc đập mỏ %s...", oreModel.Name))
+
     while oreModel and oreModel.Parent and (os.clock() - startTime < timeout) and Miner.running do
-        -- 1. Trigger ProximityPrompt / ClickDetector if present
-        for _, desc in ipairs(oreModel:GetDescendants()) do
-            if desc:IsA("ClickDetector") and fireclickdetector then
-                fireclickdetector(desc)
-            elseif desc:IsA("ProximityPrompt") and fireproximityprompt then
-                fireproximityprompt(desc)
-            end
+        if not (char and char:FindFirstChild("Pickaxe")) then
+            equipPickaxe()
         end
 
-        -- 2. Activate tool and simulate hit
-        local char = LocalPlayer.Character
+        if root and orePart then
+            root.CFrame = CFrame.lookAt(root.Position, Vector3.new(orePart.Position.X, root.Position.Y, orePart.Position.Z))
+        end
+
+        -- 1. Kích hoạt Pickaxe Tool swing
         local tool = char and (char:FindFirstChild("Pickaxe") or char:FindFirstChildWhichIsA("Tool"))
         if tool and tool:IsA("Tool") then
-            tool:Activate()
+            pcall(function() tool:Activate() end)
         end
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 1)
-        task.wait(0.05)
-        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+
+        -- 2. Click chuột phần cứng VIM để đánh quặng
+        if VirtualInputManager then
+            VirtualInputManager:SendMouseButtonEvent(500, 500, 0, true, game, 0)
+            task.wait(0.08)
+            VirtualInputManager:SendMouseButtonEvent(500, 500, 0, false, game, 0)
+        end
 
         task.wait(0.35)
     end
-    return (oreModel.Parent == nil)
+    return (oreModel.Parent == nil or oreModel:FindFirstChild("Ore") == nil)
 end
 
 function Miner.runCycle()
@@ -3290,8 +3340,21 @@ TownWarpGroup:AddButton("👁️ Metrom (Dungeon Entrance)", function() teleport
 -- -----------------------------------------------------------------------------
 local ESPGroup = Tabs.Visuals:AddLeftGroupbox("👁️ Ingredient ESP")
 local FilterGroup = Tabs.Visuals:AddLeftGroupbox("🎯 Filters & Categories")
+local QOLGroup = Tabs.Visuals:AddRightGroupbox("✨ Quality of Life (QOL)")
 local FPSGroup = Tabs.Visuals:AddRightGroupbox("⚡ FPS Booster")
 local OptGroup = Tabs.Visuals:AddRightGroupbox("🛠️ Optimization & RAM")
+
+QOLGroup:AddToggle("BypassNoPainHP", {
+    Text = "Reveal 'I Feel No Pain' HP & Mana",
+    Default = true,
+    Tooltip = "Reveals exact numerical Health and Mana/Energy bars when obscured by Trial I Feel No Pain",
+})
+
+QOLGroup:AddToggle("RevealUnidentified", {
+    Text = "Reveal Unidentified Items",
+    Default = true,
+    Tooltip = "Reveals the true real names and stats of all unidentified equipment and items in your inventory",
+})
 
 local FPSBooster = {
     originalFogEnd = (Lighting and Lighting.FogEnd) or 100000,
@@ -3524,12 +3587,58 @@ local AntiAFK = {
 local function initAntiAFK()
 
 -- =============================================================================
--- QOL: HIỂN THỊ MÁU & MANA/ENERGY THẬT KHI CHỊU TRIAL 'I FEEL NO PAIN!'
+-- QOL: REAL HP/MANA REVEAL & UNIDENTIFIED ITEMS REVEALER
 -- =============================================================================
 task.spawn(function()
     local blueEnergyColor = Color3.fromRGB(106, 192, 242)
+    local RS = game:GetService("ReplicatedStorage")
+    local ItemModifiers = nil
+    pcall(function() ItemModifiers = require(RS.Libraries.ItemModifiers) end)
+
     while true do
-        task.wait(0.2)
+        task.wait(0.25)
+
+        -- 1. GIẢI MÃ VÀ HIỆN TÊN THẬT CHO TẤT CẢ ITEM CHƯA GIÁM ĐỊNH (UNIDENTIFIED REVEALER)
+        if Toggles.RevealUnidentified and Toggles.RevealUnidentified.Value then
+            pcall(function()
+                local pgui = PlayerGui
+                local inv = pgui and pgui:FindFirstChild("Inventory")
+                if inv then
+                    local invScript = inv:FindFirstChildWhichIsA("LocalScript", true)
+                    local itemDict = nil
+                    if invScript and getsenv and getupvalues then
+                        pcall(function()
+                            local env = getsenv(invScript)
+                            if env and env.newTile then
+                                local uvs = getupvalues(env.newTile)
+                                itemDict = uvs[6]
+                            end
+                        end)
+                    end
+
+                    for _, btn in ipairs(inv:GetDescendants()) do
+                        if btn:IsA("TextButton") and (btn.Text:find("Unidentified") or btn.Text == "Unidentified Gear") then
+                            local itemId = btn.Name
+                            local itemObj = itemDict and itemDict[itemId]
+                            local itemData = itemObj and (itemObj.ItemData or itemObj)
+                            local realName = itemData and (itemData.Name or itemData.Tool)
+
+                            if realName then
+                                local fullLabel = realName
+                                if ItemModifiers and itemData.Config then
+                                    pcall(function()
+                                        fullLabel = ItemModifiers.LabelFor(realName, itemData.Config)
+                                    end)
+                                end
+                                btn.Text = "✨ " .. fullLabel
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+
+        -- 2. HIỂN THỊ MÁU & MANA/ENERGY THẬT KHI CHỊU TRIAL 'I FEEL NO PAIN!'
         if Toggles.BypassNoPainHP and Toggles.BypassNoPainHP.Value then
             pcall(function()
                 local char = LocalPlayer.Character
@@ -3656,12 +3765,58 @@ shared.ArcaneHub = Library
 initAntiAFK()
 
 -- =============================================================================
--- QOL: HIỂN THỊ MÁU & MANA/ENERGY THẬT KHI CHỊU TRIAL 'I FEEL NO PAIN!'
+-- QOL: REAL HP/MANA REVEAL & UNIDENTIFIED ITEMS REVEALER
 -- =============================================================================
 task.spawn(function()
     local blueEnergyColor = Color3.fromRGB(106, 192, 242)
+    local RS = game:GetService("ReplicatedStorage")
+    local ItemModifiers = nil
+    pcall(function() ItemModifiers = require(RS.Libraries.ItemModifiers) end)
+
     while true do
-        task.wait(0.2)
+        task.wait(0.25)
+
+        -- 1. GIẢI MÃ VÀ HIỆN TÊN THẬT CHO TẤT CẢ ITEM CHƯA GIÁM ĐỊNH (UNIDENTIFIED REVEALER)
+        if Toggles.RevealUnidentified and Toggles.RevealUnidentified.Value then
+            pcall(function()
+                local pgui = PlayerGui
+                local inv = pgui and pgui:FindFirstChild("Inventory")
+                if inv then
+                    local invScript = inv:FindFirstChildWhichIsA("LocalScript", true)
+                    local itemDict = nil
+                    if invScript and getsenv and getupvalues then
+                        pcall(function()
+                            local env = getsenv(invScript)
+                            if env and env.newTile then
+                                local uvs = getupvalues(env.newTile)
+                                itemDict = uvs[6]
+                            end
+                        end)
+                    end
+
+                    for _, btn in ipairs(inv:GetDescendants()) do
+                        if btn:IsA("TextButton") and (btn.Text:find("Unidentified") or btn.Text == "Unidentified Gear") then
+                            local itemId = btn.Name
+                            local itemObj = itemDict and itemDict[itemId]
+                            local itemData = itemObj and (itemObj.ItemData or itemObj)
+                            local realName = itemData and (itemData.Name or itemData.Tool)
+
+                            if realName then
+                                local fullLabel = realName
+                                if ItemModifiers and itemData.Config then
+                                    pcall(function()
+                                        fullLabel = ItemModifiers.LabelFor(realName, itemData.Config)
+                                    end)
+                                end
+                                btn.Text = "✨ " .. fullLabel
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+
+        -- 2. HIỂN THỊ MÁU & MANA/ENERGY THẬT KHI CHỊU TRIAL 'I FEEL NO PAIN!'
         if Toggles.BypassNoPainHP and Toggles.BypassNoPainHP.Value then
             pcall(function()
                 local char = LocalPlayer.Character
