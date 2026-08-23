@@ -1182,36 +1182,14 @@ function LevelFarmer.runCycle()
                     LevelFarmer.wasInCombat = false
                     print("[AutoFarmLevel] 🏆 Trận đấu kết thúc!")
 
-                    local initialEssence = LevelFarmer.essenceBeforeCombat
-                    local newEssence = getCurrentEssence()
-                    local startWait = os.clock()
+                    local currentEss = getCurrentEssence()
+                    print(string.format("[AutoFarmLevel] 📊 Essence hiện tại: %d", currentEss))
 
-                    -- Chờ tối đa 3.5s để server nạp thưởng Essence
-                    while os.clock() - startWait < 3.5 do
-                        newEssence = getCurrentEssence()
-                        if newEssence > initialEssence then
-                            break
-                        end
-                        task.wait(0.3)
-                    end
-
-                    print(string.format("[AutoFarmLevel] 📊 Essence trước trận: %d | Essence sau trận: %d", initialEssence, newEssence))
-
+                    -- CHẾ ĐỘ TEST (BỎ QUA HOÀN TOÀN CHECK CAP):
                     if Toggles.AutoMeditate and Toggles.AutoMeditate.Value then
-                        if newEssence >= 10 and newEssence == initialEssence then
-                            -- Chạm Cap Essence -> Đi thiền
-                            print(string.format("[AutoFarmLevel] 🔮 Xác nhận Essence đã chạm Cap (%d Essence) -> Bay đi thiền & tăng level...", newEssence))
-                            humanoidMeditateAndLevelUp()
-                        elseif newEssence > 0 and (Options and Options.TestMeditateAlways and Options.TestMeditateAlways.Value) then
-                            -- Nếu bật chế độ test thiền luôn
-                            print(string.format("[AutoFarmLevel] 🧘 Có %d Essence -> Bay đi thiền để tăng level & stats...", newEssence))
-                            humanoidMeditateAndLevelUp()
-                        else
-                            LevelFarmer.essenceBeforeCombat = newEssence
-                            task.wait(0.5)
-                        end
+                        print("[AutoFarmLevel] 🧘 (Test Mode - Bỏ qua check Cap) -> Bắt đầu chu trình đi thiền & tăng stats ngay sau trận...")
+                        humanoidMeditateAndLevelUp()
                     else
-                        LevelFarmer.essenceBeforeCombat = newEssence
                         task.wait(0.5)
                     end
                 end
@@ -2328,6 +2306,16 @@ LevelGroup:AddToggle("AutoAllocateStats", {
     Text = "Auto Allocate Stats",
     Default = true,
     Tooltip = "Tự động phân bổ StatPoints theo các mốc Target Stats bên dưới",
+})
+
+LevelGroup:AddButton({
+    Text = "🧘 Test Meditate & Level Up Now",
+    Func = function()
+        task.spawn(function()
+            humanoidMeditateAndLevelUp()
+        end)
+    end,
+    DoubleClick = false,
 })
 
 LevelGroup:AddSlider("TargetStrength", {
