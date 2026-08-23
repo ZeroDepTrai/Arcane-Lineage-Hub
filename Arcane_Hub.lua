@@ -639,6 +639,39 @@ local function getCurrentLevel()
     return 1
 end
 
+local function safeClickButton(btn)
+    if not btn then return false end
+    local clicked = false
+    if firesignal then
+        pcall(function() firesignal(btn.MouseButton1Click) end)
+        pcall(function() firesignal(btn.MouseButton1Down) end)
+        pcall(function() firesignal(btn.MouseButton1Up) end)
+        pcall(function() firesignal(btn.Activated) end)
+        clicked = true
+    end
+    if getconnections then
+        pcall(function()
+            for _, c in ipairs(getconnections(btn.MouseButton1Click)) do
+                if c.Function then c.Function() clicked = true
+                elseif c.Fire then c:Fire() clicked = true end
+            end
+        end)
+        pcall(function()
+            for _, c in ipairs(getconnections(btn.MouseButton1Down)) do
+                if c.Function then c.Function() clicked = true
+                elseif c.Fire then c:Fire() clicked = true end
+            end
+        end)
+        pcall(function()
+            for _, c in ipairs(getconnections(btn.Activated)) do
+                if c.Function then c.Function() clicked = true
+                elseif c.Fire then c:Fire() clicked = true end
+            end
+        end)
+    end
+    return clicked
+end
+
 local function getCurrentStats()
     local stats = { Strength = 0, Endurance = 0, Speed = 0, Arcane = 0, Luck = 0 }
     local pgui = PlayerGui
@@ -956,33 +989,7 @@ local function humanoidMeditateAndLevelUp()
     return true
 end
 
-local function safeClickButton(btn)
-    if not btn or not btn:IsA("GuiButton") then return false end
-    local clicked = false
-    pcall(function()
-        for _, c in ipairs(getconnections(btn.MouseButton1Click)) do
-            if c.Function then
-                c.Function()
-                clicked = true
-            elseif c.Fire then
-                c:Fire()
-                clicked = true
-            end
-        end
-    end)
-    pcall(function()
-        for _, c in ipairs(getconnections(btn.MouseButton1Down)) do
-            if c.Function then
-                c.Function()
-                clicked = true
-            elseif c.Fire then
-                c:Fire()
-                clicked = true
-            end
-        end
-    end)
-    return clicked
-end
+
 
 local function isInCombat()
     local char = LocalPlayer.Character
