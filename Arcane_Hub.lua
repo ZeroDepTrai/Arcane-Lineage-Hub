@@ -2059,7 +2059,7 @@ local function handleFistQTE(fistQTE)
     end
 end
 
--- 7. SPEAR QTE (PERFECT PRECISION FOR BASE & SUPER CLASS / INSANE+ TRAINER)
+-- 7. SPEAR QTE (PERFECT PRECISION FOR BASE, SUPER CLASS & IMPOSSIBLE TRAINER)
 local function handleSpearQTE(spearQTE)
     if not isQTEActive("Spear") or not spearQTE or not spearQTE.Visible then return end
     local container = spearQTE:FindFirstChild("Container")
@@ -2088,7 +2088,7 @@ local function handleSpearQTE(spearQTE)
                 Position = Vector3.new(btnCenterX, btnCenterY, 0)
             }
 
-            -- 1. Kích hoạt Tap Event (Instant Trigger cho TapTemplate)
+            -- 1. Kích hoạt Tap Event (Instant Trigger 100% cho TapTemplate)
             if firesignal then
                 pcall(function() firesignal(btn.Activated) end)
                 pcall(function() firesignal(btn.MouseButton1Click) end)
@@ -2114,21 +2114,25 @@ local function handleSpearQTE(spearQTE)
                 end)
             end
 
-            -- 2. Giải phóng chuẩn xác Line & Curve Slider cho cấp độ Insane & Super Class
+            -- 2. Giải phóng thanh kéo Line & Curve qua chuỗi bước tăng đơn điệu (Monotonic Vector Stepping)
             local isLine = circle:FindFirstChild("Goal_Line") ~= nil
             local isCurve = circle:FindFirstChild("Goal_Curve") ~= nil
 
             if isLine or isCurve or circle.Rotation ~= 0 then
                 local rot = circle.Rotation
-                local sweepDistances = { 100, 250, 450, 650, 900 }
-                local angles = { rot, rot + 90, rot + 180, rot + 270, rot + 45, rot + 135, rot + 225, rot + 315 }
+                local directions = { 0, 180, 90, 270, 45, 225, 135, 315 }
 
-                for _, dist in ipairs(sweepDistances) do
-                    for _, ang in ipairs(angles) do
-                        local rad = math.rad(ang)
+                for _, dirOffset in ipairs(directions) do
+                    local rad = math.rad(rot + dirOffset)
+                    local dirX = math.cos(rad)
+                    local dirY = math.sin(rad)
+
+                    -- Bước tiến tăng đơn điệu để tích lũy Progress mà không bị trừ ngược lại
+                    for step = 1, 15 do
+                        local dist = step * 60
                         local moveInput = {
                             UserInputType = Enum.UserInputType.MouseMovement,
-                            Position = Vector3.new(btnCenterX + math.cos(rad) * dist, btnCenterY + math.sin(rad) * dist, 0)
+                            Position = Vector3.new(btnCenterX + dirX * dist, btnCenterY + dirY * dist, 0)
                         }
                         if firesignal then
                             pcall(function() firesignal(UserInputService.InputChanged, moveInput) end)
@@ -2144,7 +2148,7 @@ local function handleSpearQTE(spearQTE)
                 end
             end
 
-            -- 3. Đồng bộ Gamepad Keycode bypass (Hỗ trợ hoàn hảo Super Class Trainer)
+            -- 3. Đồng bộ Gamepad Keycode bypass (Hỗ trợ hoàn hảo Impossible & Super Class Trainer)
             for _, kc in ipairs({ Enum.KeyCode.ButtonA, Enum.KeyCode.ButtonB, Enum.KeyCode.ButtonX, Enum.KeyCode.ButtonY }) do
                 local keyInput = {
                     KeyCode = kc,
