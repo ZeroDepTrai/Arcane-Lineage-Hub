@@ -538,6 +538,10 @@ local LevelFarmer = {
     running = false,
     undergroundPlatform = nil,
     farmSpotLv1_20 = Vector3.new(5035.2, 595.0, -3969.5),
+    lastEssence = -1,
+    stableEssenceCount = 0,
+    lastMeditateTime = 0,
+    aretimPos = Vector3.new(789.8, 238.0, 2120.8),
 }
 
 local function ensureUndergroundPlatform(targetPos)
@@ -687,7 +691,142 @@ local function allocateStats()
     print("[AutoFarmLevel] 📊 Đã hoàn tất phân bổ chỉ số theo Target Stats.")
 end
 
--- Auto Meditate function disabled for anticheat safety
+local function isInSoulCorridor()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+    return (root.Position - LevelFarmer.aretimPos).Magnitude < 400
+end
+
+local function simulateKeyPress(keyCode, holdTime)
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
+        task.wait(holdTime or 0.15)
+        VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
+    end)
+end
+
+local function humanoidMeditateAndLevelUp()
+    local now = os.clock()
+    if now - LevelFarmer.lastMeditateTime < 45 then
+        return false -- Cooldown debounce an toàn 45s
+    end
+    LevelFarmer.lastMeditateTime = now
+
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum then return false end
+
+    -- 1. Tìm Chiếu Thiền gần nhất
+    local mats = workspace:FindFirstChild("Mats")
+    local nearestMat = nil
+    local nearestDist = math.huge
+    if mats then
+        for _, mat in ipairs(mats:GetChildren()) do
+            local pos = mat:GetPivot().Position
+            local d = (pos - root.Position).Magnitude
+            if d < nearestDist then
+                nearestDist = d
+                nearestMat = mat
+            end
+        end
+    end
+
+    if not nearestMat then
+        print("[AutoFarmLevel] ❌ Không tìm thấy MeditationMat.")
+        return false
+    end
+
+    local matPos = nearestMat:GetPivot().Position
+    local targetCF = CFrame.new(matPos.X, matPos.Y + 2.5, matPos.Z)
+
+    print(string.format("[AutoFarmLevel] 🧘 Đang di chuyển tới Chiếu Thiền tại (%.1f, %.1f, %.1f)...", matPos.X, matPos.Y, matPos.Z))
+    teleportToUndergroundSpot(matPos)
+    task.wait(0.5)
+
+    -- 2. Giả lập bấm phím 'M' để vào Hành Lang Linh Hồn (Soul Corridor)
+    print("[AutoFarmLevel] ⌨️ Đang nhấn phím 'M' để thiền nhập định...")
+    simulateKeyPress(Enum.KeyCode.M, 0.3)
+    task.wait(1.0)
+
+    -- Nếu chưa chuyển cảnh, bấm lại hoặc kích hoạt ProximityPrompt của Chiếu Thiền
+    local waited = 0
+    while not isInSoulCorridor() and waited < 6 do
+        local prox = nearestMat:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if prox and fireproximityprompt then
+            fireproximityprompt(prox)
+        end
+        simulateKeyPress(Enum.KeyCode.M, 0.25)
+        task.wait(1.5)
+        waited = waited + 1.5
+    end
+
+    if isInSoulCorridor() then
+        print("[AutoFarmLevel] 🌌 Đã vào Hành Lang Linh Hồn (Soul Corridor) thành công!")
+        task.wait(1.0)
+
+        -- 3. Di chuyển tới gặp NPC Aretim
+        local aretimModel = workspace:FindFirstChild("NPCs") and workspace.NPCs:FindFirstChild("Aretim")
+        local aretimPos = aretimModel and aretimModel:GetPivot().Position or LevelFarmer.aretimPos
+        local aretimTargetCF = CFrame.new(aretimPos.X, aretimPos.Y + 2.0, aretimPos.Z - 4.0)
+
+        print(string.format("[AutoFarmLevel] 🚶 Đang tới gặp NPC Aretim tại (%.1f, %.1f, %.1f)...", aretimPos.X, aretimPos.Y, aretimPos.Z))
+        teleportToUndergroundSpot(aretimTargetCF.Position)
+        task.wait(0.6)
+
+        -- 4. Tương tác hội thoại với Aretim để lên cấp
+        local aretimProx = aretimModel and aretimModel:FindFirstChildWhichIsA("ProximityPrompt", true)
+        if aretimProx and fireproximityprompt then
+            fireproximityprompt(aretimProx)
+            print("[AutoFarmLevel] 💬 Đã tương tác với NPC Aretim.")
+        end
+        task.wait(2.0)
+
+        -- Tự động bấm lựa chọn hội thoại nếu có
+        local pgui = PlayerGui
+        for _, g in ipairs(pgui:GetChildren()) do
+            if g.Name:lower():find("dialog") or g.Name:lower():find("choice") or g.Name:lower():find("option") then
+                for _, btn in ipairs(g:GetDescendants()) do
+                    if btn:IsA("GuiButton") and btn.Visible then
+                        safeClickButton(btn)
+                        task.wait(0.3)
+                    end
+                end
+            end
+        end
+        task.wait(1.5)
+
+        -- 5. Tự động phân bổ điểm Stats theo cấu hình
+        allocateStats()
+        task.wait(1.0)
+
+        -- 6. Nhấn phím 'M' để rời Soul Corridor trở lại Overworld
+        print("[AutoFarmLevel] ⌨️ Nhấn phím 'M' để hoàn tất thiền và trở về...")
+        simulateKeyPress(Enum.KeyCode.M, 0.3)
+        task.wait(2.0)
+
+        local exitWaited = 0
+        while isInSoulCorridor() and exitWaited < 6 do
+            simulateKeyPress(Enum.KeyCode.M, 0.3)
+            task.wait(1.5)
+            exitWaited = exitWaited + 1.5
+        end
+    else
+        print("[AutoFarmLevel] ⚠️ Chưa thể vào Soul Corridor trong đợt này.")
+    end
+
+    -- 7. Quay trở lại bãi farm ngầm an toàn
+    local spot = LevelFarmer.farmSpotLv1_20
+    ensureUndergroundPlatform(spot)
+    teleportToUndergroundSpot(spot)
+    print("[AutoFarmLevel] 🛡️ Đã trở về bãi farm ngầm an toàn!")
+
+    -- Reset bộ đếm Essence delta
+    LevelFarmer.lastEssence = getCurrentEssence()
+    LevelFarmer.stableEssenceCount = 0
+    return true
+end
 
 local function safeClickButton(btn)
     if not btn or not btn:IsA("GuiButton") then return false end
@@ -894,9 +1033,29 @@ function LevelFarmer.runCycle()
                     task.wait(0.2)
                 end
             else
-                -- Giữ vị trí ngầm an toàn tuyệt đối, không spam di chuyển ra ngoài
+                -- Kiểm tra lượng Essence sau trận đánh (So sánh delta)
+                if Toggles.AutoMeditate and Toggles.AutoMeditate.Value then
+                    local curEssence = getCurrentEssence()
+                    if LevelFarmer.lastEssence < 0 then
+                        LevelFarmer.lastEssence = curEssence
+                    elseif curEssence > LevelFarmer.lastEssence then
+                        -- Essence vẫn đang tăng -> Nhân vật vẫn chưa chạm cap -> Đứng im farm tiếp
+                        LevelFarmer.lastEssence = curEssence
+                        LevelFarmer.stableEssenceCount = 0
+                    elseif curEssence == LevelFarmer.lastEssence and curEssence >= 10 then
+                        -- Essence không thay đổi sau trận -> Tăng bộ đếm phát hiện Cap
+                        LevelFarmer.stableEssenceCount = LevelFarmer.stableEssenceCount + 1
+                        local threshold = (Options and Options.EssenceThreshold and Options.EssenceThreshold.Value) or 40
+                        if LevelFarmer.stableEssenceCount >= 2 or curEssence >= threshold then
+                            print(string.format("[AutoFarmLevel] 🔮 Phát hiện Essence đã đầy Cap (%d Essence) -> Chuẩn bị đi thiền...", curEssence))
+                            humanoidMeditateAndLevelUp()
+                        end
+                    end
+                end
+
+                -- Giữ vị trí ngầm an toàn
                 local currentMode = (Options and Options.FarmLevelMode and Options.FarmLevelMode.Value) or "Level 1 - 20 (Underground)"
-                if tostring(currentMode):find("Level 1 - 20") then
+                if tostring(currentMode):find("Level 1 - 20") and not isInSoulCorridor() then
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
                     if root then
@@ -1996,7 +2155,20 @@ LevelGroup:AddDropdown("FarmLevelMode", {
     Tooltip = "Level 1-20: Tween xuống lòng đất an toàn, tránh người chơi khác nhìn thấy\nLevel 20-50: Tùy chọn nâng cao tiếp theo",
 })
 
--- Auto Meditate UI removed for anticheat safety
+LevelGroup:AddToggle("AutoMeditate", {
+    Text = "Auto Meditate & Level Up (Essence Cap)",
+    Default = true,
+    Tooltip = "Khi phát hiện Essence dừng tăng (chạm Cap) hoặc đạt mốc cài đặt, tự động bay thiền mô phỏng phím M gặp Aretim để lên cấp rồi trở về",
+})
+
+LevelGroup:AddSlider("EssenceThreshold", {
+    Text = "Essence Cap Threshold (Fallback)",
+    Default = 40,
+    Min = 10,
+    Max = 300,
+    Rounding = 0,
+    Tooltip = "Mốc Essence tối đa để kích hoạt đi thiền nếu bộ đếm delta chưa phát hiện",
+})
 
 LevelGroup:AddToggle("AutoAllocateStats", {
     Text = "Auto Allocate Stats",
