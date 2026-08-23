@@ -616,7 +616,43 @@ function Farmer.stop()
     print("[AutoFarm] Đã dừng Auto Farm.")
 end
 
--- [isInCombat already defined above LevelFarmer]
+-- =============================================================================
+-- COMBAT STATE DETECTOR
+-- =============================================================================
+local function isInCombat()
+    local char = LocalPlayer.Character
+    if not char then return false end
+
+    -- 1. Kiểm tra ReplicatedStorage.Fights (Nguồn chân lý chính xác 100% của server)
+    local RS = game:GetService("ReplicatedStorage")
+    local rsFights = RS:FindFirstChild("Fights")
+    if rsFights then
+        for _, fight in ipairs(rsFights:GetChildren()) do
+            local t1 = fight:FindFirstChild("Team1")
+            local t2 = fight:FindFirstChild("Team2")
+            if (t1 and (t1:FindFirstChild(LocalPlayer.Name) or t1:FindFirstChild(char.Name))) or
+               (t2 and (t2:FindFirstChild(LocalPlayer.Name) or t2:FindFirstChild(char.Name))) then
+                return true
+            end
+        end
+    end
+
+    -- 2. Kiểm tra các thành phần giao diện Combat trong PlayerGui
+    local pgui = PlayerGui
+    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    if combatGui and combatGui.Enabled then
+        local actionBG = combatGui:FindFirstChild("ActionBG")
+        local deciding = combatGui:FindFirstChild("Deciding")
+        local initiative = combatGui:FindFirstChild("InitiativeBG")
+        local dodge = combatGui:FindFirstChild("DodgeQTE")
+        if (actionBG and actionBG.Visible) or (deciding and deciding.Visible) or (initiative and initiative.Visible) or (dodge and dodge.Visible) then
+            return true
+        end
+    end
+
+    return false
+end
+
 
 -- =============================================================================
 -- AUTO FARM LEVEL & COMBAT HELPER (LEVEL 1-20 UNDERGROUND & LEVEL 20-50 ENGINE)
