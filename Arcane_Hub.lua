@@ -422,13 +422,13 @@ local Farmer = {
 local function calculateSafeStandPosition(targetPos)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
-    local curPos = root and root.Position or (targetPos + Vector3.new(0, 0, 5))
+    local curPos = root and root.Position or (targetPos + Vector3.new(0, 0, 4))
     
     local flatDir = Vector3.new(curPos.X - targetPos.X, 0, curPos.Z - targetPos.Z)
-    if flatDir.Magnitude < 0.1 then flatDir = Vector3.new(0, 0, 4.5) end
+    if flatDir.Magnitude < 0.1 then flatDir = Vector3.new(0, 0, 3.5) end
     
-    -- Đứng cách tâm mỏ quặng/item 4.5 studs ở ngoài khoảng trống an toàn
-    local standPos = targetPos + flatDir.Unit * 4.5 + Vector3.new(0, 1.5, 0)
+    -- Đứng cách tâm mỏ quặng 3.5 studs (khoảng cách vàng để 100% cú vung cuốc trúng hitbox quặng)
+    local standPos = targetPos + flatDir.Unit * 3.5 + Vector3.new(0, 0.8, 0)
     return standPos
 end
 
@@ -1661,7 +1661,30 @@ end
 -- =============================================================================
 local Miner = {
     running = false,
+    gainedOreThisNode = false,
+    lastGainedOreName = "",
 }
+
+-- Lắng nghe trực tiếp Remote InventorySync của Server để nhận diện quặng vào kho ngay lập tức (0ms)
+pcall(function()
+    local RS = game:GetService("ReplicatedStorage")
+    local invSync = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Data") and RS.Remotes.Data:FindFirstChild("InventorySync")
+    if invSync then
+        invSync.OnClientEvent:Connect(function(action, itemData)
+            if (action == "Add" or action == "Batch") and itemData then
+                local items = (action == "Batch" and itemData) or { itemData }
+                for _, itm in ipairs(items) do
+                    local itmName = (itm and (itm.Name or itm.Tool or ""))
+                    if itmName:lower():find("ore") then
+                        Miner.gainedOreThisNode = true
+                        Miner.lastGainedOreName = itmName
+                        print(string.format("[AutoMine] 💎 [Server Remote] Đã nhận thành công quặng: %s (Số lượng: %s) vào túi đồ!", itmName, tostring(itm.Count or 1)))
+                    end
+                end
+            end
+        end)
+    end
+end)
 
 local function hasPickaxe()
     local char = LocalPlayer.Character
@@ -1867,7 +1890,8 @@ local function mineOreNode(oreModel)
     local timeout = Options.MineTimeout and Options.MineTimeout.Value or 15
     local swingDelay = (Options.MineSwingDelay and Options.MineSwingDelay.Value) or 0.18
 
-    -- 1. Lưu lại tổng số quặng trong túi đồ trước khi đập
+    -- 1. Reset cờ nhận quặng của Server và lưu số lượng quặng ban đầu
+    Miner.gainedOreThisNode = false
     local initialOreCount = getInventoryOreCount()
 
     -- 2. Đảm bảo cuốc được trang bị từ Inventory
@@ -1881,14 +1905,20 @@ local function mineOreNode(oreModel)
     print(string.format("[AutoMine] ⛏️ Bắt đầu vung cuốc đập mỏ %s (Quặng trong kho: %d, Tốc độ: %.2fs/hit)...", oreModel.Name, initialOreCount, swingDelay))
 
     while (os.clock() - startTime < timeout) and Miner.running do
-        -- A. KIỂM TRA ĐIỀU KIỆN 1: TÚI ĐỒ ĐÃ NHẬN THÊM QUẶNG MỚI (CHẮC CHẮN 100% ĐÃ ĐÀO XONG)
-        local currentOreCount = getInventoryOreCount()
-        if currentOreCount > initialOreCount then
-            print(string.format("[AutoMine] 💎 Kho đồ nhận thêm %d quặng (Từ %d -> %d)! Đã đào xong mỏ %s!", currentOreCount - initialOreCount, initialOreCount, currentOreCount, oreModel.Name))
+        -- A. KIỂM TRA ĐIỀU KIỆN 1: SERVER ĐÃ BẮN EVENT INVENTORYSYNC BÁO QUẶNG VÀO TÚI ĐỒ (0ms)
+        if Miner.gainedOreThisNode then
+            print(string.format("[AutoMine] 💎 Server xác nhận nhận %s vào túi đồ! Đào mỏ %s thành công!", Miner.lastGainedOreName, oreModel.Name))
             break
         end
 
-        -- B. KIỂM TRA ĐIỀU KIỆN 2: MỎ QUẶNG TRONG WORKSPACE ĐÃ BỊ PHÁ HỦY HOÀN TOÀN
+        -- B. KIỂM TRA ĐIỀU KIỆN 2: TÚI ĐỒ TĂNG SỐ LƯỢNG KHOÁNG SẢN
+        local currentOreCount = getInventoryOreCount()
+        if currentOreCount > initialOreCount then
+            print(string.format("[AutoMine] 💎 Kho đồ nhận thêm %d quặng (Từ %d -> %d)! Đào xong mỏ %s!", currentOreCount - initialOreCount, initialOreCount, currentOreCount, oreModel.Name))
+            break
+        end
+
+        -- C. KIỂM TRA ĐIỀU KIỆN 3: MỎ QUẶNG ĐÃ BỊ PHÁ HỦY HOÀN TOÀN
         if not oreModel or not oreModel.Parent or not oreModel:IsDescendantOf(workspace) then
             print(string.format("[AutoMine] ✅ Mỏ %s đã bị phá hủy hoàn toàn!", oreModel and oreModel.Name or "Ore"))
             break
@@ -1900,24 +1930,24 @@ local function mineOreNode(oreModel)
             break
         end
 
-        -- C. Đảm bảo luôn cầm Cuốc trên tay
+        -- D. Đảm bảo luôn cầm Cuốc trên tay
         if not hasPickaxeEquipped() then
             equipPickaxe()
         end
 
-        -- D. Giữ vị trí đứng an toàn bên ngoài khối quặng (4.5 studs), triệt tiêu xung lực vật lý
+        -- E. Giữ vị trí đứng chuẩn xác 3.5 studs đối diện quặng, triệt tiêu gia tốc vật lý
         if root and currentOrePart then
             local orePos = currentOrePart.Position
             local flatDir = Vector3.new(root.Position.X - orePos.X, 0, root.Position.Z - orePos.Z)
-            if flatDir.Magnitude < 0.1 then flatDir = Vector3.new(0, 0, 4.5) end
-            local standPos = orePos + flatDir.Unit * 4.5 + Vector3.new(0, 1.2, 0)
+            if flatDir.Magnitude < 0.1 then flatDir = Vector3.new(0, 0, 3.5) end
+            local standPos = orePos + flatDir.Unit * 3.5 + Vector3.new(0, 0.8, 0)
 
             root.AssemblyLinearVelocity = Vector3.zero
             root.AssemblyAngularVelocity = Vector3.zero
             root.CFrame = CFrame.lookAt(standPos, Vector3.new(orePos.X, standPos.Y, orePos.Z))
         end
 
-        -- E. Kích hoạt Pickaxe Tool swing & Chuột vật lý
+        -- F. Kích hoạt Pickaxe Tool swing & Chuột vật lý
         local tool = char and (char:FindFirstChild("Pickaxe") or char:FindFirstChildWhichIsA("Tool"))
         if tool and tool:IsA("Tool") then
             pcall(function() tool:Activate() end)
