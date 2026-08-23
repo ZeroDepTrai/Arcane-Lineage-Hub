@@ -1126,24 +1126,36 @@ function LevelFarmer.runCycle()
                 end
             else
                 if LevelFarmer.wasInCombat then
-                    -- Chờ 1.2s sau trận để server hoàn tất cộng điểm EXP/Essence vào HUD
-                    task.wait(1.2)
                     LevelFarmer.wasInCombat = false
-                    local essenceAfterFight = getCurrentEssence()
-                    print(string.format("[AutoFarmLevel] 🏆 Kết thúc trận đánh! Trước: %d | Sau: %d", LevelFarmer.essenceBeforeCombat, essenceAfterFight))
+                    print("[AutoFarmLevel] 🏆 Trận đấu kết thúc! Đang chờ server nạp thưởng Essence...")
 
-                    if essenceAfterFight > LevelFarmer.essenceBeforeCombat then
-                        -- Essence có tăng -> Tiếp tục farm trận mới
+                    local initialEssence = LevelFarmer.essenceBeforeCombat
+                    local newEssence = getCurrentEssence()
+                    local startWait = os.clock()
+
+                    -- Chờ thông minh tối đa 4.5 giây: Nếu server nạp Essence sớm thì tiếp tục ngay lập tức
+                    while os.clock() - startWait < 4.5 do
+                        newEssence = getCurrentEssence()
+                        if newEssence > initialEssence then
+                            break
+                        end
+                        task.wait(0.3)
+                    end
+
+                    print(string.format("[AutoFarmLevel] 📊 Essence trước trận: %d | Essence sau trận: %d", initialEssence, newEssence))
+
+                    if newEssence > initialEssence then
+                        -- Đã nhận thêm Essence -> Chưa chạm Cap -> Tiếp tục farm
                         LevelFarmer.zeroGainFightCount = 0
-                        LevelFarmer.essenceBeforeCombat = essenceAfterFight
-                        print(string.format("[AutoFarmLevel] 📈 Essence đã tăng (+%d) -> Đang ở dưới sàn ngầm farm tiếp...", essenceAfterFight - LevelFarmer.essenceBeforeCombat))
-                    elseif essenceAfterFight == LevelFarmer.essenceBeforeCombat and essenceAfterFight >= 10 then
-                        -- Trận thắng không nhận thêm Essence -> Đã chạm Cap
+                        LevelFarmer.essenceBeforeCombat = newEssence
+                        print(string.format("[AutoFarmLevel] 📈 Đã nhận thưởng (+%d Essence, Tổng: %d) -> Tiếp tục farm trận mới...", newEssence - initialEssence, newEssence))
+                    elseif newEssence == initialEssence and newEssence >= 10 then
+                        -- Sau 4.5s vẫn không có thêm Essence -> Đã chạm Cap
                         LevelFarmer.zeroGainFightCount = LevelFarmer.zeroGainFightCount + 1
-                        print(string.format("[AutoFarmLevel] ⚠️ Trận này không nhận thêm Essence (Lần %d/2)", LevelFarmer.zeroGainFightCount))
+                        print(string.format("[AutoFarmLevel] ⚠️ Trận này không nhận thêm Essence (Lần %d/2 không có EXP)", LevelFarmer.zeroGainFightCount))
 
                         if LevelFarmer.zeroGainFightCount >= 2 and (Toggles.AutoMeditate and Toggles.AutoMeditate.Value) then
-                            print(string.format("[AutoFarmLevel] 🔮 Phát hiện Essence đã chạm Cap tối đa (%d Essence) -> Bắt đầu quy trình đi thiền...", essenceAfterFight))
+                            print(string.format("[AutoFarmLevel] 🔮 Xác nhận 2 trận liên tiếp chạm Cap tối đa (%d Essence) -> Bắt đầu quy trình đi thiền...", newEssence))
                             humanoidMeditateAndLevelUp()
                         end
                     end
