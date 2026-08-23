@@ -31,9 +31,19 @@ local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 15)
 
 if shared.ArcaneHub then
-    pcall(function() shared.ArcaneHub.Unload() end)
+    pcall(function() shared.ArcaneHub:Unload() end)
     shared.ArcaneHub = nil
 end
+
+-- Force destroy any lingering old Linoria GUIs
+pcall(function()
+    local parentObj = (gethui and gethui()) or game:GetService("CoreGui") or PlayerGui
+    for _, gui in ipairs(parentObj:GetChildren()) do
+        if gui.Name == "LinoriaLib" or gui.Name == "Arcane Hub" then
+            gui:Destroy()
+        end
+    end
+end)
 
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -565,7 +575,7 @@ local function teleportToUndergroundSpot(targetSpot)
     local distance = (root.Position - targetCF.Position).Magnitude
 
     if distance > 2 then
-        print(string.format("[AutoFarmLevel] 🚀 Đang bay mượt mà xuống bãi ngầm tại (%.1f, %.1f, %.1f)...", targetCF.X, targetCF.Y, targetCF.Z))
+        print(string.format("[AutoFarmLevel] 🚀 Đang bay mượt mà xuống bãi ngầm tại (%.1f, %.1f, %.1f) - Khoảng cách: %.1f studs...", targetCF.X, targetCF.Y, targetCF.Z, distance))
 
         hum.PlatformStand = true
         local noclipConn = RunService.Stepped:Connect(function()
