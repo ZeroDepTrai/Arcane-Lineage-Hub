@@ -1157,34 +1157,18 @@ function LevelFarmer.runCycle()
             else
                 if LevelFarmer.wasInCombat then
                     LevelFarmer.wasInCombat = false
-                    print("[AutoFarmLevel] 🏆 Trận đấu kết thúc! Đang chờ server nạp thưởng Essence...")
+                    print("[AutoFarmLevel] 🏆 Trận đấu kết thúc!")
 
-                    local initialEssence = LevelFarmer.essenceBeforeCombat
-                    local newEssence = getCurrentEssence()
-                    local startWait = os.clock()
+                    local currentEss = getCurrentEssence()
+                    print(string.format("[AutoFarmLevel] 📊 Essence hiện tại: %d", currentEss))
 
-                    -- Chờ thông minh tối đa 4.5 giây: Nếu server nạp Essence sớm thì tiếp tục ngay lập tức
-                    while os.clock() - startWait < 4.5 do
-                        newEssence = getCurrentEssence()
-                        if newEssence > initialEssence then
-                            break
-                        end
-                        task.wait(0.3)
-                    end
-
-                    print(string.format("[AutoFarmLevel] 📊 Essence trước trận: %d | Essence sau trận: %d", initialEssence, newEssence))
-
-                    if newEssence > initialEssence then
-                        -- Đã nhận thêm Essence -> Chưa chạm Cap -> Tiếp tục farm
-                        LevelFarmer.zeroGainFightCount = 0
-                        LevelFarmer.essenceBeforeCombat = newEssence
-                        print(string.format("[AutoFarmLevel] 📈 Đã nhận thưởng (+%d Essence, Tổng: %d) -> Tiếp tục farm trận mới...", newEssence - initialEssence, newEssence))
-                    elseif newEssence == initialEssence and newEssence >= 10 then
-                        -- Sau 4.5s polling xác nhận không nhận thêm Essence -> Đã chính thức chạm Cap tối đa!
-                        if Toggles.AutoMeditate and Toggles.AutoMeditate.Value then
-                            print(string.format("[AutoFarmLevel] 🔮 Xác nhận Essence đã chạm Cap tối đa (%d Essence) -> Bắt đầu chu trình đi thiền ngay...", newEssence))
-                            humanoidMeditateAndLevelUp()
-                        end
+                    -- TẠM THỜI DISABLE CHECK ESSENCE (Theo yêu cầu test tăng stats):
+                    -- Ngay khi xong trận, nếu bật Auto Meditate thì sẽ tự động bay đi thiền & tăng stats ngay
+                    if Toggles.AutoMeditate and Toggles.AutoMeditate.Value then
+                        print("[AutoFarmLevel] 🧘 (Bỏ qua check Essence) -> Bắt đầu chu trình đi thiền & tăng stats ngay...")
+                        humanoidMeditateAndLevelUp()
+                    else
+                        task.wait(0.5)
                     end
                 end
 
