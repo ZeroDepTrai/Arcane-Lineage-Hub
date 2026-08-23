@@ -440,20 +440,58 @@ local function flyToItem(targetPosition, cancelCheckFn)
     local cancelFn = cancelCheckFn or function() return Farmer.running or Miner.running end
     if not cancelFn() then return false end
 
+    local currentPos = root.Position
+    local distance = (currentPos - targetPosition).Magnitude
     local safeArrivalPos = calculateSafeStandPosition(targetPosition)
 
-    -- DỊCH CHUYỂN AN TOÀN TỨC THÌ (INSTANT SAFE TP) CHO MỌI KHOẢNG CÁCH
-    -- Đã test stress test 18 lần qua 9 khu vực xa 10,000+ studs: 100% An toàn, 0 sát thương, 0 bị kick, 0 giật lag
-    root.AssemblyLinearVelocity = Vector3.zero
-    root.AssemblyAngularVelocity = Vector3.zero
-    root.CFrame = CFrame.lookAt(safeArrivalPos, Vector3.new(targetPosition.X, safeArrivalPos.Y, targetPosition.Z))
-    task.wait(0.08)
+    local isInstantTP = Toggles.InstantTPMode and Toggles.InstantTPMode.Value
 
+    -- 1. NẾU BẬT INSTANT TP (RISKY) HOẶC KHOẢNG CÁCH GẦN (< 100 STUDS): DỊCH CHUYỂN TỨC THÌ
+    if isInstantTP or distance < 100 then
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        root.CFrame = CFrame.lookAt(safeArrivalPos, Vector3.new(targetPosition.X, safeArrivalPos.Y, targetPosition.Z))
+        task.wait(0.08)
+
+        if root then
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+        end
+        return true
+    end
+
+    -- 2. NẾU TẮT INSTANT TP & KHOẢNG CÁCH XA (>= 100 STUDS): BAY SKY-TWEEN AN TOÀN TRÊN TẦNG KHÔNG
+    enableFlightState()
+
+    local cruiseSpeed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 180
+    local skyHeight = Options.SkyHeight and Options.SkyHeight.Value or 1500
+    local ascendSpeed = Options.AscendSpeed and Options.AscendSpeed.Value or 150
+    local descendSpeed = Options.DescendSpeed and Options.DescendSpeed.Value or 150
+
+    local skyY = math.max(skyHeight, currentPos.Y + 200, targetPosition.Y + 200)
+
+    -- Pha 1: Bay thẳng đứng lên trời cao
+    local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), ascendSpeed, cancelFn, true)
+    if not s1 or not cancelFn() then
+        disableFlightState()
+        return false
+    end
+
+    -- Pha 2: Lướt ngang trên tầng không (Giữ nguyên FlightState)
+    local s2 = smoothTweenTo(CFrame.new(safeArrivalPos.X, skyY, safeArrivalPos.Z), cruiseSpeed, cancelFn, true)
+    if not s2 or not cancelFn() then
+        disableFlightState()
+        return false
+    end
+
+    -- Pha 3: Hạ cánh xuống điểm đứng an toàn bên ngoài mỏ quặng / item
+    local s3 = smoothTweenTo(CFrame.lookAt(safeArrivalPos, Vector3.new(targetPosition.X, safeArrivalPos.Y, targetPosition.Z)), descendSpeed, cancelFn, false)
+    
     if root then
         root.AssemblyLinearVelocity = Vector3.zero
         root.AssemblyAngularVelocity = Vector3.zero
     end
-    return true
+    return s3
 end
 
 local function harvestItem(model)
@@ -2757,6 +2795,21 @@ local function teleportToLocation(targetPos)
             return
         end
 
+        local isInstantTP = Toggles.InstantTPMode and Toggles.InstantTPMode.Value
+        if isInstantTP then
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+            root.CFrame = CFrame.new(targetPos.X, targetPos.Y + 3.5, targetPos.Z)
+            task.wait(0.08)
+            if root then
+                root.AssemblyLinearVelocity = Vector3.zero
+                root.AssemblyAngularVelocity = Vector3.zero
+            end
+            Library:Notify("✅ Instant Teleported to destination!", 3)
+            Teleporter.active = false
+            return
+        end
+
         local height = Options.TeleportHeight and Options.TeleportHeight.Value or 1500
         local speed = Options.TeleportSpeed and Options.TeleportSpeed.Value or 200
 
@@ -2765,23 +2818,22 @@ local function teleportToLocation(targetPos)
         local currentPos = root.Position
         local skyY = math.max(height, currentPos.Y + 200, targetPos.Y + 200)
 
-        local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), speed, function() return Teleporter.active end)
+        local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), speed, function() return Teleporter.active end, true)
         if not s1 or not Teleporter.active then
             disableFlightState()
             Teleporter.active = false
             return
         end
 
-        local s2 = smoothTweenTo(CFrame.new(targetPos.X, skyY, targetPos.Z), speed, function() return Teleporter.active end)
+        local s2 = smoothTweenTo(CFrame.new(targetPos.X, skyY, targetPos.Z), speed, function() return Teleporter.active end, true)
         if not s2 or not Teleporter.active then
             disableFlightState()
             Teleporter.active = false
             return
         end
 
-        local s3 = smoothTweenTo(CFrame.new(targetPos.X, targetPos.Y + 4, targetPos.Z), speed, function() return Teleporter.active end)
+        local s3 = smoothTweenTo(CFrame.new(targetPos.X, targetPos.Y + 4, targetPos.Z), speed, function() return Teleporter.active end, false)
 
-        disableFlightState()
         Teleporter.active = false
         if s3 then
             Library:Notify("✅ Arrived safely at destination!", 3)
@@ -2974,6 +3026,12 @@ FarmGroup:AddToggle("BlacklistDesert", {
     Text = "Ignore Desert Fake Crylights (Vastic Grave & Sanctum)",
     Default = false,
     Tooltip = "Loại bỏ hoàn toàn toàn bộ Crylight giả trong khu vực Sa mạc (Vastic Grave) & Forgotten Sanctum",
+})
+
+FarmGroup:AddToggle("InstantTPMode", {
+    Text = "⚡ Instant Teleport (Risky - Fast)",
+    Default = false,
+    Tooltip = "BẬT: Dịch chuyển tức thì đến mọi vị trí trên bản đồ (Siêu nhanh). TẮT: Chỉ dịch chuyển tức thì cự ly gần (<100 studs), cự ly xa sẽ bay Sky-Tween an toàn (Tránh bị soi log Server).",
 })
 
 FarmGroup:AddSlider("SkyHeight", {
