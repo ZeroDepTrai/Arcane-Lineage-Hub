@@ -3331,9 +3331,9 @@ OptGroup:AddButton("🌫️ Remove All Fog Permanently", function()
 end)
 
 OptGroup:AddToggle("BypassNoPainHP", {
-    Text = "Reveal 'I Feel No Pain' Real HP",
+    Text = "Reveal 'I Feel No Pain' Real HP & Mana",
     Default = true,
-    Tooltip = "Hiển thị chỉ số máu và thanh HP thực tế khi đang chịu hiệu ứng ẩn máu từ Trial 'I Feel No Pain!'",
+    Tooltip = "Hiển thị chỉ số máu, thanh HP và thanh Mana/Energy thực tế khi đang chịu hiệu ứng ẩn từ Trial 'I Feel No Pain!'",
 })
 
 -- -----------------------------------------------------------------------------
@@ -3379,20 +3379,23 @@ local AntiAFK = {
 local function initAntiAFK()
 
 -- =============================================================================
--- QOL: HIỂN THỊ MÁU THẬT KHI CHỊU TRIAL 'I FEEL NO PAIN!'
+-- QOL: HIỂN THỊ MÁU & MANA/ENERGY THẬT KHI CHỊU TRIAL 'I FEEL NO PAIN!'
 -- =============================================================================
 task.spawn(function()
+    local blueEnergyColor = Color3.fromRGB(106, 192, 242)
     while true do
         task.wait(0.2)
         if Toggles.BypassNoPainHP and Toggles.BypassNoPainHP.Value then
             pcall(function()
                 local char = LocalPlayer.Character
                 local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    local pgui = PlayerGui
-                    local hud = pgui and pgui:FindFirstChild("HUD")
-                    local holder = hud and (hud:FindFirstChild("Holder") or hud:FindFirstChild("HolderOLD"))
-                    local hpOutline = holder and holder:FindFirstChild("HPOutline", true)
+                local pgui = PlayerGui
+                local hud = pgui and pgui:FindFirstChild("HUD")
+                local holder = hud and (hud:FindFirstChild("Holder") or hud:FindFirstChild("HolderOLD"))
+
+                -- 1. GIẢI MÃ VÀ HIỆN MÁU THẬT (REAL HP)
+                if hum and holder then
+                    local hpOutline = holder:FindFirstChild("HPOutline", true)
                     if hpOutline then
                         local countLabel = hpOutline:FindFirstChild("Count", true)
                         if countLabel and countLabel:IsA("TextLabel") then
@@ -3405,6 +3408,41 @@ task.spawn(function()
                             if healthBar.ImageColor3 == Color3.fromRGB(150, 0, 255) or healthBar.Size.X.Scale < 0.05 then
                                 local ratio = math.clamp(hum.Health / math.max(1, hum.MaxHealth), 0, 1)
                                 healthBar.Size = UDim2.new(ratio, 0, 0.7, 0)
+                            end
+                        end
+                    end
+                end
+
+                -- 2. GIẢI MÃ VÀ HIỆN MANA/ENERGY THẬT (REAL ENERGY / MANA)
+                if char and holder then
+                    local status = char:FindFirstChild("Status")
+                    local energyVal = status and status:FindFirstChild("Energy")
+                    if energyVal then
+                        local curEnergy = energyVal.Value
+                        local maxEnergy = energyVal.MaxValue or 6
+
+                        -- Cập nhật chữ CurrentEnergy.Amount (VD: 1/6 thay vì ???)
+                        local currentEnergyFrame = holder:FindFirstChild("CurrentEnergy")
+                        local energyAmountLabel = currentEnergyFrame and currentEnergyFrame:FindFirstChild("Amount")
+                        if energyAmountLabel and energyAmountLabel:IsA("TextLabel") then
+                            if energyAmountLabel.Text == "???" or energyAmountLabel.Text:find("%?") then
+                                energyAmountLabel.Text = string.format("%d/%d", curEnergy, maxEnergy)
+                            end
+                        end
+
+                        -- Cập nhật các ô vạch Energy xanh sáng
+                        local energyBarsContainer = holder:FindFirstChild("Energy")
+                        if energyBarsContainer then
+                            for i = 1, maxEnergy do
+                                local bar = energyBarsContainer:FindFirstChild(tostring(i))
+                                if bar and bar:IsA("GuiObject") then
+                                    bar.BackgroundColor3 = blueEnergyColor
+                                    if i <= curEnergy then
+                                        bar.Visible = true
+                                    else
+                                        bar.Visible = false
+                                    end
+                                end
                             end
                         end
                     end
@@ -3473,20 +3511,23 @@ shared.ArcaneHub = Library
 initAntiAFK()
 
 -- =============================================================================
--- QOL: HIỂN THỊ MÁU THẬT KHI CHỊU TRIAL 'I FEEL NO PAIN!'
+-- QOL: HIỂN THỊ MÁU & MANA/ENERGY THẬT KHI CHỊU TRIAL 'I FEEL NO PAIN!'
 -- =============================================================================
 task.spawn(function()
+    local blueEnergyColor = Color3.fromRGB(106, 192, 242)
     while true do
         task.wait(0.2)
         if Toggles.BypassNoPainHP and Toggles.BypassNoPainHP.Value then
             pcall(function()
                 local char = LocalPlayer.Character
                 local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    local pgui = PlayerGui
-                    local hud = pgui and pgui:FindFirstChild("HUD")
-                    local holder = hud and (hud:FindFirstChild("Holder") or hud:FindFirstChild("HolderOLD"))
-                    local hpOutline = holder and holder:FindFirstChild("HPOutline", true)
+                local pgui = PlayerGui
+                local hud = pgui and pgui:FindFirstChild("HUD")
+                local holder = hud and (hud:FindFirstChild("Holder") or hud:FindFirstChild("HolderOLD"))
+
+                -- 1. GIẢI MÃ VÀ HIỆN MÁU THẬT (REAL HP)
+                if hum and holder then
+                    local hpOutline = holder:FindFirstChild("HPOutline", true)
                     if hpOutline then
                         local countLabel = hpOutline:FindFirstChild("Count", true)
                         if countLabel and countLabel:IsA("TextLabel") then
@@ -3499,6 +3540,41 @@ task.spawn(function()
                             if healthBar.ImageColor3 == Color3.fromRGB(150, 0, 255) or healthBar.Size.X.Scale < 0.05 then
                                 local ratio = math.clamp(hum.Health / math.max(1, hum.MaxHealth), 0, 1)
                                 healthBar.Size = UDim2.new(ratio, 0, 0.7, 0)
+                            end
+                        end
+                    end
+                end
+
+                -- 2. GIẢI MÃ VÀ HIỆN MANA/ENERGY THẬT (REAL ENERGY / MANA)
+                if char and holder then
+                    local status = char:FindFirstChild("Status")
+                    local energyVal = status and status:FindFirstChild("Energy")
+                    if energyVal then
+                        local curEnergy = energyVal.Value
+                        local maxEnergy = energyVal.MaxValue or 6
+
+                        -- Cập nhật chữ CurrentEnergy.Amount (VD: 1/6 thay vì ???)
+                        local currentEnergyFrame = holder:FindFirstChild("CurrentEnergy")
+                        local energyAmountLabel = currentEnergyFrame and currentEnergyFrame:FindFirstChild("Amount")
+                        if energyAmountLabel and energyAmountLabel:IsA("TextLabel") then
+                            if energyAmountLabel.Text == "???" or energyAmountLabel.Text:find("%?") then
+                                energyAmountLabel.Text = string.format("%d/%d", curEnergy, maxEnergy)
+                            end
+                        end
+
+                        -- Cập nhật các ô vạch Energy xanh sáng
+                        local energyBarsContainer = holder:FindFirstChild("Energy")
+                        if energyBarsContainer then
+                            for i = 1, maxEnergy do
+                                local bar = energyBarsContainer:FindFirstChild(tostring(i))
+                                if bar and bar:IsA("GuiObject") then
+                                    bar.BackgroundColor3 = blueEnergyColor
+                                    if i <= curEnergy then
+                                        bar.Visible = true
+                                    else
+                                        bar.Visible = false
+                                    end
+                                end
                             end
                         end
                     end
