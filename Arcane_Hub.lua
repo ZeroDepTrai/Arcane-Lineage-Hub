@@ -539,7 +539,7 @@ local LevelFarmer = {
     running = false,
     noclipConn = nil,
     undergroundPlatform = nil,
-    farmSpotLv1_30 = Vector3.new(5035.2, 595.0, -3969.5),   -- Caldera Underground (Lv 1 - 30)
+    farmSpotLv1_30 = Vector3.new(5131.5, 662.4, -3947.6),   -- The Crossing Safe Block (Lv 1 - 30)
     farmSpotLv30_50 = Vector3.new(3067.7, 623.9, -3832.3),  -- Desert Safe Block (Lv 30 - 50)
     essenceBeforeCombat = -1,
     zeroGainFightCount = 0,
@@ -1718,6 +1718,7 @@ end
 local AutoQTE = {
     lastDodgeHit = 0,
     lastSwordHit = 0,
+    currentSwordIndex = 1,
     lastDaggerHit = 0,
     isHammerHolding = false,
     lastAxePress = 0,
@@ -1758,15 +1759,13 @@ local function handleDodgeQTE(dodgeQTE)
     end
 end
 
--- 2. SWORD QTE (SINGLE-CLICK, 0.25S DEBOUNCED SWEET SPOT ENGINE)
+-- 2. SWORD QTE (PERFECT MULTI-SLASH SEQUENTIAL SWEET SPOT ENGINE)
 local function handleSwordQTE(swordQTE)
     if not isQTEActive("Sword") or not swordQTE or not swordQTE.Visible then
         AutoQTE.swordHitTable = {}
+        AutoQTE.currentSwordIndex = 1
         return
     end
-
-    local now = os.clock()
-    if now - AutoQTE.lastSwordHit < 0.25 then return end
 
     local inset = swordQTE:FindFirstChild("Inset")
     local stopBtn = swordQTE:FindFirstChild("Stop")
@@ -1775,36 +1774,55 @@ local function handleSwordQTE(swordQTE)
     local window = inset:FindFirstChild("Window")
     if not window or not window.Visible then return end
 
-    local winLeft = window.AbsolutePosition.X
-    local winWidth = window.AbsoluteSize.X
-
-    local candidate = nil
-    local lowestIdx = math.huge
-
-    for _, child in ipairs(inset:GetChildren()) do
-        local idx = tonumber(child.Name)
-        if idx and not AutoQTE.swordHitTable[child] and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.4 then
-            if idx < lowestIdx then
-                lowestIdx = idx
-                candidate = child
+    -- Tìm Indicator đang hoạt động theo chỉ số tuần tự của game (1, 2, 3, 4...)
+    local targetInd = inset:FindFirstChild(tostring(AutoQTE.currentSwordIndex))
+    if not targetInd or not targetInd.Visible or AutoQTE.swordHitTable[targetInd] then
+        -- Fallback: Tìm indicator có chỉ số nhỏ nhất chưa bấm và đang hiển thị
+        local lowestIdx = math.huge
+        targetInd = nil
+        for _, child in ipairs(inset:GetChildren()) do
+            local idx = tonumber(child.Name)
+            if idx and not AutoQTE.swordHitTable[child] and child:IsA("GuiObject") and child.Visible and child.BackgroundTransparency < 0.5 then
+                if idx < lowestIdx then
+                    lowestIdx = idx
+                    targetInd = child
+                    AutoQTE.currentSwordIndex = idx
+                end
             end
         end
     end
 
-    if not candidate then return end
+    if not targetInd then return end
 
-    local indLeft = candidate.AbsolutePosition.X
-    local indWidth = candidate.AbsoluteSize.X
+    local indLeft = targetInd.AbsolutePosition.X
+    local indWidth = targetInd.AbsoluteSize.X
+    local indRight = indLeft + indWidth
     local indCenter = indLeft + (indWidth / 2)
 
-    local sweetSpotMin = winLeft + (winWidth * 0.40)
-    local sweetSpotMax = winLeft + (winWidth * 0.70)
+    local winLeft = window.AbsolutePosition.X
+    local winWidth = window.AbsoluteSize.X
+    local winRight = winLeft + winWidth
 
-    if indCenter >= sweetSpotMin and indCenter <= sweetSpotMax then
-        AutoQTE.lastSwordHit = now
-        AutoQTE.swordHitTable[candidate] = true
+    -- Tính toán vùng tâm trúng chuẩn (Sweet Spot) an toàn bên trong Window
+    local sweetSpotMin = winLeft + (winWidth * 0.25)
+    local sweetSpotMax = winRight - (winWidth * 0.15)
+
+    local isColliding = false
+    if GuiCollisionService and GuiCollisionService.isColliding then
+        pcall(function()
+            isColliding = GuiCollisionService.isColliding(targetInd, window)
+        end)
+    end
+
+    -- Chỉ bấm khi Indicator đã thực sự tiến vào vùng tâm của Window (Tránh bấm sớm ở các super class như Berserker)
+    if (indCenter >= sweetSpotMin and indCenter <= sweetSpotMax) or (isColliding and indLeft >= winLeft and indRight <= winRight + 5) then
+        AutoQTE.lastSwordHit = os.clock()
+        AutoQTE.swordHitTable[targetInd] = true
+        AutoQTE.currentSwordIndex = AutoQTE.currentSwordIndex + 1
+
         local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
         if delayMs > 0 then task.wait(delayMs / 1000) end
+
         singleClick(stopBtn)
     end
 end
@@ -2098,6 +2116,7 @@ RunService.RenderStepped:Connect(function()
         handleSwordQTE(swordQTE)
     else
         AutoQTE.swordHitTable = {}
+        AutoQTE.currentSwordIndex = 1
     end
 
     if daggerQTE and daggerQTE.Visible then
