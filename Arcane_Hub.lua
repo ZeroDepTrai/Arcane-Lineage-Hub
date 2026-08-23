@@ -616,6 +616,8 @@ function Farmer.stop()
     print("[AutoFarm] Đã dừng Auto Farm.")
 end
 
+-- [isInCombat already defined above LevelFarmer]
+
 -- =============================================================================
 -- AUTO FARM LEVEL & COMBAT HELPER (LEVEL 1-20 UNDERGROUND & LEVEL 20-50 ENGINE)
 -- =============================================================================
@@ -1378,39 +1380,7 @@ end
 
 
 
-local function isInCombat()
-    local char = LocalPlayer.Character
-    if not char then return false end
-
-    -- 1. Kiểm tra ReplicatedStorage.Fights (Nguồn chân lý chính xác 100% của server)
-    local RS = game:GetService("ReplicatedStorage")
-    local rsFights = RS:FindFirstChild("Fights")
-    if rsFights then
-        for _, fight in ipairs(rsFights:GetChildren()) do
-            local t1 = fight:FindFirstChild("Team1")
-            local t2 = fight:FindFirstChild("Team2")
-            if (t1 and (t1:FindFirstChild(LocalPlayer.Name) or t1:FindFirstChild(char.Name))) or
-               (t2 and (t2:FindFirstChild(LocalPlayer.Name) or t2:FindFirstChild(char.Name))) then
-                return true
-            end
-        end
-    end
-
-    -- 2. Kiểm tra các thành phần giao diện Combat trong PlayerGui
-    local pgui = PlayerGui
-    local combatGui = pgui and pgui:FindFirstChild("Combat")
-    if combatGui and combatGui.Enabled then
-        local actionBG = combatGui:FindFirstChild("ActionBG")
-        local deciding = combatGui:FindFirstChild("Deciding")
-        local initiative = combatGui:FindFirstChild("InitiativeBG")
-        local dodge = combatGui:FindFirstChild("DodgeQTE")
-        if (actionBG and actionBG.Visible) or (deciding and deciding.Visible) or (initiative and initiative.Visible) or (dodge and dodge.Visible) then
-            return true
-        end
-    end
-
-    return false
-end
+-- [isInCombat already defined above LevelFarmer]
 
 local function isPlayerTurn()
     local pgui = PlayerGui
@@ -2990,7 +2960,8 @@ local Tabs = {
 local FarmGroup  = Tabs.AutoFarm:AddLeftGroupbox("🌿 Ingredient Auto Hunter")
 local MineGroup  = Tabs.AutoFarm:AddLeftGroupbox("⛏️ Auto Mine Ores")
 local LevelGroup = Tabs.AutoFarm:AddRightGroupbox("⚔️ Auto Farm Level & Mobs")
-local HopGroup   = Tabs.AutoFarm:AddRightGroupbox("🌐 Server Hop & Webhook")
+local StatsGroup = Tabs.AutoFarm:AddRightGroupbox("📊 Auto Stats Build & Cache")
+local HopGroup   = Tabs.AutoFarm:AddLeftGroupbox("🌐 Server Hop & Webhook")
 
 FarmGroup:AddToggle("AutoFarmCrylight", {
     Text = "Enable Ingredient Auto Farm",
@@ -3145,13 +3116,13 @@ LevelGroup:AddToggle("AutoMeditate", {
     Tooltip = "Tự động phát hiện khi Essence dừng tăng (đạt Cap level) -> Tự động đi thiền mô phỏng phím M gặp Aretim để thăng cấp rồi trở về",
 })
 
-LevelGroup:AddToggle("AutoAllocateStats", {
-    Text = "Auto Allocate Stats",
+StatsGroup:AddToggle("AutoAllocateStats", {
+    Text = "Enable Auto Stats Build",
     Default = true,
-    Tooltip = "Tự động phân bổ StatPoints theo các mốc Target Stats bên dưới",
+    Tooltip = "Tự động nâng điểm StatPoints theo mốc Target Stats và lưu cache theo tên nhân vật (+10 mỗi đợt)",
 })
 
-LevelGroup:AddSlider("TargetStrength", {
+StatsGroup:AddSlider("TargetStrength", {
     Text = "Target Strength",
     Default = 20,
     Min = 0,
@@ -3159,7 +3130,7 @@ LevelGroup:AddSlider("TargetStrength", {
     Rounding = 0,
 })
 
-LevelGroup:AddSlider("TargetEndurance", {
+StatsGroup:AddSlider("TargetEndurance", {
     Text = "Target Endurance",
     Default = 20,
     Min = 0,
@@ -3167,7 +3138,7 @@ LevelGroup:AddSlider("TargetEndurance", {
     Rounding = 0,
 })
 
-LevelGroup:AddSlider("TargetSpeed", {
+StatsGroup:AddSlider("TargetSpeed", {
     Text = "Target Speed",
     Default = 10,
     Min = 0,
@@ -3175,7 +3146,7 @@ LevelGroup:AddSlider("TargetSpeed", {
     Rounding = 0,
 })
 
-LevelGroup:AddSlider("TargetArcane", {
+StatsGroup:AddSlider("TargetArcane", {
     Text = "Target Arcane",
     Default = 0,
     Min = 0,
@@ -3183,7 +3154,7 @@ LevelGroup:AddSlider("TargetArcane", {
     Rounding = 0,
 })
 
-LevelGroup:AddSlider("TargetLuck", {
+StatsGroup:AddSlider("TargetLuck", {
     Text = "Target Luck",
     Default = 10,
     Min = 0,
@@ -3191,10 +3162,21 @@ LevelGroup:AddSlider("TargetLuck", {
     Rounding = 0,
 })
 
-LevelGroup:AddButton({
-    Text = "🗑️ Clear Stats Cache (Reset Active Char)",
+StatsGroup:AddButton({
+    Text = "🗑️ Clear Stats Build Data (Reset Active Char)",
     Func = function()
         clearCharacterStatsCache()
+    end
+})
+
+StatsGroup:AddButton({
+    Text = "📋 View Active Character Stats Cache",
+    Func = function()
+        local charName = getCharacterName()
+        local c = getCharacterStatsCache(charName)
+        local msg = string.format("Cache [%s]: Str:%d | End:%d | Spd:%d | Arc:%d | Lck:%d", charName, c.Strength, c.Endurance, c.Speed, c.Arcane, c.Luck)
+        Library:Notify(msg, 5)
+        print("[AutoStats] " .. msg)
     end
 })
 
