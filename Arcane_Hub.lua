@@ -2159,10 +2159,15 @@ end)
 local KeyLocations = {
     -- 🏛️ Towns & Major Hubs
     ["🏛️ Westwood Heart"] = Vector3.new(8327.3, 825.1, -5557.4),
+    ["🏛️ Westwood"] = Vector3.new(8327.3, 825.1, -5557.4),
     ["🌋 Caldera Town"] = Vector3.new(5091.2, 662.6, -4293.1),
+    ["🌋 Caldera"] = Vector3.new(5091.2, 662.6, -4293.1),
     ["🏜️ Desert (Waving Sands)"] = Vector3.new(2815.3, 634.6, -3924.6),
+    ["🏜️ Desert"] = Vector3.new(2815.3, 634.6, -3924.6),
     ["⚔️ Sanctuary of Blades"] = Vector3.new(2086.0, 386.8, -2978.3),
+    ["⚔️ Sanctuary"] = Vector3.new(2086.0, 386.8, -2978.3),
     ["⛪ Church (Heavens Point)"] = Vector3.new(831.6, 3436.9, -5602.3),
+    ["⛪ Church"] = Vector3.new(831.6, 3436.9, -5602.3),
     ["🏛️ Forgotten Sanctum (Endgame)"] = Vector3.new(10831.2, 1581.7, -3463.6),
     ["🌑 Dark Place Gate"] = Vector3.new(7855.1, 1290.3, 7930.9),
     ["🌌 Void Rift"] = Vector3.new(991.0, 41.4, 615.6),
@@ -2239,6 +2244,11 @@ local Teleporter = {
 }
 
 local function teleportToLocation(targetPos)
+    if not targetPos or typeof(targetPos) ~= "Vector3" then
+        Library:Notify("❌ Invalid destination coordinates!", 3)
+        return
+    end
+
     if Teleporter.active then
         Library:Notify("Teleport is already running! Click Cancel first.", 3)
         return
@@ -2250,6 +2260,7 @@ local function teleportToLocation(targetPos)
         local root = char and char:FindFirstChild("HumanoidRootPart")
         if not root then
             Teleporter.active = false
+            Library:Notify("❌ HumanoidRootPart not found!", 3)
             return
         end
 
@@ -2903,11 +2914,11 @@ TeleportGroup:AddButton({
     Func = cancelTeleport
 })
 
-QuickWarpGroup:AddButton("🏛️ Westwood Heart", function() teleportToLocation(KeyLocations["🏛️ Westwood Heart"]) end)
-QuickWarpGroup:AddButton("🌋 Caldera Town", function() teleportToLocation(KeyLocations["🌋 Caldera Town"]) end)
-QuickWarpGroup:AddButton("🏜️ Desert", function() teleportToLocation(KeyLocations["🏜️ Desert"]) end)
-QuickWarpGroup:AddButton("⛪ Church", function() teleportToLocation(KeyLocations["⛪ Church (Heavens Point)"]) end)
-QuickWarpGroup:AddButton("⚔️ Sanctuary of Blades", function() teleportToLocation(KeyLocations["⚔️ Sanctuary of Blades"]) end)
+QuickWarpGroup:AddButton("🏛️ Westwood Heart", function() teleportToLocation(KeyLocations["🏛️ Westwood Heart"] or KeyLocations["🏛️ Westwood"]) end)
+QuickWarpGroup:AddButton("🌋 Caldera Town", function() teleportToLocation(KeyLocations["🌋 Caldera Town"] or KeyLocations["🌋 Caldera"]) end)
+QuickWarpGroup:AddButton("🏜️ Desert", function() teleportToLocation(KeyLocations["🏜️ Desert (Waving Sands)"] or KeyLocations["🏜️ Desert"]) end)
+QuickWarpGroup:AddButton("⛪ Church", function() teleportToLocation(KeyLocations["⛪ Church (Heavens Point)"] or KeyLocations["⛪ Church"]) end)
+QuickWarpGroup:AddButton("⚔️ Sanctuary of Blades", function() teleportToLocation(KeyLocations["⚔️ Sanctuary of Blades"] or KeyLocations["⚔️ Sanctuary"]) end)
 
 -- -----------------------------------------------------------------------------
 -- TAB 5: VISUALS & FPS BOOSTER
@@ -3130,6 +3141,66 @@ MenuGroup:AddLabel("Menu bind"):AddKeyPicker("MenuKeybind", {
 Library.ToggleKeybind = Options.MenuKeybind
 
 SaveManager:LoadAutoloadConfig()
+
+-- =============================================================================
+-- BUILT-IN ANTI-AFK SYSTEM (BULLETPROOF TRIPLE-LAYER KICK BYPASS)
+-- =============================================================================
+local AntiAFK = {
+    initialized = false,
+    connections = {},
+}
+
+local function initAntiAFK()
+    if AntiAFK.initialized then return end
+    AntiAFK.initialized = true
+
+    -- Lớp 1: Gỡ bỏ / Vô hiệu hóa kết nối Idled mặc định của Roblox CoreGui (nếu executor hỗ trợ getconnections)
+    pcall(function()
+        if getconnections then
+            for _, conn in ipairs(getconnections(LocalPlayer.Idled)) do
+                if conn.Disable then
+                    conn:Disable()
+                elseif conn.Disconnect then
+                    conn:Disconnect()
+                end
+            end
+        end
+    end)
+
+    -- Lớp 2: Lắng nghe sự kiện LocalPlayer.Idled và gửi tương tác ảo mô phỏng người dùng
+    local idledConn = LocalPlayer.Idled:Connect(function()
+        if Toggles.AntiAFK and Toggles.AntiAFK.Value then
+            pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new(0, 0))
+            end)
+        end
+    end)
+    table.insert(AntiAFK.connections, idledConn)
+
+    -- Lớp 3: Luồng nhịp tim (Heartbeat pulse) định kỳ mỗi 60 giây chủ động reset bộ đếm AFK
+    task.spawn(function()
+        while true do
+            task.wait(60)
+            if Toggles.AntiAFK and Toggles.AntiAFK.Value then
+                pcall(function()
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new(0, 0))
+                end)
+                pcall(function()
+                    local vim = game:GetService("VirtualInputManager")
+                    if vim then
+                        vim:SendKeyEvent(true, Enum.KeyCode.RightControl, false, game)
+                        task.wait(0.05)
+                        vim:SendKeyEvent(false, Enum.KeyCode.RightControl, false, game)
+                    end
+                end)
+            end
+        end
+    end)
+
+    print("[AntiAFK] 🛡️ Built-in Anti-AFK Engine Initialized Successfully!")
+end
 
 -- =============================================================================
 -- KHỞI CHẠY CHU TRÌNH TỰ ĐỘNG
