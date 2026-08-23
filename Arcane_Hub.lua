@@ -1666,43 +1666,50 @@ end
 local function equipPickaxe()
     local char = LocalPlayer.Character
     if not char then return false end
-    if char:FindFirstChild("Pickaxe") then return true end
 
-    -- 1. Kiểm tra trong Backpack
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    local bp = LocalPlayer:FindFirstChild("Backpack")
-    if bp and hum then
-        local pick = bp:FindFirstChild("Pickaxe") or bp:FindFirstChildWhichIsA("Tool")
-        if pick and pick:IsA("Tool") then
-            hum:EquipTool(pick)
-            task.wait(0.3)
-            if char:FindFirstChild("Pickaxe") then return true end
-        end
-    end
-
-    -- 2. Trang bị từ Inventory qua Remote InventoryManage
-    local pgui = PlayerGui
-    local inv = pgui and pgui:FindFirstChild("Inventory")
     local RS = game:GetService("ReplicatedStorage")
     local invManage = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Information") and RS.Remotes.Information:FindFirstChild("InventoryManage")
+
+    local pgui = PlayerGui
+    local inv = pgui and pgui:FindFirstChild("Inventory")
+    local pickaxeUniqueId = nil
+    local pickaxeBtn = nil
 
     if inv then
         for _, desc in ipairs(inv:GetDescendants()) do
             if desc:IsA("TextButton") and desc.Text:lower():find("pickaxe") then
-                local uniqueId = tonumber(desc.Name) or desc.Name
-                if invManage then
-                    pcall(function() invManage:FireServer("Equip", "Pickaxe", uniqueId) end)
-                end
-                if firesignal then
-                    pcall(function() firesignal(desc.MouseButton1Click) end)
-                    pcall(function() firesignal(desc.MouseButton1Down) end)
-                end
-                task.wait(0.4)
+                pickaxeUniqueId = tonumber(desc.Name) or desc.Name
+                pickaxeBtn = desc
                 break
             end
         end
     end
 
+    -- Đồng bộ cả 2 lệnh Equip & Use lên Server để cấp quyền sử dụng cuốc thật sự
+    if pickaxeUniqueId and invManage then
+        pcall(function() invManage:FireServer("Equip", "Pickaxe", pickaxeUniqueId) end)
+        task.wait(0.1)
+        pcall(function() invManage:FireServer("Use", "Pickaxe", pickaxeUniqueId) end)
+    end
+
+    if pickaxeBtn then
+        if firesignal then
+            pcall(function() firesignal(pickaxeBtn.MouseButton1Click) end)
+            pcall(function() firesignal(pickaxeBtn.MouseButton1Down) end)
+        end
+        safeClickButton(pickaxeBtn)
+    end
+
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if bp and hum then
+        local bpPick = bp:FindFirstChild("Pickaxe") or bp:FindFirstChildWhichIsA("Tool")
+        if bpPick and bpPick:IsA("Tool") then
+            hum:EquipTool(bpPick)
+        end
+    end
+
+    task.wait(0.3)
     return char:FindFirstChild("Pickaxe") ~= nil
 end
 
@@ -1751,33 +1758,48 @@ local function buyPickaxe()
 end
 
 local function mineOreNode(oreModel)
-    if not oreModel or not oreModel.Parent then return false end
+    if not oreModel or not oreModel.Parent or not oreModel:IsDescendantOf(workspace) then return false end
     local startTime = os.clock()
     local timeout = Options.MineTimeout and Options.MineTimeout.Value or 15
+
+    -- Đảm bảo cuốc được trang bị với đầy đủ quyền từ Server
     equipPickaxe()
 
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local orePart = oreModel:FindFirstChild("Ore") or oreModel:FindFirstChildWhichIsA("BasePart")
+    if not orePart then return false end
 
     print(string.format("[AutoMine] ⛏️ Bắt đầu vung cuốc đập mỏ %s...", oreModel.Name))
 
-    while oreModel and oreModel.Parent and (os.clock() - startTime < timeout) and Miner.running do
+    while (os.clock() - startTime < timeout) and Miner.running do
+        -- 1. KIỂM TRA ĐIỀU KIỆN MỎ QUẶNG ĐÃ VỠ HOÀN TOÀN (DỪNG ĐẬP NGAY LẬP TỨC 0ms)
+        if not oreModel or not oreModel.Parent or not oreModel:IsDescendantOf(workspace) then
+            print(string.format("[AutoMine] ✅ Mỏ %s đã bị phá hủy hoàn toàn!", oreModel and oreModel.Name or "Ore"))
+            break
+        end
+
+        local currentOrePart = oreModel:FindFirstChild("Ore") or oreModel:FindFirstChildWhichIsA("BasePart")
+        if not currentOrePart or not currentOrePart.Parent or currentOrePart.Transparency >= 0.9 or not currentOrePart:IsDescendantOf(workspace) then
+            print(string.format("[AutoMine] ✅ Quặng trong mỏ %s đã được khai thác xong!", oreModel.Name))
+            break
+        end
+
+        -- 2. Đảm bảo nhân vật luôn cầm Cuốc
         if not (char and char:FindFirstChild("Pickaxe")) then
             equipPickaxe()
         end
 
-        if root and orePart then
-            root.CFrame = CFrame.lookAt(root.Position, Vector3.new(orePart.Position.X, root.Position.Y, orePart.Position.Z))
+        if root and currentOrePart then
+            root.CFrame = CFrame.lookAt(root.Position, Vector3.new(currentOrePart.Position.X, root.Position.Y, currentOrePart.Position.Z))
         end
 
-        -- 1. Kích hoạt Pickaxe Tool swing
+        -- 3. Kích hoạt Pickaxe Tool swing & Chuột vật lý
         local tool = char and (char:FindFirstChild("Pickaxe") or char:FindFirstChildWhichIsA("Tool"))
         if tool and tool:IsA("Tool") then
             pcall(function() tool:Activate() end)
         end
 
-        -- 2. Click chuột phần cứng VIM để đánh quặng
         if VirtualInputManager then
             VirtualInputManager:SendMouseButtonEvent(500, 500, 0, true, game, 0)
             task.wait(0.08)
@@ -1786,7 +1808,7 @@ local function mineOreNode(oreModel)
 
         task.wait(0.35)
     end
-    return (oreModel.Parent == nil or oreModel:FindFirstChild("Ore") == nil)
+    return true
 end
 
 function Miner.runCycle()
