@@ -793,6 +793,76 @@ local function getCurrentStats()
     return stats
 end
 
+-- =============================================================================
+-- CHARACTER STATS ALLOCATION CACHE SYSTEM (PERSISTENT BY CHARACTER NAME)
+-- =============================================================================
+local STATS_CACHE_FILE = "Arcane_Hub_StatsCache.json"
+local statsCacheMemory = {}
+
+local function getCharacterName()
+    local pgui = PlayerGui
+    local hud = pgui and pgui:FindFirstChild("HUD")
+    local holder = hud and (hud:FindFirstChild("Holder") or hud:FindFirstChild("HolderOLD"))
+    local charNameObj = holder and holder:FindFirstChild("CharacterName", true)
+    local nameLabel = charNameObj and charNameObj:FindFirstChild("PlrName")
+    if nameLabel and nameLabel:IsA("TextLabel") and #nameLabel.Text > 0 then
+        return nameLabel.Text
+    end
+    return LocalPlayer.Name
+end
+
+local function loadStatsCache()
+    if readfile and isfile and isfile(STATS_CACHE_FILE) then
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(readfile(STATS_CACHE_FILE))
+        end)
+        if success and type(result) == "table" then
+            statsCacheMemory = result
+            return result
+        end
+    end
+    return statsCacheMemory
+end
+
+local function saveStatsCache(cache)
+    statsCacheMemory = cache
+    if writefile then
+        pcall(function()
+            writefile(STATS_CACHE_FILE, HttpService:JSONEncode(cache))
+        end)
+    end
+end
+
+local function getCharacterStatsCache()
+    local charName = getCharacterName()
+    local cache = loadStatsCache()
+    if not cache[charName] then
+        cache[charName] = {
+            Strength = 0,
+            Endurance = 0,
+            Speed = 0,
+            Arcane = 0,
+            Luck = 0,
+        }
+        saveStatsCache(cache)
+    end
+    return cache[charName], cache, charName
+end
+
+local function clearCharacterStatsCache()
+    local charStats, allCache, charName = getCharacterStatsCache()
+    allCache[charName] = {
+        Strength = 0,
+        Endurance = 0,
+        Speed = 0,
+        Arcane = 0,
+        Luck = 0,
+    }
+    saveStatsCache(allCache)
+    print(string.format("[AutoStats] 🗑️ Đã xóa sạch cache điểm stats của nhân vật '%s'!", charName))
+    Library:Notify(string.format("✅ Cleared stats cache for '%s'!", charName), 4)
+end
+
 local function allocateStats()
     if not (Toggles.AutoAllocateStats and Toggles.AutoAllocateStats.Value) then return end
 
@@ -809,67 +879,74 @@ local function allocateStats()
         task.wait(0.4)
     end
 
+    local charStats, allCache, charName = getCharacterStatsCache()
+
     -- =========================================================================
-    -- TRƯỜNG HỢP 1: BẢNG LEVELUP THỰC TẾ (PlayerGui.LevelUp)
+    -- TRƯỜNG HỢP 1: BẢNG LEVELUP CHUẨN HIỆN ĐẠI (PlayerGui.LevelUp)
     -- =========================================================================
-    if lvlUpGui and lvlUpGui.Enabled then
-        local container = lvlUpGui:FindFirstChild("Container")
-        local header = container and container:FindFirstChild("Header")
-        local buttons = container and container:FindFirstChild("Body") and container.Body:FindFirstChild("Buttons")
-        local finishBtn = lvlUpGui:FindFirstChild("Finish")
+    if lvlUpGui and lvlUpGui.Enabled and lvlUpGui:FindFirstChild("Holder") then
+        local holder = lvlUpGui.Holder
+        local container = holder:FindFirstChild("Container")
+        local finishBtn = holder:FindFirstChild("Finish") or (container and container:FindFirstChild("Finish"))
+        
+        local pointsLabel = (container and container:FindFirstChild("Points", true)) or holder:FindFirstChild("Points", true)
+        local pointsText = pointsLabel and pointsLabel:IsA("TextLabel") and pointsLabel.Text or ""
+        local availPoints = tonumber(pointsText:match("(%d+)")) or 0
 
-        local pointsLabel = header and header:FindFirstChild("PointsLeft")
-        local availPoints = pointsLabel and tonumber(pointsLabel.Text:match("(%d+)")) or 0
-        print(string.format("[AutoFarmLevel] 📊 Giao diện LevelUp mở! Điểm khả dụng: %d điểm", availPoints))
+        print(string.format("[AutoFarmLevel] 🌟 [LevelUp GUI] Nhân vật '%s' có %d điểm stats chưa cộng.", charName, availPoints))
 
-        if availPoints > 0 and buttons then
-            local function getStatValue(statName)
-                local f = buttons:FindFirstChild(statName)
-                local lbl = f and f:FindFirstChild("Frame") and f.Frame:FindFirstChild("TextLabel")
-                if lbl and lbl:IsA("TextLabel") then
-                    local num = tonumber(lbl.Text:match("^%s*(%d+)"))
-                    if num then return num end
-                end
-                return 0
-            end
+        if availPoints > 0 and container then
+            local strSlider = Options.TargetStrength and Options.TargetStrength.Value or 20
+            local arcSlider = Options.TargetArcane and Options.TargetArcane.Value or 0
+            local endSlider = Options.TargetEndurance and Options.TargetEndurance.Value or 20
+            local spdSlider = Options.TargetSpeed and Options.TargetSpeed.Value or 10
+            local lckSlider = Options.TargetLuck and Options.TargetLuck.Value or 10
 
-            local strCur = getStatValue("Strength")
-            local arcCur = getStatValue("Arcane")
-            local endCur = getStatValue("Endurance")
-            local spdCur = getStatValue("Speed")
-            local lckCur = getStatValue("Luck")
+            -- Target điểm cần cộng = max(0, slider - 10)
+            local strMaxAdd = math.max(0, strSlider - 10)
+            local arcMaxAdd = math.max(0, arcSlider - 10)
+            local endMaxAdd = math.max(0, endSlider - 10)
+            local spdMaxAdd = math.max(0, spdSlider - 10)
+            local lckMaxAdd = math.max(0, lckSlider - 10)
 
-            local strTarget = Options.TargetStrength and Options.TargetStrength.Value or 20
-            local arcTarget = Options.TargetArcane and Options.TargetArcane.Value or 0
-            local endTarget = Options.TargetEndurance and Options.TargetEndurance.Value or 20
-            local spdTarget = Options.TargetSpeed and Options.TargetSpeed.Value or 10
-            local lckTarget = Options.TargetLuck and Options.TargetLuck.Value or 10
+            -- Số điểm còn thiếu cần cộng thêm cho nhân vật này (So với cache lưu)
+            local strNeeded = math.max(0, strMaxAdd - (charStats.Strength or 0))
+            local arcNeeded = math.max(0, arcMaxAdd - (charStats.Arcane or 0))
+            local endNeeded = math.max(0, endMaxAdd - (charStats.Endurance or 0))
+            local spdNeeded = math.max(0, spdMaxAdd - (charStats.Speed or 0))
+            local lckNeeded = math.max(0, lckMaxAdd - (charStats.Luck or 0))
 
-            print(string.format("[AutoFarmLevel] 📋 Stats hiện tại: Str:%d/%d, Arc:%d/%d, End:%d/%d, Spd:%d/%d, Lck:%d/%d", 
-                strCur, strTarget, arcCur, arcTarget, endCur, endTarget, spdCur, spdTarget, lckCur, lckTarget))
+            print(string.format("[AutoStats] 📊 Cache hiện tại của '%s': Str:%d/%d, End:%d/%d, Spd:%d/%d, Arc:%d/%d, Lck:%d/%d",
+                charName,
+                charStats.Strength or 0, strMaxAdd,
+                charStats.Endurance or 0, endMaxAdd,
+                charStats.Speed or 0, spdMaxAdd,
+                charStats.Arcane or 0, arcMaxAdd,
+                charStats.Luck or 0, lckMaxAdd
+            ))
 
-            -- Tính toán phân bổ điểm theo mốc Target (Ưu tiên theo thứ tự cấu hình)
-            local strAdd = math.min(availPoints, math.max(0, strTarget - strCur))
+            -- Phân bổ điểm
+            local strAdd = math.min(availPoints, strNeeded)
             availPoints = availPoints - strAdd
 
-            local arcAdd = math.min(availPoints, math.max(0, arcTarget - arcCur))
-            availPoints = availPoints - arcAdd
-
-            local endAdd = math.min(availPoints, math.max(0, endTarget - endCur))
+            local endAdd = math.min(availPoints, endNeeded)
             availPoints = availPoints - endAdd
 
-            local spdAdd = math.min(availPoints, math.max(0, spdTarget - spdCur))
+            local spdAdd = math.min(availPoints, spdNeeded)
             availPoints = availPoints - spdAdd
 
-            local lckAdd = math.min(availPoints, math.max(0, lckTarget - lckCur))
+            local arcAdd = math.min(availPoints, arcNeeded)
+            availPoints = availPoints - arcAdd
+
+            local lckAdd = math.min(availPoints, lckNeeded)
             availPoints = availPoints - lckAdd
 
             -- Nếu còn thừa điểm (Game bắt buộc cộng hết u12 == 0 mới cho bấm Finish):
-            -- Tự động dồn vào chỉ số có target cao nhất
+            -- Tự động dồn vào chỉ số có target slider cao nhất
             if availPoints > 0 then
-                if strTarget >= endTarget and strTarget >= arcTarget and strTarget > 0 then
+                if strSlider >= endSlider and strSlider >= arcSlider and strSlider > 0 then
                     strAdd = strAdd + availPoints
-                elseif arcTarget >= strTarget and arcTarget >= endTarget and arcTarget > 0 then
+                elseif arcSlider >= strSlider and arcSlider >= endSlider and arcSlider > 0 then
                     arcAdd = arcAdd + availPoints
                 else
                     endAdd = endAdd + availPoints
@@ -908,10 +985,24 @@ local function allocateStats()
             if spdAdd > 0 then clickLevelUpButton("Speed", spdAdd) end
             if lckAdd > 0 then clickLevelUpButton("Luck", lckAdd) end
 
+            -- Cập nhật Cache vĩnh viễn cho nhân vật này
+            charStats.Strength = (charStats.Strength or 0) + strAdd
+            charStats.Endurance = (charStats.Endurance or 0) + endAdd
+            charStats.Speed = (charStats.Speed or 0) + spdAdd
+            charStats.Arcane = (charStats.Arcane or 0) + arcAdd
+            charStats.Luck = (charStats.Luck or 0) + lckAdd
+            saveStatsCache(allCache)
+
             task.wait(0.5)
             if finishBtn then
                 safeClickButton(finishBtn)
-                print(string.format("[AutoFarmLevel] ✅ Đã phân bổ Stats vào LevelUp: Str+%d, Arc+%d, End+%d, Spd+%d, Luck+%d và bấm Finish!", strAdd, arcAdd, endAdd, spdAdd, lckAdd))
+                print(string.format("[AutoFarmLevel] ✅ Đã phân bổ Stats: Str+%d (Tổng %d/%d), End+%d (Tổng %d/%d), Spd+%d (Tổng %d/%d), Arc+%d (Tổng %d/%d), Luck+%d (Tổng %d/%d) và bấm Finish!", 
+                    strAdd, charStats.Strength, strMaxAdd,
+                    endAdd, charStats.Endurance, endMaxAdd,
+                    spdAdd, charStats.Speed, spdMaxAdd,
+                    arcAdd, charStats.Arcane, arcMaxAdd,
+                    lckAdd, charStats.Luck, lckMaxAdd
+                ))
             end
 
             -- Đồng bộ Remote 5 tham số
@@ -941,42 +1032,39 @@ local function allocateStats()
         local availPoints = tonumber(statPointsText:match("(%d+)")) or 0
         if availPoints <= 0 then return end
 
-        local function parseStatCount(labelName)
-            local lbl = statAllocOld:FindFirstChild(labelName, true)
-            if lbl and lbl:IsA("TextLabel") then
-                local num = tonumber(lbl.Text:match("^%s*(%d+)"))
-                if num then return num end
-            end
-            return 0
-        end
+        local strSlider = Options.TargetStrength and Options.TargetStrength.Value or 20
+        local arcSlider = Options.TargetArcane and Options.TargetArcane.Value or 0
+        local endSlider = Options.TargetEndurance and Options.TargetEndurance.Value or 20
+        local spdSlider = Options.TargetSpeed and Options.TargetSpeed.Value or 10
+        local lckSlider = Options.TargetLuck and Options.TargetLuck.Value or 10
 
-        local strCur = parseStatCount("StrengthCount")
-        local arcCur = parseStatCount("ArcaneCount")
-        local endCur = parseStatCount("EnduranceCount")
-        local spdCur = parseStatCount("SpeedCount")
-        local lckCur = parseStatCount("LuckCount")
+        local strMaxAdd = math.max(0, strSlider - 10)
+        local arcMaxAdd = math.max(0, arcSlider - 10)
+        local endMaxAdd = math.max(0, endSlider - 10)
+        local spdMaxAdd = math.max(0, spdSlider - 10)
+        local lckMaxAdd = math.max(0, lckSlider - 10)
 
-        local strTarget = Options.TargetStrength and Options.TargetStrength.Value or 20
-        local arcTarget = Options.TargetArcane and Options.TargetArcane.Value or 0
-        local endTarget = Options.TargetEndurance and Options.TargetEndurance.Value or 20
-        local spdTarget = Options.TargetSpeed and Options.TargetSpeed.Value or 10
-        local lckTarget = Options.TargetLuck and Options.TargetLuck.Value or 10
+        local strNeeded = math.max(0, strMaxAdd - (charStats.Strength or 0))
+        local arcNeeded = math.max(0, arcMaxAdd - (charStats.Arcane or 0))
+        local endNeeded = math.max(0, endMaxAdd - (charStats.Endurance or 0))
+        local spdNeeded = math.max(0, spdMaxAdd - (charStats.Speed or 0))
+        local lckNeeded = math.max(0, lckMaxAdd - (charStats.Luck or 0))
 
-        local strAdd = math.min(availPoints, math.max(0, strTarget - strCur))
+        local strAdd = math.min(availPoints, strNeeded)
         availPoints = availPoints - strAdd
-        local arcAdd = math.min(availPoints, math.max(0, arcTarget - arcCur))
-        availPoints = availPoints - arcAdd
-        local endAdd = math.min(availPoints, math.max(0, endTarget - endCur))
+        local endAdd = math.min(availPoints, endNeeded)
         availPoints = availPoints - endAdd
-        local spdAdd = math.min(availPoints, math.max(0, spdTarget - spdCur))
+        local spdAdd = math.min(availPoints, spdNeeded)
         availPoints = availPoints - spdAdd
-        local lckAdd = math.min(availPoints, math.max(0, lckTarget - lckCur))
+        local arcAdd = math.min(availPoints, arcNeeded)
+        availPoints = availPoints - arcAdd
+        local lckAdd = math.min(availPoints, lckNeeded)
         availPoints = availPoints - lckAdd
 
         if availPoints > 0 then
-            if strTarget >= endTarget and strTarget >= arcTarget and strTarget > 0 then
+            if strSlider >= endSlider and strSlider >= arcSlider and strSlider > 0 then
                 strAdd = strAdd + availPoints
-            elseif arcTarget >= strTarget and arcTarget >= endTarget and arcTarget > 0 then
+            elseif arcSlider >= strSlider and arcSlider >= endSlider and arcSlider > 0 then
                 arcAdd = arcAdd + availPoints
             else
                 endAdd = endAdd + availPoints
@@ -1000,6 +1088,14 @@ local function allocateStats()
         if spdAdd > 0 then clickStatUp("SpeedUp", spdAdd) end
         if lckAdd > 0 then clickStatUp("LuckUp", lckAdd) end
 
+        -- Cập nhật Cache
+        charStats.Strength = (charStats.Strength or 0) + strAdd
+        charStats.Endurance = (charStats.Endurance or 0) + endAdd
+        charStats.Speed = (charStats.Speed or 0) + spdAdd
+        charStats.Arcane = (charStats.Arcane or 0) + arcAdd
+        charStats.Luck = (charStats.Luck or 0) + lckAdd
+        saveStatsCache(allCache)
+
         task.wait(0.4)
         local finishBtn = statAllocOld:FindFirstChild("Finish", true)
         if finishBtn then safeClickButton(finishBtn) end
@@ -1013,7 +1109,6 @@ local function allocateStats()
         end
     end
 end
-
 local function isInSoulCorridor()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -2834,6 +2929,13 @@ LevelGroup:AddSlider("TargetLuck", {
     Min = 0,
     Max = 200,
     Rounding = 0,
+})
+
+LevelGroup:AddButton({
+    Text = "🗑️ Clear Stats Cache (Reset Active Char)",
+    Func = function()
+        clearCharacterStatsCache()
+    end
 })
 
 LevelGroup:AddDropdown("SelectedCombatAction", {
