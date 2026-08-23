@@ -641,6 +641,39 @@ local function disableLevelFarmerNoclip()
     end
 end
 
+local function getCurrentLevel()
+    local pgui = PlayerGui
+    local hud = pgui and pgui:FindFirstChild("HUD")
+    if hud then
+        local lvlObj = hud:FindFirstChild("CharacterLevel", true)
+        local lvlText = lvlObj and lvlObj:FindFirstChild("Level")
+        if lvlText and lvlText:IsA("TextLabel") then
+            local num = tonumber(lvlText.Text:match("%d+"))
+            if num then return num end
+        end
+    end
+    local char = LocalPlayer.Character
+    local lvlVal = char and (char:FindFirstChild("Level") or (char:FindFirstChild("Status") and char.Status:FindFirstChild("Level")))
+    if lvlVal and lvlVal:IsA("ValueBase") then
+        return tonumber(lvlVal.Value) or 1
+    end
+    return 1
+end
+
+local function getCurrentEssence()
+    local pgui = PlayerGui
+    local hud = pgui and pgui:FindFirstChild("HUD")
+    if hud then
+        local crystals = hud:FindFirstChild("Crystals", true)
+        local amountObj = crystals and crystals:FindFirstChild("Amount")
+        if amountObj and amountObj:IsA("TextLabel") then
+            local num = tonumber(amountObj.Text:match("%d+"))
+            if num then return num end
+        end
+    end
+    return 0
+end
+
 local function getActiveFarmSpot()
     local mode = (Options and Options.FarmLevelMode and Options.FarmLevelMode.Value) or "Auto (Detect Level 1 - 50)"
     
@@ -705,34 +738,6 @@ local function flyToFarmSpot(targetSpot)
         print("[AutoFarmLevel] ✅ Đã hạ cánh an toàn tại bãi farm!")
     end
     return s3
-end
-
-local function getCurrentEssence()
-    local pgui = PlayerGui
-    local hud = pgui and pgui:FindFirstChild("HUD")
-    if hud then
-        local crystals = hud:FindFirstChild("Crystals", true)
-        local amountObj = crystals and crystals:FindFirstChild("Amount")
-        if amountObj and amountObj:IsA("TextLabel") then
-            local num = tonumber(amountObj.Text:match("%d+"))
-            if num then return num end
-        end
-    end
-    return 0
-end
-
-local function getCurrentLevel()
-    local pgui = PlayerGui
-    local hud = pgui and pgui:FindFirstChild("HUD")
-    if hud then
-        local lvlObj = hud:FindFirstChild("CharacterLevel", true)
-        local lvlText = lvlObj and lvlObj:FindFirstChild("Level")
-        if lvlText and lvlText:IsA("TextLabel") then
-            local num = tonumber(lvlText.Text:match("%d+"))
-            if num then return num end
-        end
-    end
-    return 1
 end
 
 local function safeClickButton(btn)
