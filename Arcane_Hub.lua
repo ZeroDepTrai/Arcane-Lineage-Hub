@@ -50,6 +50,7 @@ local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
+local VirtualUser = game:GetService("VirtualUser")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 
@@ -3079,6 +3080,12 @@ FPSGroup:AddSlider("FPSCap", {
     end
 })
 
+OptGroup:AddToggle("AntiAFK", {
+    Text = "Built-in Anti-AFK (20m Kick Bypass)",
+    Default = true,
+    Tooltip = "Tự động gửi tín hiệu chống ngắt kết nối khi treo máy AFK 24/7",
+})
+
 OptGroup:AddButton("⚡ Instant Clean RAM / Garbage", function()
     collectgarbage("collect")
     Library:Notify("RAM / Garbage Collection executed!", 3)
@@ -3128,6 +3135,8 @@ SaveManager:LoadAutoloadConfig()
 -- KHỞI CHẠY CHU TRÌNH TỰ ĐỘNG
 -- =============================================================================
 shared.ArcaneHub = Library
+
+initAntiAFK()
 
 if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then
     Farmer.runCycle()
