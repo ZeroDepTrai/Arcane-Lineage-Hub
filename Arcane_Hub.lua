@@ -2060,7 +2060,7 @@ local function handleFistQTE(fistQTE)
     end
 end
 
--- 7. SPEAR QTE (HYPER-SPEED ZERO-LATENCY SOLVER FOR IMPOSSIBLE DIFFICULTY)
+-- 7. SPEAR QTE (PERFECT STUTTER-FREE ACTIVE NODE SOLVER)
 local function handleSpearQTE(spearQTE)
     if not isQTEActive("Spear") or not spearQTE or not spearQTE.Visible then return end
     local container = spearQTE:FindFirstChild("Container")
@@ -2078,56 +2078,57 @@ local function handleSpearQTE(spearQTE)
 
     for _, entry in ipairs(circles) do
         local circle = entry.obj
-        if not AutoQTE.spearSolvedTable[circle] then
-            local btn = circle:FindFirstChild("InputButton", true) or circle:FindFirstChildWhichIsA("ImageButton", true) or circle:FindFirstChildWhichIsA("TextButton", true)
-            
-            if btn and (btn.ImageTransparency < 0.8 or (btn:IsA("TextButton") and btn.TextTransparency < 0.8)) then
-                AutoQTE.spearSolvedTable[circle] = true
+        local btn = circle:FindFirstChild("InputButton", true) or circle:FindFirstChildWhichIsA("ImageButton", true) or circle:FindFirstChildWhichIsA("TextButton", true)
 
-                local btnCenterX = btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2
-                local btnCenterY = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2
-                local startInput = {
-                    UserInputType = Enum.UserInputType.MouseButton1,
-                    Position = Vector3.new(btnCenterX, btnCenterY, 0)
+        -- CHỈ XỬ LÝ DUY NHẤT VÒNG TRÒN ĐANG CÓ TRẠNG THÁI ACTIVE == TRUE TỪ GAME
+        if btn and btn.Active == true and btn.ImageTransparency < 0.8 then
+            AutoQTE.spearSolvedTable[circle] = true
+
+            local btnCenterX = btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2
+            local btnCenterY = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2
+            local startInput = {
+                UserInputType = Enum.UserInputType.MouseButton1,
+                Position = Vector3.new(btnCenterX, btnCenterY, 0)
+            }
+
+            -- 1. Kích hoạt Tap Event tức thì
+            if firesignal then
+                pcall(function() firesignal(btn.Activated) end)
+                pcall(function() firesignal(btn.MouseButton1Click) end)
+                pcall(function() firesignal(btn.InputBegan, startInput) end)
+            end
+
+            if getconnections then
+                pcall(function()
+                    for _, c in ipairs(getconnections(btn.Activated)) do
+                        if c.Function then c.Function() elseif c.Fire then c:Fire() end
+                    end
+                end)
+                pcall(function()
+                    for _, c in ipairs(getconnections(btn.InputBegan)) do
+                        if c.Function then c.Function(startInput) elseif c.Fire then c:Fire(startInput) end
+                    end
+                end)
+            end
+
+            -- 2. Giải phóng Line & Curve Slider
+            local isLine = circle:FindFirstChild("Goal_Line") ~= nil
+            local isCurve = circle:FindFirstChild("Goal_Curve") ~= nil
+
+            if isLine or isCurve or circle.Rotation ~= 0 then
+                local rot = circle.Rotation
+                local rad = math.rad(rot)
+                local dx = math.cos(rad)
+                local dy = math.sin(rad)
+
+                local dragPoints = {
+                    Vector3.new(btnCenterX + dx * 1000, btnCenterY + dy * 1000, 0),
+                    Vector3.new(btnCenterX - dx * 1000, btnCenterY - dy * 1000, 0),
+                    Vector3.new(btnCenterX - dy * 1000, btnCenterY + dx * 1000, 0),
+                    Vector3.new(btnCenterX + dy * 1000, btnCenterY - dx * 1000, 0)
                 }
 
-                -- 1. Kích hoạt Tap Event (Instant 100% Hit)
-                if firesignal then
-                    pcall(function() firesignal(btn.Activated) end)
-                    pcall(function() firesignal(btn.MouseButton1Click) end)
-                    pcall(function() firesignal(btn.MouseButton1Down) end)
-                    pcall(function() firesignal(btn.InputBegan, startInput) end)
-                end
-
-                if getconnections then
-                    pcall(function()
-                        for _, c in ipairs(getconnections(btn.Activated)) do
-                            if c.Function then c.Function() elseif c.Fire then c:Fire() end
-                        end
-                    end)
-                    pcall(function()
-                        for _, c in ipairs(getconnections(btn.MouseButton1Click)) do
-                            if c.Function then c.Function() elseif c.Fire then c:Fire() end
-                        end
-                    end)
-                    pcall(function()
-                        for _, c in ipairs(getconnections(btn.InputBegan)) do
-                            if c.Function then c.Function(startInput) elseif c.Fire then c:Fire(startInput) end
-                        end
-                    end)
-                end
-
-                -- 2. Giải phóng tức thì Line & Curve Slider qua 6 vector xung cực đại (Max Delta Push)
-                local sweepVectors = {
-                    Vector3.new(btnCenterX + 1200, btnCenterY, 0),
-                    Vector3.new(btnCenterX - 1200, btnCenterY, 0),
-                    Vector3.new(btnCenterX, btnCenterY + 1200, 0),
-                    Vector3.new(btnCenterX, btnCenterY - 1200, 0),
-                    Vector3.new(btnCenterX + 1200, btnCenterY + 1200, 0),
-                    Vector3.new(btnCenterX - 1200, btnCenterY - 1200, 0)
-                }
-
-                for _, movePos in ipairs(sweepVectors) do
+                for _, movePos in ipairs(dragPoints) do
                     local moveInput = {
                         UserInputType = Enum.UserInputType.MouseMovement,
                         Position = movePos
@@ -2143,25 +2144,21 @@ local function handleSpearQTE(spearQTE)
                         end)
                     end
                 end
+            end
 
-                -- 3. Gamepad Keycode bypass
-                for _, kc in ipairs({ Enum.KeyCode.ButtonA, Enum.KeyCode.ButtonB, Enum.KeyCode.ButtonX, Enum.KeyCode.ButtonY }) do
-                    local keyInput = {
-                        KeyCode = kc,
-                        UserInputType = Enum.UserInputType.Gamepad1
-                    }
-                    if firesignal then
-                        pcall(function() firesignal(UserInputService.InputBegan, keyInput, false) end)
-                    end
-                    if getconnections then
-                        pcall(function()
-                            for _, c in ipairs(getconnections(UserInputService.InputBegan)) do
-                                if c.Function then c.Function(keyInput, false) elseif c.Fire then c:Fire(keyInput, false) end
-                            end
-                        end)
-                    end
+            -- 3. Gamepad Keycode bypass
+            for _, kc in ipairs({ Enum.KeyCode.ButtonA, Enum.KeyCode.ButtonB, Enum.KeyCode.ButtonX, Enum.KeyCode.ButtonY }) do
+                local keyInput = {
+                    KeyCode = kc,
+                    UserInputType = Enum.UserInputType.Gamepad1
+                }
+                if firesignal then
+                    pcall(function() firesignal(UserInputService.InputBegan, keyInput, false) end)
                 end
             end
+
+            singleClick(btn)
+            break
         end
     end
 end
