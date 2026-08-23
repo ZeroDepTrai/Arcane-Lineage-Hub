@@ -537,8 +537,10 @@ end
 -- =============================================================================
 local LevelFarmer = {
     running = false,
+    noclipConn = nil,
     undergroundPlatform = nil,
-    farmSpotLv1_20 = Vector3.new(5035.2, 595.0, -3969.5),
+    farmSpotLv1_30 = Vector3.new(5035.2, 595.0, -3969.5),   -- Caldera Underground (Lv 1 - 30)
+    farmSpotLv30_50 = Vector3.new(3067.7, 623.9, -3832.3),  -- Desert Safe Block (Lv 30 - 50)
     essenceBeforeCombat = -1,
     zeroGainFightCount = 0,
     wasInCombat = false,
@@ -569,7 +571,52 @@ local function removeUndergroundPlatform()
     LevelFarmer.undergroundPlatform = nil
 end
 
-local function teleportToUndergroundSpot(targetSpot)
+local function enableLevelFarmerNoclip()
+    if LevelFarmer.noclipConn then return end
+    LevelFarmer.noclipConn = RunService.Stepped:Connect(function()
+        if not LevelFarmer.running then return end
+        local c = LocalPlayer.Character
+        if c and not isInCombat() then
+            for _, p in ipairs(c:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    p.CanCollide = false
+                end
+            end
+            local r = c:FindFirstChild("HumanoidRootPart")
+            if r then
+                r.AssemblyLinearVelocity = Vector3.zero
+                r.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+    end)
+end
+
+local function disableLevelFarmerNoclip()
+    if LevelFarmer.noclipConn then
+        LevelFarmer.noclipConn:Disconnect()
+        LevelFarmer.noclipConn = nil
+    end
+end
+
+local function getActiveFarmSpot()
+    local mode = (Options and Options.FarmLevelMode and Options.FarmLevelMode.Value) or "Auto (Detect Level 1 - 50)"
+    
+    if mode == "Level 1 - 30 (Underground)" then
+        return LevelFarmer.farmSpotLv1_30, "Level 1 - 30 (Underground)"
+    elseif mode == "Level 30 - 50 (Desert Block)" then
+        return LevelFarmer.farmSpotLv30_50, "Level 30 - 50 (Desert Block)"
+    else
+        -- Tự động nhận diện cấp độ người chơi
+        local currentLvl = getCurrentLevel()
+        if currentLvl >= 30 then
+            return LevelFarmer.farmSpotLv30_50, string.format("Auto Detect (Lv %d -> Desert Block 30-50)", currentLvl)
+        else
+            return LevelFarmer.farmSpotLv1_30, string.format("Auto Detect (Lv %d -> Underground 1-30)", currentLvl)
+        end
+    end
+end
+
+local function flyToFarmSpot(targetSpot)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -578,38 +625,43 @@ local function teleportToUndergroundSpot(targetSpot)
         return false
     end
 
-    ensureUndergroundPlatform(targetSpot)
+    local currentPos = root.Position
+    local isLv1_30 = (targetSpot - LevelFarmer.farmSpotLv1_30).Magnitude < 5
+    local targetCF = isLv1_30 and CFrame.new(targetSpot.X, targetSpot.Y + 4.0, targetSpot.Z) or CFrame.new(targetSpot)
+    local distance = (currentPos - targetCF.Position).Magnitude
 
-    local targetCF = CFrame.new(targetSpot.X, targetSpot.Y + 4.0, targetSpot.Z)
-    local distance = (root.Position - targetCF.Position).Magnitude
-    print(string.format("[AutoFarmLevel] 🚀 Bắt đầu bay xuống bãi ngầm tại (%.1f, %.1f, %.1f) - Khoảng cách: %.1f studs...", targetCF.X, targetCF.Y, targetCF.Z, distance))
-
-    if distance > 2 then
-        hum.PlatformStand = true
-        local noclipConn = RunService.Stepped:Connect(function()
-            local c = LocalPlayer.Character
-            if c then
-                for _, p in ipairs(c:GetDescendants()) do
-                    if p:IsA("BasePart") then p.CanCollide = false end
-                end
-                local r = c:FindFirstChild("HumanoidRootPart")
-                if r then r.AssemblyLinearVelocity = Vector3.zero end
-            end
-        end)
-
-        local speed = 180
-        local duration = math.max(0.1, distance / speed)
-        local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), { CFrame = targetCF })
-        tween:Play()
-        tween.Completed:Wait()
-
-        noclipConn:Disconnect()
-        hum.PlatformStand = false
-        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+    if distance <= 4 then
+        root.CFrame = targetCF
+        if isLv1_30 then ensureUndergroundPlatform(targetSpot) end
+        return true
     end
 
-    print("[AutoFarmLevel] ✅ Đã ở bãi ngầm an toàn!")
-    return true
+    print(string.format("[AutoFarmLevel] 🚀 Bắt đầu Sky-Tween bay tới bãi farm tại (%.1f, %.1f, %.1f) - Khoảng cách: %.1f studs...", targetCF.X, targetCF.Y, targetCF.Z, distance))
+
+    if isLv1_30 then
+        ensureUndergroundPlatform(targetSpot)
+    else
+        removeUndergroundPlatform()
+    end
+
+    local skyHeight = 1500
+    local skyY = math.max(skyHeight, currentPos.Y + 200, targetSpot.Y + 200)
+
+    -- Phase 1: Bay thẳng lên trời thật cao
+    local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), 200, function() return LevelFarmer.running end)
+    if not s1 or not LevelFarmer.running then return false end
+
+    -- Phase 2: Bay ngang trên không trung tới vị trí bãi farm
+    local s2 = smoothTweenTo(CFrame.new(targetSpot.X, skyY, targetSpot.Z), 240, function() return LevelFarmer.running end)
+    if not s2 or not LevelFarmer.running then return false end
+
+    -- Phase 3: Hạ cánh thẳng đứng xuống bãi farm (xuyên khối / xuyên đất an toàn)
+    local s3 = smoothTweenTo(targetCF, 180, function() return LevelFarmer.running end)
+    if s3 then
+        root.CFrame = targetCF
+        print("[AutoFarmLevel] ✅ Đã hạ cánh an toàn tại bãi farm!")
+    end
+    return s3
 end
 
 local function getCurrentEssence()
@@ -1127,11 +1179,12 @@ local function humanoidMeditateAndLevelUp()
         print("[AutoFarmLevel] ⚠️ Chưa thể vào Soul Corridor trong đợt này.")
     end
 
-    -- 7. Quay trở lại bãi farm ngầm an toàn
-    local spot = LevelFarmer.farmSpotLv1_20
-    ensureUndergroundPlatform(spot)
-    teleportToUndergroundSpot(spot)
-    print("[AutoFarmLevel] 🛡️ Đã trở về bãi farm ngầm an toàn!")
+    -- 7. Quay trở lại bãi farm an toàn qua Sky-Tween
+    local spot, spotDesc = getActiveFarmSpot()
+    print(string.format("[AutoFarmLevel] 🚀 Đang bay trở lại bãi farm (%s) qua Sky-Tween...", spotDesc))
+    flyToFarmSpot(spot)
+    enableLevelFarmerNoclip()
+    print("[AutoFarmLevel] 🛡️ Đã trở về bãi farm an toàn!")
 
     -- Reset bộ đếm Essence sau trận
     LevelFarmer.essenceBeforeCombat = getCurrentEssence()
@@ -1330,13 +1383,14 @@ function LevelFarmer.runCycle()
     LevelFarmer.running = true
 
     task.spawn(function()
-        local mode = (Options and Options.FarmLevelMode and Options.FarmLevelMode.Value) or "Level 1 - 20 (Underground)"
-        print(string.format("[AutoFarmLevel] ⚔️ Bắt đầu Auto Farm Level - Chế độ: %s", tostring(mode)))
+        local spot, spotDesc = getActiveFarmSpot()
+        print(string.format("[AutoFarmLevel] ⚔️ Bắt đầu Auto Farm Level - Vị trí: %s", tostring(spotDesc)))
 
-        -- Luôn luôn đảm bảo platform và bay xuống bãi ngầm an toàn ngay lập tức
-        local spot = LevelFarmer.farmSpotLv1_20
-        ensureUndergroundPlatform(spot)
-        teleportToUndergroundSpot(spot)
+        -- Bay tới bãi farm an toàn bằng Sky-Tween & bật Noclip liên tục
+        flyToFarmSpot(spot)
+        enableLevelFarmerNoclip()
+
+        local currentAssignedSpot = spot
 
         while LevelFarmer.running do
             if isInCombat() then
@@ -1389,18 +1443,23 @@ function LevelFarmer.runCycle()
                     end
                 end
 
-                -- Giữ vị trí ngầm an toàn khi đứng chờ trận mới
-                local currentMode = (Options and Options.FarmLevelMode and Options.FarmLevelMode.Value) or "Level 1 - 20 (Underground)"
-                if tostring(currentMode):find("Level 1 - 20") and not isInSoulCorridor() then
+                -- Tự động kiểm tra vị trí bãi farm và level khi đứng chờ ngoài trận
+                if not isInSoulCorridor() then
+                    local targetSpot, targetDesc = getActiveFarmSpot()
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
                     if root then
-                        local spot = LevelFarmer.farmSpotLv1_20
-                        ensureUndergroundPlatform(spot)
-                        local dist = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(spot.X, 0, spot.Z)).Magnitude
-                        local yDiff = math.abs(root.Position.Y - (spot.Y + 4.0))
-                        if dist > 12 or yDiff > 8 then
-                            teleportToUndergroundSpot(spot)
+                        local isLv1_30 = (targetSpot - LevelFarmer.farmSpotLv1_30).Magnitude < 5
+                        local checkY = isLv1_30 and (targetSpot.Y + 4.0) or targetSpot.Y
+                        local dist = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(targetSpot.X, 0, targetSpot.Z)).Magnitude
+                        local yDiff = math.abs(root.Position.Y - checkY)
+
+                        -- Nếu cấp độ thay đổi khiến đổi bãi farm hoặc bị văng ra xa -> Sky-Tween bay tới bãi mới
+                        if targetSpot ~= currentAssignedSpot or dist > 15 or yDiff > 10 then
+                            currentAssignedSpot = targetSpot
+                            print(string.format("[AutoFarmLevel] 🔄 Cập nhật bãi farm (%s) -> Tiến hành Sky-Tween...", targetDesc))
+                            flyToFarmSpot(targetSpot)
+                            enableLevelFarmerNoclip()
                         end
                     end
                 end
@@ -1414,6 +1473,8 @@ end
 
 function LevelFarmer.stop()
     LevelFarmer.running = false
+    disableLevelFarmerNoclip()
+    removeUndergroundPlatform()
     disableFlightState()
 end
 
@@ -2566,13 +2627,14 @@ LevelGroup:AddToggle("AutoFarmLevel", {
 
 LevelGroup:AddDropdown("FarmLevelMode", {
     Values = {
-        "Level 1 - 20 (Underground)",
-        "Level 20 - 50 (Coming Soon)"
+        "Auto (Detect Level 1 - 50)",
+        "Level 1 - 30 (Underground)",
+        "Level 30 - 50 (Desert Block)"
     },
     Default = 1,
     Multi = false,
     Text = "Farm Level Mode",
-    Tooltip = "Level 1-20: Tween xuống lòng đất an toàn, tránh người chơi khác nhìn thấy\nLevel 20-50: Tùy chọn nâng cao tiếp theo",
+    Tooltip = "Auto: Tự động phát hiện cấp độ hiện tại (Lv < 30 bay về bãi ngầm Caldera, Lv >= 30 bay về bãi an toàn Desert Block)\nLevel 1-30: Bãi ngầm Caldera\nLevel 30-50: Bãi an toàn trong khối Desert (Noclip liên tục)",
 })
 
 LevelGroup:AddToggle("AutoMeditate", {
