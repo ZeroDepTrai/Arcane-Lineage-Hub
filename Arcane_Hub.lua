@@ -580,7 +580,7 @@ local function teleportToUndergroundSpot(targetSpot)
 
     if distance > 5 then
         print(string.format("[AutoFarmLevel] 🚀 Đang tween xuống vị trí ngầm tại (%.1f, %.1f, %.1f)...", targetCF.X, targetCF.Y, targetCF.Z))
-        local speed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 120
+        local speed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 150
         local tweenSuccess = smoothTweenTo(targetCF, speed, function() return LevelFarmer.running end)
         if not tweenSuccess then return false end
     end
@@ -590,6 +590,160 @@ local function teleportToUndergroundSpot(targetSpot)
     hum.PlatformStand = false
     hum:ChangeState(Enum.HumanoidStateType.GettingUp)
     task.wait(0.2)
+    return true
+end
+
+local function getCurrentEssence()
+    local pgui = PlayerGui
+    local hud = pgui and pgui:FindFirstChild("HUD")
+    if hud then
+        local crystals = hud:FindFirstChild("Crystals", true)
+        local amountObj = crystals and crystals:FindFirstChild("Amount")
+        if amountObj and amountObj:IsA("TextLabel") then
+            local num = tonumber(amountObj.Text:match("%d+"))
+            if num then return num end
+        end
+    end
+    return 0
+end
+
+local function getCurrentLevel()
+    local pgui = PlayerGui
+    local hud = pgui and pgui:FindFirstChild("HUD")
+    if hud then
+        local lvlObj = hud:FindFirstChild("CharacterLevel", true)
+        local lvlText = lvlObj and lvlObj:FindFirstChild("Level")
+        if lvlText and lvlText:IsA("TextLabel") then
+            local num = tonumber(lvlText.Text:match("%d+"))
+            if num then return num end
+        end
+    end
+    return 1
+end
+
+local function getCurrentStats()
+    local stats = { Strength = 0, Endurance = 0, Speed = 0, Arcane = 0, Luck = 0 }
+    local pgui = PlayerGui
+    local sm = pgui and pgui:FindFirstChild("StatMenu")
+    if sm then
+        local attrs = sm:FindFirstChild("Attributes", true)
+        if attrs then
+            for statName, _ in pairs(stats) do
+                local frame = attrs:FindFirstChild(statName)
+                local valObj = frame and frame:FindFirstChild("StatValue")
+                if valObj and valObj:IsA("TextLabel") then
+                    local num = tonumber(valObj.Text:match("^%s*(%d+)"))
+                    if num then stats[statName] = num end
+                end
+            end
+        end
+    end
+    return stats
+end
+
+local function allocateStats()
+    if not (Toggles.AutoAllocateStats and Toggles.AutoAllocateStats.Value) then return end
+
+    local currentStats = getCurrentStats()
+    local targets = {
+        Strength = Options.TargetStrength and Options.TargetStrength.Value or 20,
+        Endurance = Options.TargetEndurance and Options.TargetEndurance.Value or 20,
+        Speed = Options.TargetSpeed and Options.TargetSpeed.Value or 10,
+        Arcane = Options.TargetArcane and Options.TargetArcane.Value or 0,
+        Luck = Options.TargetLuck and Options.TargetLuck.Value or 10,
+    }
+
+    local RS = game:GetService("ReplicatedStorage")
+    local remotes = RS:FindFirstChild("Remotes")
+    local info = remotes and remotes:FindFirstChild("Information")
+    local statRemote = info and info:FindFirstChild("StatAllocation")
+    if not statRemote then return end
+
+    local statOrder = { "Strength", "Endurance", "Speed", "Arcane", "Luck" }
+    for _, stat in ipairs(statOrder) do
+        local cur = currentStats[stat] or 0
+        local tgt = targets[stat] or 0
+        while cur < tgt do
+            pcall(function()
+                statRemote:FireServer(stat)
+            end)
+            cur = cur + 1
+            task.wait(0.08)
+        end
+    end
+    print("[AutoFarmLevel] 📊 Đã hoàn tất phân bổ chỉ số theo Target Stats.")
+end
+
+local function performMeditationAndLevelUp()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+
+    -- 1. Tìm Chiếu Thiền gần nhất
+    local mats = workspace:FindFirstChild("Mats")
+    local nearestMat = nil
+    local nearestDist = math.huge
+    if mats then
+        for _, mat in ipairs(mats:GetChildren()) do
+            local pos = mat:GetPivot().Position
+            local d = (pos - root.Position).Magnitude
+            if d < nearestDist then
+                nearestDist = d
+                nearestMat = mat
+            end
+        end
+    end
+
+    if not nearestMat then
+        print("[AutoFarmLevel] ❌ Không tìm thấy MeditationMat trên bản đồ.")
+        return false
+    end
+
+    local matPos = nearestMat:GetPivot().Position
+    local targetCF = CFrame.new(matPos.X, matPos.Y + 2.5, matPos.Z)
+
+    print(string.format("[AutoFarmLevel] 🧘 Đang bay chớp nhoáng tới Chiếu Thiền tại (%.1f, %.1f, %.1f)...", matPos.X, matPos.Y, matPos.Z))
+    local tweenSuccess = smoothTweenTo(targetCF, 220, function() return LevelFarmer.running end)
+    if not tweenSuccess then return false end
+
+    task.wait(0.2)
+
+    -- 2. Kích hoạt ProximityPrompt
+    local prox = nearestMat:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if prox and fireproximityprompt then
+        fireproximityprompt(prox)
+        print("[AutoFarmLevel] ✨ Đã kích hoạt Chiếu Thiền!")
+    end
+
+    task.wait(1.5)
+
+    -- 3. Đổi cấp qua Aretim / Remote
+    local RS = game:GetService("ReplicatedStorage")
+    local remotes = RS:FindFirstChild("Remotes")
+    local dataRemotes = remotes and remotes:FindFirstChild("Data")
+    local lvlRemote = dataRemotes and dataRemotes:FindFirstChild("LevelUp")
+    if lvlRemote then
+        pcall(function()
+            lvlRemote:FireServer()
+            print("[AutoFarmLevel] 🆙 Đã gửi yêu cầu đổi cấp qua Aretim.")
+        end)
+    end
+
+    task.wait(0.8)
+
+    -- 4. Tự động cộng điểm stats
+    allocateStats()
+    task.wait(0.5)
+
+    -- 5. Quay lại bãi ngầm an toàn
+    local mode = Options.FarmLevelMode and Options.FarmLevelMode.Value or "Level 1 - 20 (Underground)"
+    if mode:find("Level 1 - 20") then
+        local spot = LevelFarmer.farmSpotLv1_20
+        ensureUndergroundPlatform(spot)
+        teleportToUndergroundSpot(spot)
+        print("[AutoFarmLevel] 🛡️ Đã quay lại bãi farm ngầm an toàn.")
+    end
+
     return true
 end
 
@@ -795,6 +949,16 @@ function LevelFarmer.runCycle()
                     task.wait(0.2)
                 end
             else
+                -- Tự động kiểm tra Essence và đi thiền đổi cấp nếu đầy
+                if Toggles.AutoMeditate and Toggles.AutoMeditate.Value then
+                    local curEssence = getCurrentEssence()
+                    local threshold = Options.EssenceThreshold and Options.EssenceThreshold.Value or 40
+                    if curEssence >= threshold then
+                        print(string.format("[AutoFarmLevel] 🔮 Essence đạt mốc (%d >= %d) -> Bắt đầu chu trình đổi cấp...", curEssence, threshold))
+                        performMeditationAndLevelUp()
+                    end
+                end
+
                 -- If out of combat and in Level 1 - 20 mode, check if we drifted or need repositioning
                 local currentMode = Options.FarmLevelMode and Options.FarmLevelMode.Value or "Level 1 - 20 (Underground)"
                 if currentMode:find("Level 1 - 20") then
@@ -1897,6 +2061,67 @@ LevelGroup:AddDropdown("FarmLevelMode", {
     Tooltip = "Level 1-20: Tween xuống lòng đất an toàn, tránh người chơi khác nhìn thấy\nLevel 20-50: Tùy chọn nâng cao tiếp theo",
 })
 
+LevelGroup:AddToggle("AutoMeditate", {
+    Text = "Auto Meditate & Level Up (Essence Cap)",
+    Default = true,
+    Tooltip = "Khi tích lũy đủ Essence (Cap), tự động bay chớp nhoáng tới chiếu thiền đổi cấp qua Aretim rồi quay lại bãi ngầm",
+})
+
+LevelGroup:AddSlider("EssenceThreshold", {
+    Text = "Essence Meditate Threshold",
+    Default = 40,
+    Min = 10,
+    Max = 300,
+    Rounding = 0,
+    Tooltip = "Số lượng Essence tích lũy để kích hoạt đi thiền đổi cấp",
+})
+
+LevelGroup:AddToggle("AutoAllocateStats", {
+    Text = "Auto Allocate Stats",
+    Default = true,
+    Tooltip = "Tự động phân bổ StatPoints theo các mốc Target Stats bên dưới",
+})
+
+LevelGroup:AddSlider("TargetStrength", {
+    Text = "Target Strength",
+    Default = 20,
+    Min = 0,
+    Max = 60,
+    Rounding = 0,
+})
+
+LevelGroup:AddSlider("TargetEndurance", {
+    Text = "Target Endurance",
+    Default = 20,
+    Min = 0,
+    Max = 60,
+    Rounding = 0,
+})
+
+LevelGroup:AddSlider("TargetSpeed", {
+    Text = "Target Speed",
+    Default = 10,
+    Min = 0,
+    Max = 60,
+    Rounding = 0,
+})
+
+LevelGroup:AddSlider("TargetArcane", {
+    Text = "Target Arcane",
+    Default = 0,
+    Min = 0,
+    Max = 60,
+    Rounding = 0,
+})
+
+LevelGroup:AddSlider("TargetLuck", {
+    Text = "Target Luck",
+    Default = 10,
+    Min = 0,
+    Max = 60,
+    Rounding = 0,
+})
+
 LevelGroup:AddDropdown("SelectedCombatAction", {
     Values = {
         "Strike (Basic Attack)",
@@ -1941,6 +2166,15 @@ LevelGroup:AddButton({
     Func = function()
         LevelFarmer.running = true
         teleportToUndergroundSpot(LevelFarmer.farmSpotLv1_20)
+    end,
+})
+
+LevelGroup:AddButton({
+    Text = "🧘 Meditate & Level Up Now",
+    Func = function()
+        task.spawn(function()
+            performMeditationAndLevelUp()
+        end)
     end,
 })
 
