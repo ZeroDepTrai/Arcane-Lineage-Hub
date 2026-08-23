@@ -744,7 +744,6 @@ local function humanoidMeditateAndLevelUp()
 
     print(string.format("[AutoFarmLevel] 🧘 Đang bay tới Chiếu Thiền tại (%.1f, %.1f, %.1f)...", matPos.X, matPos.Y, matPos.Z))
 
-    -- Bay mượt mà tới chiếu thiền
     hum.PlatformStand = true
     local noclipConn = RunService.Stepped:Connect(function()
         local c = LocalPlayer.Character
@@ -769,26 +768,18 @@ local function humanoidMeditateAndLevelUp()
     hum:ChangeState(Enum.HumanoidStateType.Running)
     task.wait(0.5)
 
-    -- 2. Kích hoạt Thiền (Sử dụng Remote bản địa của Character + Phím M + ProximityPrompt)
-    print("[AutoFarmLevel] 🧘 Bắt đầu ngồi thiền nhập định...")
+    -- 2. Kích hoạt Thiền bản địa của game
+    print("[AutoFarmLevel] 🧘 Đang ngồi thiền nhập định vào Soul Corridor...")
     local medHandler = char:FindFirstChild("MeditateHandler")
     local medRemote = medHandler and medHandler:FindFirstChild("Meditate")
     if medRemote then
         pcall(function() medRemote:FireServer() end)
     end
-
-    local prox = nearestMat:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prox and fireproximityprompt then
-        fireproximityprompt(prox)
-    end
-    simulateKeyPress(Enum.KeyCode.M, 0.3)
     task.wait(1.5)
 
-    -- Đợi chuyển cảnh vào Soul Corridor
     local waited = 0
     while not isInSoulCorridor() and waited < 6 do
         if medRemote then pcall(function() medRemote:FireServer() end) end
-        if prox and fireproximityprompt then fireproximityprompt(prox) end
         simulateKeyPress(Enum.KeyCode.M, 0.3)
         task.wait(1.5)
         waited = waited + 1.5
@@ -796,7 +787,7 @@ local function humanoidMeditateAndLevelUp()
 
     if isInSoulCorridor() then
         print("[AutoFarmLevel] 🌌 Đã vào Hành Lang Linh Hồn (Soul Corridor) thành công!")
-        task.wait(1.0)
+        task.wait(0.8)
 
         -- 3. Di chuyển tới gặp NPC Aretim
         local aretimModel = workspace:FindFirstChild("NPCs") and workspace.NPCs:FindFirstChild("Aretim")
@@ -827,40 +818,66 @@ local function humanoidMeditateAndLevelUp()
         hum:ChangeState(Enum.HumanoidStateType.Running)
         task.wait(0.6)
 
-        -- 4. Tương tác hội thoại với Aretim để lên cấp
+        -- 4. Tương tác hội thoại với Aretim để mở Menu Thăng Cấp
         local aretimProx = aretimModel and aretimModel:FindFirstChildWhichIsA("ProximityPrompt", true)
         if aretimProx and fireproximityprompt then
             fireproximityprompt(aretimProx)
             print("[AutoFarmLevel] 💬 Đã tương tác với NPC Aretim.")
         end
-        task.wait(2.0)
+        task.wait(1.5)
 
-        -- Tự động bấm lựa chọn hội thoại thăng cấp
+        -- Tự động chọn thăng tối đa level ('Show me as much light as I can handle')
         local pgui = PlayerGui
-        for _, g in ipairs(pgui:GetChildren()) do
-            if g.Name:lower():find("dialog") or g.Name:lower():find("choice") or g.Name:lower():find("option") then
-                for _, btn in ipairs(g:GetDescendants()) do
-                    if btn:IsA("GuiButton") and btn.Visible then
-                        safeClickButton(btn)
-                        task.wait(0.3)
+        local diag = pgui:FindFirstChild("NPCDialogue")
+        if diag then
+            local optionsFrame = diag:FindFirstChild("Options", true)
+            if optionsFrame then
+                local clicked = false
+                for _, opt in ipairs(optionsFrame:GetChildren()) do
+                    if opt:IsA("TextButton") and opt.Visible then
+                        local txt = opt.Text:lower()
+                        if txt:find("as much light") or txt:find("lvls") then
+                            print(string.format("[AutoFarmLevel] 🆙 Đang bấm thăng cấp: '%s'", opt.Text))
+                            safeClickButton(opt)
+                            clicked = true
+                            break
+                        end
+                    end
+                end
+                if not clicked then
+                    for _, opt in ipairs(optionsFrame:GetChildren()) do
+                        if opt:IsA("TextButton") and opt.Visible and opt.Text:lower():find("+lvl") then
+                            print(string.format("[AutoFarmLevel] 🆙 Đang bấm thăng cấp: '%s'", opt.Text))
+                            safeClickButton(opt)
+                            break
+                        end
                     end
                 end
             end
         end
         task.wait(1.5)
 
-        -- 5. Tự động phân bổ điểm Stats
+        -- 5. Tự động phân bổ điểm Stats theo cấu hình và bấm Finish
         allocateStats()
+        task.wait(0.8)
+
+        local statAlloc = pgui.HUD and pgui.HUD:FindFirstChild("StatAllocateOLD", true)
+        if statAlloc then
+            local finishBtn = statAlloc:FindFirstChild("Finish")
+            if finishBtn then
+                safeClickButton(finishBtn)
+                print("[AutoFarmLevel] ✅ Đã bấm Finish phân bổ Stats.")
+            end
+        end
         task.wait(1.0)
 
         -- 6. Thoát khỏi Soul Corridor trở lại Overworld
-        print("[AutoFarmLevel] ⌨️ Thoát thiền để trở về...")
+        print("[AutoFarmLevel] 🧘 Thoát thiền để trở về Overworld...")
         local currentMedHandler = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("MeditateHandler")
         local currentMedRemote = currentMedHandler and currentMedHandler:FindFirstChild("Meditate")
         if currentMedRemote then
             pcall(function() currentMedRemote:FireServer() end)
         end
-        simulateKeyPress(Enum.KeyCode.M, 0.3)
         task.wait(2.0)
 
         local exitWaited = 0
