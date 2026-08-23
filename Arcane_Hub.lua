@@ -1179,11 +1179,11 @@ local function executeCombatTurn()
     local actionBG = combatGui:FindFirstChild("ActionBG")
     if not actionBG then return end
 
-    local actionChoice = Options.SelectedCombatAction and Options.SelectedCombatAction.Value or "Strike (Basic Attack)"
+    local actionChoice = Options.SelectedCombatAction and Options.SelectedCombatAction.Value or "Auto Smart (Best Skill -> Strike)"
     local customSkill = Options.CustomSkillName and Options.CustomSkillName.Value or ""
     local targetPrio = Options.TargetPriority and Options.TargetPriority.Value or "First Enemy"
 
-    -- 1. Click ContextPage AttackButton if visible
+    -- 1. Click ContextPage AttackButton nếu đang ở trang chủ Context
     local ctxPage = actionBG:FindFirstChild("ContextPage")
     if ctxPage and ctxPage.Visible then
         local atkBtn = ctxPage:FindFirstChild("AttackButton")
@@ -1193,33 +1193,30 @@ local function executeCombatTurn()
         end
     end
 
-    -- 2. Select Skill or Strike in AttacksPage.Attack.ScrollingFrame
+    -- 2. Chọn Skill / Strike trong AttacksPage.Attack.ScrollingFrame
     local atkPage = actionBG:FindFirstChild("AttacksPage")
     local attackFrame = atkPage and atkPage:FindFirstChild("Attack")
     local scrollFrame = attackFrame and attackFrame:FindFirstChild("ScrollingFrame")
 
-    if scrollFrame then
+    if scrollFrame and scrollFrame.Visible then
         local selectedSkillBtn = nil
 
+        local function isSkillReady(btn)
+            if not btn or not btn:IsA("GuiButton") or btn.Name == "Template" or btn.Name == "Return" then return false end
+            local cd = btn:FindFirstChild("CD")
+            if cd and cd.Visible then return false end
+            local sealed = btn:FindFirstChild("Sealed")
+            if sealed and sealed.Visible then return false end
+            return true
+        end
+
+        -- Ưu tiên 1: Custom Skill Name (nếu chỉ định và sẵn sàng)
         if actionChoice == "Custom Skill Name" and customSkill ~= "" then
             for _, btn in ipairs(scrollFrame:GetChildren()) do
-                if btn:IsA("GuiButton") and btn.Name ~= "Return" then
+                if isSkillReady(btn) then
                     local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
                     local textToMatch = nameLabel and nameLabel.Text or btn.Name
                     if textToMatch:lower():find(customSkill:lower()) then
-                        local cdFrame = btn:FindFirstChild("Cooldown", true) or btn:FindFirstChild("CoolDown", true)
-                        if not (cdFrame and cdFrame.Visible) then
-                            selectedSkillBtn = btn
-                            break
-                        end
-                    end
-                end
-            end
-        elseif actionChoice == "Auto Smart (Best Skill -> Strike)" or actionChoice == "First Available Skill (Fallback Strike)" then
-            for _, btn in ipairs(scrollFrame:GetChildren()) do
-                if btn:IsA("GuiButton") and btn.Name ~= "Strike" and btn.Name ~= "Template" and btn.Name ~= "Return" then
-                    local cdFrame = btn:FindFirstChild("Cooldown", true) or btn:FindFirstChild("CoolDown", true)
-                    if not (cdFrame and cdFrame.Visible) then
                         selectedSkillBtn = btn
                         break
                     end
@@ -1227,33 +1224,55 @@ local function executeCombatTurn()
             end
         end
 
-        -- Fallback to Strike
-        if not selectedSkillBtn then
-            selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChildWhichIsA("GuiButton")
+        -- Ưu tiên 2: Auto Smart (Chọn skill mạnh nhất / tốn Energy cao nhất đang SẴN SÀNG)
+        if not selectedSkillBtn and (actionChoice:find("Auto Smart") or actionChoice:find("First Available")) then
+            local bestSkill = nil
+            local maxCost = -1
+            for _, btn in ipairs(scrollFrame:GetChildren()) do
+                if isSkillReady(btn) and btn.Name ~= "Strike" and btn.Name ~= "Magic Missile" then
+                    local costText = btn:FindFirstChild("Cost") and btn.Cost:FindFirstChild("TextLabel") and btn.Cost.TextLabel.Text or "0"
+                    local costNum = tonumber(costText:match("%d+")) or 0
+                    if costNum > maxCost then
+                        maxCost = costNum
+                        bestSkill = btn
+                    end
+                end
+            end
+            if bestSkill then
+                selectedSkillBtn = bestSkill
+            end
+        end
+
+        -- Ưu tiên 3: Fallback về Strike / Magic Missile hoặc bất kỳ skill nào dùng được
+        if not selectedSkillBtn or not isSkillReady(selectedSkillBtn) then
+            selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChild("Magic Missile")
+            if not selectedSkillBtn or not isSkillReady(selectedSkillBtn) then
+                for _, btn in ipairs(scrollFrame:GetChildren()) do
+                    if isSkillReady(btn) then
+                        selectedSkillBtn = btn
+                        break
+                    end
+                end
+            end
         end
 
         if selectedSkillBtn then
+            local skillName = selectedSkillBtn.Name
+            print(string.format("[AutoFarmLevel] ⚔️ Đang kích hoạt đòn đánh: '%s'", skillName))
             safeClickButton(selectedSkillBtn)
-            task.wait(0.2)
+            task.wait(0.25)
         end
     end
 
-    -- 3. Select Target Enemy in AttacksPage.Enemies.ScrollingFrame
+    -- 3. Chọn mục tiêu quái (nếu là skill đánh quái mở bảng Enemies)
     local enemiesFrame = atkPage and atkPage:FindFirstChild("Enemies")
     local enemiesScroll = enemiesFrame and (enemiesFrame:FindFirstChild("ScrollingFrame") or enemiesFrame)
 
-    if enemiesScroll then
+    if enemiesFrame and enemiesFrame.Visible and enemiesScroll then
         local enemyButtons = {}
         for _, btn in ipairs(enemiesScroll:GetChildren()) do
-            if btn:IsA("GuiButton") and btn.Visible and btn.Name ~= "Return" then
+            if btn:IsA("GuiButton") and btn.Visible and btn.Name ~= "Return" and btn.Name ~= "Template" then
                 table.insert(enemyButtons, btn)
-            end
-        end
-        if #enemyButtons == 0 then
-            for _, btn in ipairs(enemiesScroll:GetDescendants()) do
-                if btn:IsA("GuiButton") and btn.Visible and btn.Name ~= "Return" then
-                    table.insert(enemyButtons, btn)
-                end
             end
         end
 
@@ -1272,7 +1291,7 @@ local function executeCombatTurn()
         end
     end
 
-    -- 4. Click Go confirmation button if visible
+    -- 4. Click Go confirmation button nếu xuất hiện
     local goBtn = combatGui:FindFirstChild("Go")
     if goBtn and goBtn.Visible then
         safeClickButton(goBtn)
