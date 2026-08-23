@@ -559,23 +559,38 @@ local function teleportToUndergroundSpot(targetSpot)
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not root or not hum then return false end
 
-    -- 1. Đảm bảo platform ngầm tồn tại
     ensureUndergroundPlatform(targetSpot)
 
     local targetCF = CFrame.new(targetSpot.X, targetSpot.Y + 4.0, targetSpot.Z)
     local distance = (root.Position - targetCF.Position).Magnitude
 
-    if distance > 3 then
-        print(string.format("[AutoFarmLevel] 🚀 Đang tween xuống vị trí ngầm tại (%.1f, %.1f, %.1f) - Khoảng cách: %.1f studs...", targetCF.X, targetCF.Y, targetCF.Z, distance))
-        local speed = (Options and Options.CruiseSpeed and Options.CruiseSpeed.Value) or 180
-        smoothTweenTo(targetCF, speed, function() return LevelFarmer.running end)
+    if distance > 2 then
+        print(string.format("[AutoFarmLevel] 🚀 Đang bay mượt mà xuống bãi ngầm tại (%.1f, %.1f, %.1f)...", targetCF.X, targetCF.Y, targetCF.Z))
+
+        hum.PlatformStand = true
+        local noclipConn = RunService.Stepped:Connect(function()
+            local c = LocalPlayer.Character
+            if c then
+                for _, p in ipairs(c:GetDescendants()) do
+                    if p:IsA("BasePart") then p.CanCollide = false end
+                end
+                local r = c:FindFirstChild("HumanoidRootPart")
+                if r then r.AssemblyLinearVelocity = Vector3.zero end
+            end
+        end)
+
+        local speed = 180
+        local duration = math.max(0.1, distance / speed)
+        local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), { CFrame = targetCF })
+        tween:Play()
+        tween.Completed:Wait()
+
+        noclipConn:Disconnect()
+        hum.PlatformStand = false
+        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
     end
 
-    -- 2. Đứng vững chắc trên sàn
-    disableFlightState()
-    hum.PlatformStand = false
-    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-    task.wait(0.2)
+    print("[AutoFarmLevel] ✅ Đã ở bãi ngầm an toàn!")
     return true
 end
 
@@ -687,10 +702,35 @@ local function performMeditationAndLevelUp()
 
     local matPos = nearestMat:GetPivot().Position
     local targetCF = CFrame.new(matPos.X, matPos.Y + 2.5, matPos.Z)
+    local distance = (root.Position - targetCF.Position).Magnitude
 
     print(string.format("[AutoFarmLevel] 🧘 Đang bay chớp nhoáng tới Chiếu Thiền tại (%.1f, %.1f, %.1f)...", matPos.X, matPos.Y, matPos.Z))
-    local tweenSuccess = smoothTweenTo(targetCF, 220, function() return LevelFarmer.running end)
-    if not tweenSuccess then return false end
+
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then hum.PlatformStand = true end
+
+    local noclipConn = RunService.Stepped:Connect(function()
+        local c = LocalPlayer.Character
+        if c then
+            for _, p in ipairs(c:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+            local r = c:FindFirstChild("HumanoidRootPart")
+            if r then r.AssemblyLinearVelocity = Vector3.zero end
+        end
+    end)
+
+    local speed = 220
+    local duration = math.max(0.1, distance / speed)
+    local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), { CFrame = targetCF })
+    tween:Play()
+    tween.Completed:Wait()
+
+    noclipConn:Disconnect()
+    if hum then
+        hum.PlatformStand = false
+        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+    end
 
     task.wait(0.2)
 
@@ -2147,22 +2187,7 @@ LevelGroup:AddSlider("CombatDelay", {
     Rounding = 1,
 })
 
-LevelGroup:AddButton({
-    Text = "🚀 Tween to Underground Spot Now",
-    Func = function()
-        LevelFarmer.running = true
-        teleportToUndergroundSpot(LevelFarmer.farmSpotLv1_20)
-    end,
-})
-
-LevelGroup:AddButton({
-    Text = "🧘 Meditate & Level Up Now",
-    Func = function()
-        task.spawn(function()
-            performMeditationAndLevelUp()
-        end)
-    end,
-})
+-- Fully automated Level Farming (No manual buttons needed)
 
 HopGroup:AddToggle("AutoServerHop", {
     Text = "Auto Server Hop",
