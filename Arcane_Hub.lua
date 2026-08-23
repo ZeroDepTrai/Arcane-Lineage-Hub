@@ -538,8 +538,9 @@ local LevelFarmer = {
     running = false,
     undergroundPlatform = nil,
     farmSpotLv1_20 = Vector3.new(5035.2, 595.0, -3969.5),
-    lastEssence = -1,
-    stableEssenceCount = 0,
+    essenceBeforeCombat = -1,
+    zeroGainFightCount = 0,
+    wasInCombat = false,
     lastMeditateTime = 0,
     aretimPos = Vector3.new(789.8, 238.0, 2120.8),
 }
@@ -708,8 +709,8 @@ end
 
 local function humanoidMeditateAndLevelUp()
     local now = os.clock()
-    if now - LevelFarmer.lastMeditateTime < 45 then
-        return false -- Cooldown debounce an toàn 45s
+    if now - LevelFarmer.lastMeditateTime < 30 then
+        return false
     end
     LevelFarmer.lastMeditateTime = now
 
@@ -739,25 +740,56 @@ local function humanoidMeditateAndLevelUp()
     end
 
     local matPos = nearestMat:GetPivot().Position
-    local targetCF = CFrame.new(matPos.X, matPos.Y + 2.5, matPos.Z)
+    local targetCF = CFrame.new(matPos.X, matPos.Y + 2.0, matPos.Z)
 
-    print(string.format("[AutoFarmLevel] 🧘 Đang di chuyển tới Chiếu Thiền tại (%.1f, %.1f, %.1f)...", matPos.X, matPos.Y, matPos.Z))
-    teleportToUndergroundSpot(matPos)
+    print(string.format("[AutoFarmLevel] 🧘 Đang bay tới Chiếu Thiền tại (%.1f, %.1f, %.1f)...", matPos.X, matPos.Y, matPos.Z))
+
+    -- Bay mượt mà tới chiếu thiền
+    hum.PlatformStand = true
+    local noclipConn = RunService.Stepped:Connect(function()
+        local c = LocalPlayer.Character
+        if c then
+            for _, p in ipairs(c:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+            local r = c:FindFirstChild("HumanoidRootPart")
+            if r then r.AssemblyLinearVelocity = Vector3.zero end
+        end
+    end)
+
+    local distance = (root.Position - targetCF.Position).Magnitude
+    local speed = 180
+    local duration = math.max(0.1, distance / speed)
+    local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), { CFrame = targetCF })
+    tween:Play()
+    tween.Completed:Wait()
+
+    noclipConn:Disconnect()
+    hum.PlatformStand = false
+    hum:ChangeState(Enum.HumanoidStateType.Running)
     task.wait(0.5)
 
-    -- 2. Giả lập bấm phím 'M' để vào Hành Lang Linh Hồn (Soul Corridor)
-    print("[AutoFarmLevel] ⌨️ Đang nhấn phím 'M' để thiền nhập định...")
-    simulateKeyPress(Enum.KeyCode.M, 0.3)
-    task.wait(1.0)
+    -- 2. Kích hoạt Thiền (Sử dụng Remote bản địa của Character + Phím M + ProximityPrompt)
+    print("[AutoFarmLevel] 🧘 Bắt đầu ngồi thiền nhập định...")
+    local medHandler = char:FindFirstChild("MeditateHandler")
+    local medRemote = medHandler and medHandler:FindFirstChild("Meditate")
+    if medRemote then
+        pcall(function() medRemote:FireServer() end)
+    end
 
-    -- Nếu chưa chuyển cảnh, bấm lại hoặc kích hoạt ProximityPrompt của Chiếu Thiền
+    local prox = nearestMat:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if prox and fireproximityprompt then
+        fireproximityprompt(prox)
+    end
+    simulateKeyPress(Enum.KeyCode.M, 0.3)
+    task.wait(1.5)
+
+    -- Đợi chuyển cảnh vào Soul Corridor
     local waited = 0
     while not isInSoulCorridor() and waited < 6 do
-        local prox = nearestMat:FindFirstChildWhichIsA("ProximityPrompt", true)
-        if prox and fireproximityprompt then
-            fireproximityprompt(prox)
-        end
-        simulateKeyPress(Enum.KeyCode.M, 0.25)
+        if medRemote then pcall(function() medRemote:FireServer() end) end
+        if prox and fireproximityprompt then fireproximityprompt(prox) end
+        simulateKeyPress(Enum.KeyCode.M, 0.3)
         task.wait(1.5)
         waited = waited + 1.5
     end
@@ -772,7 +804,27 @@ local function humanoidMeditateAndLevelUp()
         local aretimTargetCF = CFrame.new(aretimPos.X, aretimPos.Y + 2.0, aretimPos.Z - 4.0)
 
         print(string.format("[AutoFarmLevel] 🚶 Đang tới gặp NPC Aretim tại (%.1f, %.1f, %.1f)...", aretimPos.X, aretimPos.Y, aretimPos.Z))
-        teleportToUndergroundSpot(aretimTargetCF.Position)
+        
+        hum.PlatformStand = true
+        local noclipCorridor = RunService.Stepped:Connect(function()
+            local c = LocalPlayer.Character
+            if c then
+                for _, p in ipairs(c:GetDescendants()) do
+                    if p:IsA("BasePart") then p.CanCollide = false end
+                end
+                local r = c:FindFirstChild("HumanoidRootPart")
+                if r then r.AssemblyLinearVelocity = Vector3.zero end
+            end
+        end)
+
+        local dCorridor = (root.Position - aretimTargetCF.Position).Magnitude
+        local tCorridor = TweenService:Create(root, TweenInfo.new(math.max(0.1, dCorridor / 160), Enum.EasingStyle.Linear), { CFrame = aretimTargetCF })
+        tCorridor:Play()
+        tCorridor.Completed:Wait()
+
+        noclipCorridor:Disconnect()
+        hum.PlatformStand = false
+        hum:ChangeState(Enum.HumanoidStateType.Running)
         task.wait(0.6)
 
         -- 4. Tương tác hội thoại với Aretim để lên cấp
@@ -783,7 +835,7 @@ local function humanoidMeditateAndLevelUp()
         end
         task.wait(2.0)
 
-        -- Tự động bấm lựa chọn hội thoại nếu có
+        -- Tự động bấm lựa chọn hội thoại thăng cấp
         local pgui = PlayerGui
         for _, g in ipairs(pgui:GetChildren()) do
             if g.Name:lower():find("dialog") or g.Name:lower():find("choice") or g.Name:lower():find("option") then
@@ -797,17 +849,23 @@ local function humanoidMeditateAndLevelUp()
         end
         task.wait(1.5)
 
-        -- 5. Tự động phân bổ điểm Stats theo cấu hình
+        -- 5. Tự động phân bổ điểm Stats
         allocateStats()
         task.wait(1.0)
 
-        -- 6. Nhấn phím 'M' để rời Soul Corridor trở lại Overworld
-        print("[AutoFarmLevel] ⌨️ Nhấn phím 'M' để hoàn tất thiền và trở về...")
+        -- 6. Thoát khỏi Soul Corridor trở lại Overworld
+        print("[AutoFarmLevel] ⌨️ Thoát thiền để trở về...")
+        local currentMedHandler = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("MeditateHandler")
+        local currentMedRemote = currentMedHandler and currentMedHandler:FindFirstChild("Meditate")
+        if currentMedRemote then
+            pcall(function() currentMedRemote:FireServer() end)
+        end
         simulateKeyPress(Enum.KeyCode.M, 0.3)
         task.wait(2.0)
 
         local exitWaited = 0
         while isInSoulCorridor() and exitWaited < 6 do
+            if currentMedRemote then pcall(function() currentMedRemote:FireServer() end) end
             simulateKeyPress(Enum.KeyCode.M, 0.3)
             task.wait(1.5)
             exitWaited = exitWaited + 1.5
@@ -822,9 +880,9 @@ local function humanoidMeditateAndLevelUp()
     teleportToUndergroundSpot(spot)
     print("[AutoFarmLevel] 🛡️ Đã trở về bãi farm ngầm an toàn!")
 
-    -- Reset bộ đếm Essence delta
-    LevelFarmer.lastEssence = getCurrentEssence()
-    LevelFarmer.stableEssenceCount = 0
+    -- Reset bộ đếm Essence sau trận
+    LevelFarmer.essenceBeforeCombat = getCurrentEssence()
+    LevelFarmer.zeroGainFightCount = 0
     return true
 end
 
@@ -1025,6 +1083,12 @@ function LevelFarmer.runCycle()
 
         while LevelFarmer.running do
             if isInCombat() then
+                if not LevelFarmer.wasInCombat then
+                    -- Bắt đầu vào trận -> Lưu lại lượng Essence trước khi đánh
+                    LevelFarmer.wasInCombat = true
+                    LevelFarmer.essenceBeforeCombat = getCurrentEssence()
+                end
+
                 if isPlayerTurn() then
                     executeCombatTurn()
                     local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.4
@@ -1033,26 +1097,26 @@ function LevelFarmer.runCycle()
                     task.wait(0.2)
                 end
             else
-                -- Kiểm tra lượng Essence sau trận đánh (So sánh delta)
-                if Toggles.AutoMeditate and Toggles.AutoMeditate.Value then
-                    local curEssence = getCurrentEssence()
-                    if LevelFarmer.lastEssence < 0 then
-                        LevelFarmer.lastEssence = curEssence
-                    elseif curEssence > LevelFarmer.lastEssence then
-                        -- Essence vẫn đang tăng -> Nhân vật vẫn chưa chạm cap -> Đứng im farm tiếp
-                        LevelFarmer.lastEssence = curEssence
-                        LevelFarmer.stableEssenceCount = 0
-                    elseif curEssence == LevelFarmer.lastEssence and curEssence >= 10 then
-                        -- Essence không tăng thêm sau trận -> Đã đạt mốc Cap tối đa của level hiện tại
-                        LevelFarmer.stableEssenceCount = LevelFarmer.stableEssenceCount + 1
-                        if LevelFarmer.stableEssenceCount >= 2 then
-                            print(string.format("[AutoFarmLevel] 🔮 Phát hiện Essence đã chạm Cap tối đa (%d Essence) -> Bắt đầu chu trình đi thiền...", curEssence))
+                if LevelFarmer.wasInCombat then
+                    -- Vừa kết thúc trận đánh! So sánh Essence trước và sau trận
+                    LevelFarmer.wasInCombat = false
+                    local essenceAfterFight = getCurrentEssence()
+
+                    if essenceAfterFight > LevelFarmer.essenceBeforeCombat then
+                        -- Essence có tăng -> Vẫn chưa chạm Cap -> Đứng im farm tiếp
+                        LevelFarmer.zeroGainFightCount = 0
+                        LevelFarmer.essenceBeforeCombat = essenceAfterFight
+                    elseif essenceAfterFight == LevelFarmer.essenceBeforeCombat and essenceAfterFight >= 10 then
+                        -- Thắng trận nhưng Essence không tăng -> Đã chạm mốc Cap tối đa!
+                        LevelFarmer.zeroGainFightCount = LevelFarmer.zeroGainFightCount + 1
+                        if LevelFarmer.zeroGainFightCount >= 2 and (Toggles.AutoMeditate and Toggles.AutoMeditate.Value) then
+                            print(string.format("[AutoFarmLevel] 🔮 Phát hiện Essence đã chạm Cap tối đa (%d Essence) -> Bắt đầu chu trình đi thiền...", essenceAfterFight))
                             humanoidMeditateAndLevelUp()
                         end
                     end
                 end
 
-                -- Giữ vị trí ngầm an toàn
+                -- Giữ vị trí ngầm an toàn khi đứng chờ trận mới
                 local currentMode = (Options and Options.FarmLevelMode and Options.FarmLevelMode.Value) or "Level 1 - 20 (Underground)"
                 if tostring(currentMode):find("Level 1 - 20") and not isInSoulCorridor() then
                     local char = LocalPlayer.Character
@@ -1067,7 +1131,7 @@ function LevelFarmer.runCycle()
                         end
                     end
                 end
-                task.wait(0.5)
+                task.wait(0.4)
             end
             task.wait(0.1)
         end
