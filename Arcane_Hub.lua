@@ -709,7 +709,7 @@ end
 
 local function humanoidMeditateAndLevelUp()
     local now = os.clock()
-    if now - LevelFarmer.lastMeditateTime < 30 then
+    if now - LevelFarmer.lastMeditateTime < 5 then
         return false
     end
     LevelFarmer.lastMeditateTime = now
@@ -1159,15 +1159,36 @@ function LevelFarmer.runCycle()
                     LevelFarmer.wasInCombat = false
                     print("[AutoFarmLevel] 🏆 Trận đấu kết thúc!")
 
-                    local currentEss = getCurrentEssence()
-                    print(string.format("[AutoFarmLevel] 📊 Essence hiện tại: %d", currentEss))
+                    local initialEssence = LevelFarmer.essenceBeforeCombat
+                    local newEssence = getCurrentEssence()
+                    local startWait = os.clock()
 
-                    -- TẠM THỜI DISABLE CHECK ESSENCE (Theo yêu cầu test tăng stats):
-                    -- Ngay khi xong trận, nếu bật Auto Meditate thì sẽ tự động bay đi thiền & tăng stats ngay
+                    -- Chờ tối đa 3.5s để server nạp thưởng Essence
+                    while os.clock() - startWait < 3.5 do
+                        newEssence = getCurrentEssence()
+                        if newEssence > initialEssence then
+                            break
+                        end
+                        task.wait(0.3)
+                    end
+
+                    print(string.format("[AutoFarmLevel] 📊 Essence trước trận: %d | Essence sau trận: %d", initialEssence, newEssence))
+
                     if Toggles.AutoMeditate and Toggles.AutoMeditate.Value then
-                        print("[AutoFarmLevel] 🧘 (Bỏ qua check Essence) -> Bắt đầu chu trình đi thiền & tăng stats ngay...")
-                        humanoidMeditateAndLevelUp()
+                        if newEssence >= 10 and newEssence == initialEssence then
+                            -- Chạm Cap Essence -> Đi thiền
+                            print(string.format("[AutoFarmLevel] 🔮 Xác nhận Essence đã chạm Cap (%d Essence) -> Bay đi thiền & tăng level...", newEssence))
+                            humanoidMeditateAndLevelUp()
+                        elseif newEssence > 0 and (Options and Options.TestMeditateAlways and Options.TestMeditateAlways.Value) then
+                            -- Nếu bật chế độ test thiền luôn
+                            print(string.format("[AutoFarmLevel] 🧘 Có %d Essence -> Bay đi thiền để tăng level & stats...", newEssence))
+                            humanoidMeditateAndLevelUp()
+                        else
+                            LevelFarmer.essenceBeforeCombat = newEssence
+                            task.wait(0.5)
+                        end
                     else
+                        LevelFarmer.essenceBeforeCombat = newEssence
                         task.wait(0.5)
                     end
                 end
