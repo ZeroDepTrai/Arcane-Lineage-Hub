@@ -535,11 +535,63 @@ function Farmer.stop()
 end
 
 -- =============================================================================
--- AUTO FARM LEVEL & COMBAT HELPER (PERFECTED AUTO ATTACK, SKILL & TARGET ENGINE)
+-- AUTO FARM LEVEL & COMBAT HELPER (LEVEL 1-20 UNDERGROUND & LEVEL 20-50 ENGINE)
 -- =============================================================================
 local LevelFarmer = {
     running = false,
+    undergroundPlatform = nil,
+    farmSpotLv1_20 = Vector3.new(5035.2, 595.0, -3969.5),
 }
+
+local function ensureUndergroundPlatform(targetPos)
+    local plat = workspace:FindFirstChild("ArcaneFarmPlatform")
+    if not plat then
+        plat = Instance.new("Part")
+        plat.Name = "ArcaneFarmPlatform"
+        plat.Size = Vector3.new(16, 2, 16)
+        plat.Anchored = true
+        plat.CanCollide = true
+        plat.Material = Enum.Material.SmoothPlastic
+        plat.Color = Color3.fromRGB(35, 35, 35)
+        plat.Parent = workspace
+    end
+    plat.Position = targetPos
+    LevelFarmer.undergroundPlatform = plat
+    return plat
+end
+
+local function removeUndergroundPlatform()
+    local plat = workspace:FindFirstChild("ArcaneFarmPlatform")
+    if plat then plat:Destroy() end
+    LevelFarmer.undergroundPlatform = nil
+end
+
+local function teleportToUndergroundSpot(targetSpot)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum then return false end
+
+    -- Ensure platform exists
+    ensureUndergroundPlatform(targetSpot)
+
+    local targetCF = CFrame.new(targetSpot.X, targetSpot.Y + 4.0, targetSpot.Z)
+    local distance = (root.Position - targetCF.Position).Magnitude
+
+    if distance > 5 then
+        print(string.format("[AutoFarmLevel] 🚀 Đang tween xuống vị trí ngầm tại (%.1f, %.1f, %.1f)...", targetCF.X, targetCF.Y, targetCF.Z))
+        local speed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 120
+        local tweenSuccess = smoothTweenTo(targetCF, speed, function() return LevelFarmer.running end)
+        if not tweenSuccess then return false end
+    end
+
+    -- Settle firmly on platform
+    disableFlightState()
+    hum.PlatformStand = false
+    hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+    task.wait(0.2)
+    return true
+end
 
 local function safeClickButton(btn)
     if not btn or not btn:IsA("GuiButton") then return false end
@@ -723,7 +775,15 @@ function LevelFarmer.runCycle()
     LevelFarmer.running = true
 
     task.spawn(function()
-        print("[AutoCombat] ⚔️ Bật Auto Combat Helper (Tự động tung chiêu & chọn mục tiêu)...")
+        local mode = Options.FarmLevelMode and Options.FarmLevelMode.Value or "Level 1 - 20 (Underground)"
+        print(string.format("[AutoFarmLevel] ⚔️ Bắt đầu Auto Farm Level - Chế độ: %s", mode))
+
+        -- If Level 1 - 20, ensure we are at the underground spot first
+        if mode:find("Level 1 - 20") then
+            local spot = LevelFarmer.farmSpotLv1_20
+            ensureUndergroundPlatform(spot)
+            teleportToUndergroundSpot(spot)
+        end
 
         while LevelFarmer.running do
             if isInCombat() then
@@ -735,17 +795,32 @@ function LevelFarmer.runCycle()
                     task.wait(0.2)
                 end
             else
-                -- Stand still in overworld
-                task.wait(0.3)
+                -- If out of combat and in Level 1 - 20 mode, check if we drifted or need repositioning
+                local currentMode = Options.FarmLevelMode and Options.FarmLevelMode.Value or "Level 1 - 20 (Underground)"
+                if currentMode:find("Level 1 - 20") then
+                    local char = LocalPlayer.Character
+                    local root = char and char:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        local spot = LevelFarmer.farmSpotLv1_20
+                        ensureUndergroundPlatform(spot)
+                        local dist = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(spot.X, 0, spot.Z)).Magnitude
+                        local yDiff = math.abs(root.Position.Y - (spot.Y + 4.0))
+                        if dist > 8 or yDiff > 6 then
+                            teleportToUndergroundSpot(spot)
+                        end
+                    end
+                end
+                task.wait(0.4)
             end
             task.wait(0.1)
         end
-        print("[AutoCombat] ⏹️ Đã dừng Auto Combat Helper.")
+        print("[AutoFarmLevel] ⏹️ Đã dừng Auto Farm Level.")
     end)
 end
 
 function LevelFarmer.stop()
     LevelFarmer.running = false
+    disableFlightState()
 end
 
 -- =============================================================================
@@ -1803,12 +1878,23 @@ MineGroup:AddButton({
 })
 
 LevelGroup:AddToggle("AutoFarmLevel", {
-    Text = "Enable Auto Combat Helper",
+    Text = "Enable Auto Farm Level",
     Default = false,
-    Tooltip = "Đứng im một chỗ -> Khi vào trận đấu (Random Encounter/PvE) sẽ tự động dùng Skill / Strike và tự chọn mục tiêu quái",
+    Tooltip = "Tự động tween tới bãi farm (dưới lòng đất với Lv 1-20) và tự động chiến đấu / giải QTE khi vào trận",
     Callback = function(Value)
         if Value then LevelFarmer.runCycle() else LevelFarmer.stop() end
     end
+})
+
+LevelGroup:AddDropdown("FarmLevelMode", {
+    Values = {
+        "Level 1 - 20 (Underground)",
+        "Level 20 - 50 (Coming Soon)"
+    },
+    Default = 1,
+    Multi = false,
+    Text = "Farm Level Mode",
+    Tooltip = "Level 1-20: Tween xuống lòng đất an toàn, tránh người chơi khác nhìn thấy\nLevel 20-50: Tùy chọn nâng cao tiếp theo",
 })
 
 LevelGroup:AddDropdown("SelectedCombatAction", {
@@ -1848,6 +1934,14 @@ LevelGroup:AddSlider("CombatDelay", {
     Min = 0.1,
     Max = 2.0,
     Rounding = 1,
+})
+
+LevelGroup:AddButton({
+    Text = "🚀 Tween to Underground Spot Now",
+    Func = function()
+        LevelFarmer.running = true
+        teleportToUndergroundSpot(LevelFarmer.farmSpotLv1_20)
+    end,
 })
 
 HopGroup:AddToggle("AutoServerHop", {
@@ -2302,6 +2396,7 @@ ThemeManager:ApplyToTab(Tabs.Settings)
 local MenuGroup = Tabs.Settings:AddRightGroupbox("Menu Settings")
 
 MenuGroup:AddButton("Unload Script", function()
+    pcall(function() removeUndergroundPlatform() end)
     Library:Unload()
 end)
 
