@@ -744,9 +744,15 @@ local function allocateStats()
             local spdTarget = Options.TargetSpeed and Options.TargetSpeed.Value or 10
             local lckTarget = Options.TargetLuck and Options.TargetLuck.Value or 10
 
-            -- Tính toán cộng theo mốc Target
+            print(string.format("[AutoFarmLevel] 📋 Stats hiện tại: Str:%d/%d, Arc:%d/%d, End:%d/%d, Spd:%d/%d, Lck:%d/%d", 
+                strCur, strTarget, arcCur, arcTarget, endCur, endTarget, spdCur, spdTarget, lckCur, lckTarget))
+
+            -- Tính toán phân bổ điểm theo mốc Target (Ưu tiên theo thứ tự cấu hình)
             local strAdd = math.min(availPoints, math.max(0, strTarget - strCur))
             availPoints = availPoints - strAdd
+
+            local arcAdd = math.min(availPoints, math.max(0, arcTarget - arcCur))
+            availPoints = availPoints - arcAdd
 
             local endAdd = math.min(availPoints, math.max(0, endTarget - endCur))
             availPoints = availPoints - endAdd
@@ -754,28 +760,43 @@ local function allocateStats()
             local spdAdd = math.min(availPoints, math.max(0, spdTarget - spdCur))
             availPoints = availPoints - spdAdd
 
-            local arcAdd = math.min(availPoints, math.max(0, arcTarget - arcCur))
-            availPoints = availPoints - arcAdd
-
             local lckAdd = math.min(availPoints, math.max(0, lckTarget - lckCur))
             availPoints = availPoints - lckAdd
 
-            -- Nếu còn thừa điểm (Game yêu cầu cộng hết u12 == 0 mới cho Finish), dồn vào Endurance / Strength
+            -- Nếu còn thừa điểm (Game bắt buộc cộng hết u12 == 0 mới cho bấm Finish):
+            -- Tự động dồn vào chỉ số có target cao nhất
             if availPoints > 0 then
-                endAdd = endAdd + availPoints
+                if strTarget >= endTarget and strTarget >= arcTarget and strTarget > 0 then
+                    strAdd = strAdd + availPoints
+                elseif arcTarget >= strTarget and arcTarget >= endTarget and arcTarget > 0 then
+                    arcAdd = arcAdd + availPoints
+                else
+                    endAdd = endAdd + availPoints
+                end
                 availPoints = 0
             end
 
             -- Click các nút Up trong container
             local function clickLevelUpButton(statName, count)
                 if count <= 0 then return end
+                local upBtn = nil
                 for _, d in ipairs(container:GetDescendants()) do
                     if d:IsA("ImageButton") and d.Name:find(statName) and d.Name:find("Up") then
-                        for _ = 1, count do
-                            safeClickButton(d)
-                            task.wait(0.03)
-                        end
+                        upBtn = d
                         break
+                    end
+                end
+                if not upBtn then return end
+
+                local toAllocBox = container:FindFirstChild("ToAllocate", true)
+                if toAllocBox and toAllocBox:IsA("TextBox") then
+                    toAllocBox.Text = tostring(count)
+                    safeClickButton(upBtn)
+                    task.wait(0.08)
+                else
+                    for _ = 1, count do
+                        safeClickButton(upBtn)
+                        task.wait(0.02)
                     end
                 end
             end
@@ -795,7 +816,7 @@ local function allocateStats()
             -- Đồng bộ Remote 5 tham số
             local RS = game:GetService("ReplicatedStorage")
             local statRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Information") and RS.Remotes.Information:FindFirstChild("StatAllocation")
-            if statRemote then
+            if statRemote and (strAdd + arcAdd + endAdd + spdAdd + lckAdd > 0) then
                 pcall(function()
                     statRemote:FireServer(strAdd, arcAdd, endAdd, spdAdd, lckAdd)
                 end)
@@ -842,17 +863,23 @@ local function allocateStats()
 
         local strAdd = math.min(availPoints, math.max(0, strTarget - strCur))
         availPoints = availPoints - strAdd
+        local arcAdd = math.min(availPoints, math.max(0, arcTarget - arcCur))
+        availPoints = availPoints - arcAdd
         local endAdd = math.min(availPoints, math.max(0, endTarget - endCur))
         availPoints = availPoints - endAdd
         local spdAdd = math.min(availPoints, math.max(0, spdTarget - spdCur))
         availPoints = availPoints - spdAdd
-        local arcAdd = math.min(availPoints, math.max(0, arcTarget - arcCur))
-        availPoints = availPoints - arcAdd
         local lckAdd = math.min(availPoints, math.max(0, lckTarget - lckCur))
         availPoints = availPoints - lckAdd
 
         if availPoints > 0 then
-            endAdd = endAdd + availPoints
+            if strTarget >= endTarget and strTarget >= arcTarget and strTarget > 0 then
+                strAdd = strAdd + availPoints
+            elseif arcTarget >= strTarget and arcTarget >= endTarget and arcTarget > 0 then
+                arcAdd = arcAdd + availPoints
+            else
+                endAdd = endAdd + availPoints
+            end
             availPoints = 0
         end
 
@@ -861,7 +888,7 @@ local function allocateStats()
             if btn then
                 for _ = 1, count do
                     safeClickButton(btn)
-                    task.wait(0.04)
+                    task.wait(0.03)
                 end
             end
         end
@@ -878,7 +905,7 @@ local function allocateStats()
 
         local RS = game:GetService("ReplicatedStorage")
         local statRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Information") and RS.Remotes.Information:FindFirstChild("StatAllocation")
-        if statRemote then
+        if statRemote and (strAdd + arcAdd + endAdd + spdAdd + lckAdd > 0) then
             pcall(function()
                 statRemote:FireServer(strAdd, arcAdd, endAdd, spdAdd, lckAdd)
             end)
@@ -2552,7 +2579,7 @@ LevelGroup:AddSlider("TargetStrength", {
     Text = "Target Strength",
     Default = 20,
     Min = 0,
-    Max = 60,
+    Max = 200,
     Rounding = 0,
 })
 
@@ -2560,7 +2587,7 @@ LevelGroup:AddSlider("TargetEndurance", {
     Text = "Target Endurance",
     Default = 20,
     Min = 0,
-    Max = 60,
+    Max = 200,
     Rounding = 0,
 })
 
@@ -2568,7 +2595,7 @@ LevelGroup:AddSlider("TargetSpeed", {
     Text = "Target Speed",
     Default = 10,
     Min = 0,
-    Max = 60,
+    Max = 200,
     Rounding = 0,
 })
 
@@ -2576,7 +2603,7 @@ LevelGroup:AddSlider("TargetArcane", {
     Text = "Target Arcane",
     Default = 0,
     Min = 0,
-    Max = 60,
+    Max = 200,
     Rounding = 0,
 })
 
@@ -2584,7 +2611,7 @@ LevelGroup:AddSlider("TargetLuck", {
     Text = "Target Luck",
     Default = 10,
     Min = 0,
-    Max = 60,
+    Max = 200,
     Rounding = 0,
 })
 
