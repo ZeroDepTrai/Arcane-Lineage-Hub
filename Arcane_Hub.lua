@@ -768,21 +768,21 @@ local function humanoidMeditateAndLevelUp()
     hum:ChangeState(Enum.HumanoidStateType.Running)
     task.wait(0.5)
 
-    -- 2. Kích hoạt Thiền bản địa của game
+    -- 2. Kích hoạt Thiền bản địa của game (Chờ 4s để hoàn tất hoạt ảnh ngồi và chuyển cảnh)
     print("[AutoFarmLevel] 🧘 Đang ngồi thiền nhập định vào Soul Corridor...")
     local medHandler = char:FindFirstChild("MeditateHandler")
     local medRemote = medHandler and medHandler:FindFirstChild("Meditate")
     if medRemote then
         pcall(function() medRemote:FireServer() end)
     end
-    task.wait(1.5)
+    task.wait(4.0)
 
     local waited = 0
-    while not isInSoulCorridor() and waited < 6 do
+    while not isInSoulCorridor() and waited < 8 do
         if medRemote then pcall(function() medRemote:FireServer() end) end
         simulateKeyPress(Enum.KeyCode.M, 0.3)
-        task.wait(1.5)
-        waited = waited + 1.5
+        task.wait(2.0)
+        waited = waited + 2.0
     end
 
     if isInSoulCorridor() then
@@ -871,21 +871,21 @@ local function humanoidMeditateAndLevelUp()
         end
         task.wait(1.0)
 
-        -- 6. Thoát khỏi Soul Corridor trở lại Overworld
+        -- 6. Thoát khỏi Soul Corridor trở lại Overworld (Chờ 4s để chuyển cảnh trở về)
         print("[AutoFarmLevel] 🧘 Thoát thiền để trở về Overworld...")
         local currentMedHandler = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("MeditateHandler")
         local currentMedRemote = currentMedHandler and currentMedHandler:FindFirstChild("Meditate")
         if currentMedRemote then
             pcall(function() currentMedRemote:FireServer() end)
         end
-        task.wait(2.0)
+        task.wait(4.0)
 
         local exitWaited = 0
-        while isInSoulCorridor() and exitWaited < 6 do
+        while isInSoulCorridor() and exitWaited < 8 do
             if currentMedRemote then pcall(function() currentMedRemote:FireServer() end) end
             simulateKeyPress(Enum.KeyCode.M, 0.3)
-            task.wait(1.5)
-            exitWaited = exitWaited + 1.5
+            task.wait(2.0)
+            exitWaited = exitWaited + 2.0
         end
     else
         print("[AutoFarmLevel] ⚠️ Chưa thể vào Soul Corridor trong đợt này.")
