@@ -817,7 +817,13 @@ local function isInCombat()
     local pgui = PlayerGui
     local combatGui = pgui and pgui:FindFirstChild("Combat")
     if combatGui and combatGui.Enabled then
-        return true
+        local actionBG = combatGui:FindFirstChild("ActionBG")
+        local deciding = combatGui:FindFirstChild("Deciding")
+        local initiative = combatGui:FindFirstChild("InitiativeBG")
+        local dodge = combatGui:FindFirstChild("DodgeQTE")
+        if (actionBG and actionBG.Visible) or (deciding and deciding.Visible) or (initiative and initiative.Visible) or (dodge and dodge.Visible) then
+            return true
+        end
     end
     local fFolder = workspace:FindFirstChild("Fights")
     if fFolder and LocalPlayer.Character then
