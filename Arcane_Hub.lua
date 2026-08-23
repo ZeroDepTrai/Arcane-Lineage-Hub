@@ -364,7 +364,8 @@ end
 local function smoothTweenTo(targetCFrame, speed, cancelCheckFn)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
-    if not root then return false end
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum then return false end
 
     enableFlightState()
 
@@ -377,24 +378,25 @@ local function smoothTweenTo(targetCFrame, speed, cancelCheckFn)
     tween:Play()
 
     local completed = false
-    local conn
-    conn = tween.Completed:Connect(function()
+    task.spawn(function()
+        tween.Completed:Wait()
         completed = true
-        if conn then conn:Disconnect() end
     end)
 
-    while not completed do
+    local startTime = os.clock()
+    while not completed and (os.clock() - startTime < duration + 2) do
         if cancelCheckFn and not cancelCheckFn() then
-            tween:Cancel()
+            pcall(function() tween:Cancel() end)
             FlightController.currentTween = nil
             disableFlightState()
             return false
         end
-        task.wait()
+        task.wait(0.04)
     end
 
     FlightController.currentTween = nil
-    return completed
+    disableFlightState()
+    return true
 end
 
 -- =============================================================================
@@ -557,20 +559,19 @@ local function teleportToUndergroundSpot(targetSpot)
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not root or not hum then return false end
 
-    -- Ensure platform exists
+    -- 1. Đảm bảo platform ngầm tồn tại
     ensureUndergroundPlatform(targetSpot)
 
     local targetCF = CFrame.new(targetSpot.X, targetSpot.Y + 4.0, targetSpot.Z)
     local distance = (root.Position - targetCF.Position).Magnitude
 
-    if distance > 5 then
-        print(string.format("[AutoFarmLevel] 🚀 Đang tween xuống vị trí ngầm tại (%.1f, %.1f, %.1f)...", targetCF.X, targetCF.Y, targetCF.Z))
-        local speed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 150
-        local tweenSuccess = smoothTweenTo(targetCF, speed, function() return LevelFarmer.running end)
-        if not tweenSuccess then return false end
+    if distance > 3 then
+        print(string.format("[AutoFarmLevel] 🚀 Đang tween xuống vị trí ngầm tại (%.1f, %.1f, %.1f) - Khoảng cách: %.1f studs...", targetCF.X, targetCF.Y, targetCF.Z, distance))
+        local speed = (Options and Options.CruiseSpeed and Options.CruiseSpeed.Value) or 180
+        smoothTweenTo(targetCF, speed, function() return LevelFarmer.running end)
     end
 
-    -- Settle firmly on platform
+    -- 2. Đứng vững chắc trên sàn
     disableFlightState()
     hum.PlatformStand = false
     hum:ChangeState(Enum.HumanoidStateType.GettingUp)
