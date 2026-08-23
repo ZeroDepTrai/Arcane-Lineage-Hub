@@ -419,6 +419,19 @@ local Farmer = {
     running = false,
 }
 
+local function calculateSafeStandPosition(targetPos)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local curPos = root and root.Position or (targetPos + Vector3.new(0, 0, 5))
+    
+    local flatDir = Vector3.new(curPos.X - targetPos.X, 0, curPos.Z - targetPos.Z)
+    if flatDir.Magnitude < 0.1 then flatDir = Vector3.new(0, 0, 4.5) end
+    
+    -- Đứng cách tâm mỏ quặng/item 4.5 studs ở ngoài khoảng trống an toàn
+    local standPos = targetPos + flatDir.Unit * 4.5 + Vector3.new(0, 1.5, 0)
+    return standPos
+end
+
 local function flyToItem(targetPosition, cancelCheckFn)
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -429,16 +442,19 @@ local function flyToItem(targetPosition, cancelCheckFn)
 
     local currentPos = root.Position
     local distance = (currentPos - targetPosition).Magnitude
+    local safeArrivalPos = calculateSafeStandPosition(targetPosition)
 
-    -- 1. KHOẢNG CÁCH GẦN (DƯỚI 60 STUDS): DỊCH CHUYỂN TỨC THÌ (INSTANT TP)
-    -- Loại bỏ hoàn toàn va chạm địa hình, không rớt void, không delay, an toàn 100% không bị anti-cheat
-    if distance < 60 then
-        root.CFrame = CFrame.lookAt(Vector3.new(targetPosition.X, targetPosition.Y + 2.5, targetPosition.Z), targetPosition)
-        task.wait(0.15)
+    -- 1. KHOẢNG CÁCH DƯỚI 200 STUDS: DỊCH CHUYỂN AN TOÀN TỨC THÌ (INSTANT SAFE TP)
+    -- Đã test thực tế: Game không có anti-cheat khoảng cách TP, triệt tiêu hoàn toàn rung lắc & va chạm khối
+    if distance < 200 then
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+        root.CFrame = CFrame.lookAt(safeArrivalPos, Vector3.new(targetPosition.X, safeArrivalPos.Y, targetPosition.Z))
+        task.wait(0.12)
         return true
     end
 
-    -- 2. KHOẢNG CÁCH XA (>= 60 STUDS): SKY-TWEEN 3 PHA LIÊN TỤC (GIỮ NGUYÊN FLIGHT STATE)
+    -- 2. KHOẢNG CÁCH XA (>= 200 STUDS): SKY-TWEEN 3 PHA LIÊN TỤC
     enableFlightState()
 
     local cruiseSpeed = Options.CruiseSpeed and Options.CruiseSpeed.Value or 180
@@ -456,14 +472,19 @@ local function flyToItem(targetPosition, cancelCheckFn)
     end
 
     -- Pha 2: Lướt ngang trên tầng không
-    local s2 = smoothTweenTo(CFrame.new(targetPosition.X, skyY, targetPosition.Z), cruiseSpeed, cancelFn, true)
+    local s2 = smoothTweenTo(CFrame.new(safeArrivalPos.X, skyY, safeArrivalPos.Z), cruiseSpeed, cancelFn, true)
     if not s2 or not cancelFn() then
         disableFlightState()
         return false
     end
 
-    -- Pha 3: Hạ cánh xuống vị trí mục tiêu
-    local s3 = smoothTweenTo(CFrame.new(targetPosition.X, targetPosition.Y + 2.5, targetPosition.Z), descendSpeed, cancelFn, false)
+    -- Pha 3: Hạ cánh xuống điểm đứng an toàn bên ngoài mỏ quặng
+    local s3 = smoothTweenTo(CFrame.lookAt(safeArrivalPos, Vector3.new(targetPosition.X, safeArrivalPos.Y, targetPosition.Z)), descendSpeed, cancelFn, false)
+    
+    if root then
+        root.AssemblyLinearVelocity = Vector3.zero
+        root.AssemblyAngularVelocity = Vector3.zero
+    end
     return s3
 end
 
@@ -1802,13 +1823,54 @@ local function buyPickaxe()
     return false
 end
 
+local function getInventoryOreCount()
+    local total = 0
+    pcall(function()
+        local pgui = PlayerGui
+        local inv = pgui and pgui:FindFirstChild("Inventory")
+        local invScript = inv and inv:FindFirstChildWhichIsA("LocalScript", true)
+        if invScript and getsenv and getupvalues then
+            local env = getsenv(invScript)
+            if env and env.newTile then
+                local uvs = getupvalues(env.newTile)
+                local itemDict = uvs[6]
+                if itemDict then
+                    for k, v in pairs(itemDict) do
+                        local itemName = v.Tool or (v.ItemData and v.ItemData.Name) or ""
+                        local amount = (v.ItemAmount and v.ItemAmount.Value) or (v.ItemData and tonumber(v.ItemData.Count)) or 1
+                        if itemName:lower():find("ore") then
+                            total = total + amount
+                        end
+                    end
+                    return
+                end
+            end
+        end
+
+        if inv then
+            for _, desc in ipairs(inv:GetDescendants()) do
+                if desc:IsA("TextButton") and desc.Text:lower():find("ore") then
+                    local amtVal = desc:FindFirstChild("ItemAmount")
+                    local amtLbl = desc:FindFirstChild("AmountLabel")
+                    local count = amtVal and amtVal.Value or (amtLbl and tonumber(amtLbl.Text:match("%d+")) or 1)
+                    total = total + count
+                end
+            end
+        end
+    end)
+    return total
+end
+
 local function mineOreNode(oreModel)
     if not oreModel or not oreModel.Parent or not oreModel:IsDescendantOf(workspace) then return false end
     local startTime = os.clock()
     local timeout = Options.MineTimeout and Options.MineTimeout.Value or 15
     local swingDelay = (Options.MineSwingDelay and Options.MineSwingDelay.Value) or 0.18
 
-    -- Đảm bảo cuốc được trang bị 1 lần trước khi đập
+    -- 1. Lưu lại tổng số quặng trong túi đồ trước khi đập
+    local initialOreCount = getInventoryOreCount()
+
+    -- 2. Đảm bảo cuốc được trang bị từ Inventory
     equipPickaxe()
 
     local char = LocalPlayer.Character
@@ -1816,10 +1878,17 @@ local function mineOreNode(oreModel)
     local orePart = oreModel:FindFirstChild("Ore") or oreModel:FindFirstChildWhichIsA("BasePart")
     if not orePart then return false end
 
-    print(string.format("[AutoMine] ⛏️ Bắt đầu vung cuốc đập mỏ %s (Tốc độ: %.2fs/hit)...", oreModel.Name, swingDelay))
+    print(string.format("[AutoMine] ⛏️ Bắt đầu vung cuốc đập mỏ %s (Quặng trong kho: %d, Tốc độ: %.2fs/hit)...", oreModel.Name, initialOreCount, swingDelay))
 
     while (os.clock() - startTime < timeout) and Miner.running do
-        -- 1. KIỂM TRA ĐIỀU KIỆN MỎ QUẶNG ĐÃ VỠ HOÀN TOÀN
+        -- A. KIỂM TRA ĐIỀU KIỆN 1: TÚI ĐỒ ĐÃ NHẬN THÊM QUẶNG MỚI (CHẮC CHẮN 100% ĐÃ ĐÀO XONG)
+        local currentOreCount = getInventoryOreCount()
+        if currentOreCount > initialOreCount then
+            print(string.format("[AutoMine] 💎 Kho đồ nhận thêm %d quặng (Từ %d -> %d)! Đã đào xong mỏ %s!", currentOreCount - initialOreCount, initialOreCount, currentOreCount, oreModel.Name))
+            break
+        end
+
+        -- B. KIỂM TRA ĐIỀU KIỆN 2: MỎ QUẶNG TRONG WORKSPACE ĐÃ BỊ PHÁ HỦY HOÀN TOÀN
         if not oreModel or not oreModel.Parent or not oreModel:IsDescendantOf(workspace) then
             print(string.format("[AutoMine] ✅ Mỏ %s đã bị phá hủy hoàn toàn!", oreModel and oreModel.Name or "Ore"))
             break
@@ -1831,16 +1900,24 @@ local function mineOreNode(oreModel)
             break
         end
 
-        -- 2. Chỉ trang bị lại nếu nhân vật vô tình bị rớt cuốc
+        -- C. Đảm bảo luôn cầm Cuốc trên tay
         if not hasPickaxeEquipped() then
             equipPickaxe()
         end
 
+        -- D. Giữ vị trí đứng an toàn bên ngoài khối quặng (4.5 studs), triệt tiêu xung lực vật lý
         if root and currentOrePart then
-            root.CFrame = CFrame.lookAt(root.Position, Vector3.new(currentOrePart.Position.X, root.Position.Y, currentOrePart.Position.Z))
+            local orePos = currentOrePart.Position
+            local flatDir = Vector3.new(root.Position.X - orePos.X, 0, root.Position.Z - orePos.Z)
+            if flatDir.Magnitude < 0.1 then flatDir = Vector3.new(0, 0, 4.5) end
+            local standPos = orePos + flatDir.Unit * 4.5 + Vector3.new(0, 1.2, 0)
+
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
+            root.CFrame = CFrame.lookAt(standPos, Vector3.new(orePos.X, standPos.Y, orePos.Z))
         end
 
-        -- 3. Kích hoạt Pickaxe Tool swing & Chuột vật lý
+        -- E. Kích hoạt Pickaxe Tool swing & Chuột vật lý
         local tool = char and (char:FindFirstChild("Pickaxe") or char:FindFirstChildWhichIsA("Tool"))
         if tool and tool:IsA("Tool") then
             pcall(function() tool:Activate() end)
