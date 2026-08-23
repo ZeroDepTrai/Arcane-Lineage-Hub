@@ -314,7 +314,6 @@ end
 -- =============================================================================
 local FlightController = {
     active = false,
-    tweenBV = nil,
     noclipConn = nil,
     currentTween = nil,
 }
@@ -324,16 +323,6 @@ local function enableFlightState()
     local root = char and char:FindFirstChild("HumanoidRootPart")
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not root then return end
-
-    if not FlightController.tweenBV or FlightController.tweenBV.Parent ~= root then
-        if FlightController.tweenBV then FlightController.tweenBV:Destroy() end
-        local bv = Instance.new("BodyVelocity")
-        bv.Name = "ArcaneTweenBodyVelocity"
-        bv.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-        bv.Velocity = Vector3.zero
-        bv.Parent = root
-        FlightController.tweenBV = bv
-    end
 
     if hum then
         hum.PlatformStand = true
@@ -358,11 +347,6 @@ local function enableFlightState()
 end
 
 local function disableFlightState()
-    if FlightController.tweenBV then
-        FlightController.tweenBV:Destroy()
-        FlightController.tweenBV = nil
-    end
-
     if FlightController.noclipConn then
         FlightController.noclipConn:Disconnect()
         FlightController.noclipConn = nil
@@ -373,6 +357,7 @@ local function disableFlightState()
     if hum then
         hum.PlatformStand = false
         hum.AutoRotate = true
+        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
     end
 end
 
