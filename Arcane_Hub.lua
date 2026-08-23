@@ -915,6 +915,24 @@ local function safeClickButton(btn)
 end
 
 local function isInCombat()
+    local char = LocalPlayer.Character
+    if not char then return false end
+
+    -- 1. Kiểm tra ReplicatedStorage.Fights (Nguồn chân lý chính xác 100% của server)
+    local RS = game:GetService("ReplicatedStorage")
+    local rsFights = RS:FindFirstChild("Fights")
+    if rsFights then
+        for _, fight in ipairs(rsFights:GetChildren()) do
+            local t1 = fight:FindFirstChild("Team1")
+            local t2 = fight:FindFirstChild("Team2")
+            if (t1 and (t1:FindFirstChild(LocalPlayer.Name) or t1:FindFirstChild(char.Name))) or
+               (t2 and (t2:FindFirstChild(LocalPlayer.Name) or t2:FindFirstChild(char.Name))) then
+                return true
+            end
+        end
+    end
+
+    -- 2. Kiểm tra các thành phần giao diện Combat trong PlayerGui
     local pgui = PlayerGui
     local combatGui = pgui and pgui:FindFirstChild("Combat")
     if combatGui and combatGui.Enabled then
@@ -926,14 +944,7 @@ local function isInCombat()
             return true
         end
     end
-    local fFolder = workspace:FindFirstChild("Fights")
-    if fFolder and LocalPlayer.Character then
-        for _, fight in ipairs(fFolder:GetChildren()) do
-            if fight:FindFirstChild(LocalPlayer.Name) or fight:FindFirstChild(LocalPlayer.Character.Name) then
-                return true
-            end
-        end
-    end
+
     return false
 end
 
@@ -1084,9 +1095,9 @@ function LevelFarmer.runCycle()
         while LevelFarmer.running do
             if isInCombat() then
                 if not LevelFarmer.wasInCombat then
-                    -- Bắt đầu vào trận -> Lưu lại lượng Essence trước khi đánh
                     LevelFarmer.wasInCombat = true
                     LevelFarmer.essenceBeforeCombat = getCurrentEssence()
+                    print(string.format("[AutoFarmLevel] ⚔️ Đã vào trận đánh mới! (Essence đầu trận: %d)", LevelFarmer.essenceBeforeCombat))
                 end
 
                 if isPlayerTurn() then
@@ -1094,23 +1105,28 @@ function LevelFarmer.runCycle()
                     local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.4
                     task.wait(combatDelay)
                 else
-                    task.wait(0.2)
+                    task.wait(0.25)
                 end
             else
                 if LevelFarmer.wasInCombat then
-                    -- Vừa kết thúc trận đánh! So sánh Essence trước và sau trận
+                    -- Chờ 1.2s sau trận để server hoàn tất cộng điểm EXP/Essence vào HUD
+                    task.wait(1.2)
                     LevelFarmer.wasInCombat = false
                     local essenceAfterFight = getCurrentEssence()
+                    print(string.format("[AutoFarmLevel] 🏆 Kết thúc trận đánh! Trước: %d | Sau: %d", LevelFarmer.essenceBeforeCombat, essenceAfterFight))
 
                     if essenceAfterFight > LevelFarmer.essenceBeforeCombat then
-                        -- Essence có tăng -> Vẫn chưa chạm Cap -> Đứng im farm tiếp
+                        -- Essence có tăng -> Tiếp tục farm trận mới
                         LevelFarmer.zeroGainFightCount = 0
                         LevelFarmer.essenceBeforeCombat = essenceAfterFight
+                        print(string.format("[AutoFarmLevel] 📈 Essence đã tăng (+%d) -> Đang ở dưới sàn ngầm farm tiếp...", essenceAfterFight - LevelFarmer.essenceBeforeCombat))
                     elseif essenceAfterFight == LevelFarmer.essenceBeforeCombat and essenceAfterFight >= 10 then
-                        -- Thắng trận nhưng Essence không tăng -> Đã chạm mốc Cap tối đa!
+                        -- Trận thắng không nhận thêm Essence -> Đã chạm Cap
                         LevelFarmer.zeroGainFightCount = LevelFarmer.zeroGainFightCount + 1
+                        print(string.format("[AutoFarmLevel] ⚠️ Trận này không nhận thêm Essence (Lần %d/2)", LevelFarmer.zeroGainFightCount))
+
                         if LevelFarmer.zeroGainFightCount >= 2 and (Toggles.AutoMeditate and Toggles.AutoMeditate.Value) then
-                            print(string.format("[AutoFarmLevel] 🔮 Phát hiện Essence đã chạm Cap tối đa (%d Essence) -> Bắt đầu chu trình đi thiền...", essenceAfterFight))
+                            print(string.format("[AutoFarmLevel] 🔮 Phát hiện Essence đã chạm Cap tối đa (%d Essence) -> Bắt đầu quy trình đi thiền...", essenceAfterFight))
                             humanoidMeditateAndLevelUp()
                         end
                     end
