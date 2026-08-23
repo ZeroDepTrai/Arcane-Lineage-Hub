@@ -1601,6 +1601,7 @@ local function isQTEActive(qteName)
         if qteName == "Hammer" then return qteMap["Hammer (Power Bar)"] == true end
         if qteName == "Axe" then return qteMap["Axe (Equilibrium)"] == true end
         if qteName == "Fist" then return qteMap["Fist / Cestus (Combos)"] == true end
+        if qteName == "Spear" then return qteMap["Spear (Taps, Lines & Curves)"] == true end
         if qteName == "Lockpick" then return qteMap["Chest Lockpick"] == true end
     end
     return true
@@ -1859,19 +1860,60 @@ local function handleFistQTE(fistQTE)
     end
 end
 
--- 7. SPEAR QTE (ACTIVE TAP AUTOCLICKER)
+-- 7. SPEAR QTE (INSTANT TAPS, LINES & CURVES AUTO-SOLVER)
 local function handleSpearQTE(spearQTE)
-    if not spearQTE or not spearQTE.Visible then return end
+    if not isQTEActive("Spear") or not spearQTE or not spearQTE.Visible then return end
     local container = spearQTE:FindFirstChild("Container")
-    if container then
-        for _, tap in ipairs(container:GetChildren()) do
-            if tap:IsA("GuiObject") and tap.Visible then
-                local btn = tap:FindFirstChild("InputButton") or tap:FindFirstChildWhichIsA("TextButton", true) or tap:FindFirstChildWhichIsA("ImageButton", true)
-                if btn and (btn.Active == nil or btn.Active == true) then
-                    singleClick(btn)
-                    break
-                end
+    if not container then return end
+
+    local circles = {}
+    for _, child in ipairs(container:GetChildren()) do
+        if child:IsA("GuiObject") and child.Visible then
+            local num = child.Name:match("%d+")
+            local idx = tonumber(num) or 999
+            table.insert(circles, { idx = idx, obj = child })
+        end
+    end
+    table.sort(circles, function(a, b) return a.idx < b.idx end)
+
+    for _, entry in ipairs(circles) do
+        local circle = entry.obj
+        local btn = circle:FindFirstChild("InputButton", true) or circle:FindFirstChildWhichIsA("ImageButton", true) or circle:FindFirstChildWhichIsA("TextButton", true)
+        if btn and (btn.Active == nil or btn.Active == true) then
+            if firesignal then
+                pcall(function() firesignal(btn.Activated) end)
+                pcall(function() firesignal(btn.MouseButton1Click) end)
+                pcall(function() firesignal(btn.MouseButton1Down) end)
+                pcall(function() firesignal(btn.MouseButton1Up) end)
             end
+
+            if getconnections then
+                pcall(function()
+                    for _, c in ipairs(getconnections(btn.Activated)) do
+                        if c.Function then c.Function()
+                        elseif c.Fire then c:Fire() end
+                    end
+                end)
+                pcall(function()
+                    for _, c in ipairs(getconnections(btn.MouseButton1Click)) do
+                        if c.Function then c.Function()
+                        elseif c.Fire then c:Fire() end
+                    end
+                end)
+                pcall(function()
+                    for _, c in ipairs(getconnections(btn.InputBegan)) do
+                        local fakeInput = {
+                            UserInputType = Enum.UserInputType.MouseButton1,
+                            Position = Vector3.new(btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2, 0)
+                        }
+                        if c.Function then c.Function(fakeInput)
+                        elseif c.Fire then c:Fire(fakeInput) end
+                    end
+                end)
+            end
+
+            singleClick(btn)
+            break
         end
     end
 end
@@ -1911,6 +1953,7 @@ RunService.RenderStepped:Connect(function()
     local hammerQTE = combatGui:FindFirstChild("HammerQTE")
     local axeQTE = combatGui:FindFirstChild("AxeQTE")
     local fistQTE = combatGui:FindFirstChild("FistQTE")
+    local spearQTE = combatGui:FindFirstChild("SpearQTE")
     local lockpickQTE = combatGui:FindFirstChild("LockpickQTE")
 
     if dodgeQTE and dodgeQTE.Visible then handleDodgeQTE(dodgeQTE) end
@@ -1929,6 +1972,7 @@ RunService.RenderStepped:Connect(function()
     if hammerQTE and hammerQTE.Visible then handleHammerQTE(hammerQTE) end
     if axeQTE and axeQTE.Visible then handleAxeQTE(axeQTE) end
     if fistQTE and fistQTE.Visible then handleFistQTE(fistQTE) end
+    if spearQTE and spearQTE.Visible then handleSpearQTE(spearQTE) end
     if lockpickQTE and lockpickQTE.Visible then handleLockpickQTE(lockpickQTE) end
 end)
 
@@ -2598,6 +2642,7 @@ CombatGroup:AddDropdown("EnabledQTEList", {
         "Hammer (Power Bar)",
         "Axe (Equilibrium)",
         "Fist / Cestus (Combos)",
+        "Spear (Taps, Lines & Curves)",
         "Chest Lockpick"
     },
     Default = {
@@ -2607,6 +2652,7 @@ CombatGroup:AddDropdown("EnabledQTEList", {
         "Hammer (Power Bar)",
         "Axe (Equilibrium)",
         "Fist / Cestus (Combos)",
+        "Spear (Taps, Lines & Curves)",
         "Chest Lockpick"
     },
     Multi = true,
