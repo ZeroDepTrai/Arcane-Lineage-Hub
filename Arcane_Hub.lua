@@ -1879,7 +1879,7 @@ local function handleFistQTE(fistQTE)
     end
 end
 
--- 7. SPEAR QTE (INSTANT TAPS, LINES & CURVES AUTO-SOLVER)
+-- 7. SPEAR QTE (INSTANT TAPS & HIGH-SPEED SLIDER DRAG SOLVER)
 local function handleSpearQTE(spearQTE)
     if not isQTEActive("Spear") or not spearQTE or not spearQTE.Visible then return end
     local container = spearQTE:FindFirstChild("Container")
@@ -1899,37 +1899,66 @@ local function handleSpearQTE(spearQTE)
         local circle = entry.obj
         local btn = circle:FindFirstChild("InputButton", true) or circle:FindFirstChildWhichIsA("ImageButton", true) or circle:FindFirstChildWhichIsA("TextButton", true)
         if btn and (btn.Active == nil or btn.Active == true) then
+            local btnCenterX = btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2
+            local btnCenterY = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2
+            local startInput = {
+                UserInputType = Enum.UserInputType.MouseButton1,
+                Position = Vector3.new(btnCenterX, btnCenterY, 0)
+            }
+
+            -- 1. Kích hoạt Tap / Activated
             if firesignal then
                 pcall(function() firesignal(btn.Activated) end)
                 pcall(function() firesignal(btn.MouseButton1Click) end)
                 pcall(function() firesignal(btn.MouseButton1Down) end)
                 pcall(function() firesignal(btn.MouseButton1Up) end)
+                pcall(function() firesignal(btn.InputBegan, startInput) end)
             end
 
             if getconnections then
                 pcall(function()
                     for _, c in ipairs(getconnections(btn.Activated)) do
-                        if c.Function then c.Function()
-                        elseif c.Fire then c:Fire() end
+                        if c.Function then c.Function() elseif c.Fire then c:Fire() end
                     end
                 end)
                 pcall(function()
                     for _, c in ipairs(getconnections(btn.MouseButton1Click)) do
-                        if c.Function then c.Function()
-                        elseif c.Fire then c:Fire() end
+                        if c.Function then c.Function() elseif c.Fire then c:Fire() end
                     end
                 end)
                 pcall(function()
                     for _, c in ipairs(getconnections(btn.InputBegan)) do
-                        local fakeInput = {
-                            UserInputType = Enum.UserInputType.MouseButton1,
-                            Position = Vector3.new(btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2, 0)
-                        }
-                        if c.Function then c.Function(fakeInput)
-                        elseif c.Fire then c:Fire(fakeInput) end
+                        if c.Function then c.Function(startInput) elseif c.Fire then c:Fire(startInput) end
                     end
                 end)
             end
+
+            -- 2. Giải phóng ngay lập tức các dạng Kéo Slider (Line & Curve Drag) qua InputChanged quét đa hướng
+            for _, angleDeg in ipairs({ 0, 45, 90, 135, 180, 225, 270, 315 }) do
+                local rad = math.rad(angleDeg)
+                local movePos = Vector3.new(btnCenterX + math.cos(rad) * 450, btnCenterY + math.sin(rad) * 450, 0)
+                local moveInput = {
+                    UserInputType = Enum.UserInputType.MouseMovement,
+                    Position = movePos
+                }
+                if firesignal then
+                    pcall(function() firesignal(UserInputService.InputChanged, moveInput) end)
+                end
+                if getconnections then
+                    pcall(function()
+                        for _, c in ipairs(getconnections(UserInputService.InputChanged)) do
+                            if c.Function then c.Function(moveInput) elseif c.Fire then c:Fire(moveInput) end
+                        end
+                    end)
+                end
+            end
+
+            -- 3. Dự phòng VirtualInputManager kéo chuột tốc độ cao
+            pcall(function()
+                VirtualInputManager:SendMouseButtonEvent(btnCenterX, btnCenterY, 0, true, game, 0)
+                VirtualInputManager:SendMouseMoveEvent(btnCenterX + 300, btnCenterY + 300, game)
+                VirtualInputManager:SendMouseButtonEvent(btnCenterX + 300, btnCenterY + 300, 0, false, game, 0)
+            end)
 
             singleClick(btn)
             break
