@@ -3119,12 +3119,12 @@ end))
 -- TELEPORT SUITE (ALL 35+ CLASS TRAINERS, TOWNS, MERCHANTS, AND LANDMARKS)
 -- =============================================================================
 local BaseTrainers = {
-    ["⚔️ Base: Ysa (Warrior - Sword)"] = Vector3.new(5100.6, 658.2, -4072.0),
+    ["⚔️ Base: Doran (Warrior - Sword)"] = Vector3.new(5627.8, 703.8, -4336.9),
+    ["🗡️ Base: Luther (Thief - Dagger)"] = Vector3.new(3496.5, 632.8, -3983.3),
+    ["🥊 Base: Aberon (Martial Artist - Fist / Cestus)"] = Vector3.new(2800.0, 610.7, -4018.2),
     ["🔮 Base: Arandor (Wizard - Magic / Staff)"] = Vector3.new(5840.1, 727.0, -4790.1),
-    ["🗡️ Base: Boots (Thief - Dagger)"] = Vector3.new(4945.6, 658.6, -4121.4),
-    ["🥊 Base: Doran (Martial Artist - Fist / Cestus)"] = Vector3.new(5627.8, 703.8, -4336.9),
-    ["🛡️ Base: Tivek (Slayer - Spear)"] = Vector3.new(4473.3, 650.1, -5730.3),
-    ["🪓 Base: Geron (Marauder - Axe)"] = Vector3.new(4448.3, 652.1, -3359.3),
+    ["🚩 Base: Tivek (Slayer - Spear / Lancer)"] = Vector3.new(4473.3, 650.1, -5730.3),
+    ["🪓 Base: Geron (Berserker / Marauder - Axe)"] = Vector3.new(4448.3, 652.1, -3359.3),
     ["🛡️ Base: Lagolt (Sentry - Greatsword)"] = Vector3.new(4651.7, 718.7, -5574.9),
 }
 
@@ -3151,7 +3151,8 @@ local SuperTrainers = {
 
 local MajorBosses = {
     ["🐉 Boss: Yar'thul, the Blazing Dragon (Mount Thul Door)"] = Vector3.new(40.5, 581.6, -4113.5),
-    ["💀 Boss: Thorian, the Rotten (Cessgrounds Door)"]         = Vector3.new(8327.2, 628.7, -722.5),
+    ["💀 Boss: Thorian, the Rotten (Remnants Entrance Gate)"]    = Vector3.new(8328.1, 645.0, -1544.1),
+    ["💀 Boss: Thorian, the Rotten (Arena Inside)"]            = Vector3.new(8327.2, 628.7, -722.5),
     ["✨ Boss: Seraphon (Light Boss / Illustris Door)"]          = Vector3.new(710.5, 3449.1, -5678.1),
     ["🦅 Boss: Arkhaia (Temple of Norn Door)"]                 = Vector3.new(14710.9, 550.7, 7133.7),
     ["🐍 Boss: Handaconda (Desert Room Entrance)"]              = Vector3.new(3134.1, 179.1, -852.2),
