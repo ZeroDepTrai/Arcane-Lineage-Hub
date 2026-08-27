@@ -4408,7 +4408,7 @@ end
 local function applyExtremeFPSBoost()
     task.spawn(function()
         pcall(function()
-            local isExtreme = Toggles.ExtremeFPSBoost and Toggles.ExtremeFPSBoost.Value or false
+            local isExtreme = (Toggles.FPSBoost and Toggles.FPSBoost.Value) or (Toggles.ExtremeFPSBoost and Toggles.ExtremeFPSBoost.Value) or false
             OptimizationState.extremeActive = isExtreme
 
             if isExtreme then
@@ -4536,12 +4536,11 @@ FilterGroup:AddDropdown("ESPWhitelist", {
     Text = "Whitelist Selection",
 })
 
-FPSGroup:AddButton({
+FPSGroup:AddToggle("FPSBoost", {
     Text = "🔥 FPS Boost (Potato Mode)",
-    DoubleClick = true,
-    Tooltip = "⚡ Tối đa hóa FPS kịch khung: Ép Smooth Plastic, xóa Decal/Texture/Light, ẩn cây cối thảm thực vật, tắt Particles/Shadows/Fog (KHÔNG tắt 3D Render).\n⚠️ CẢNH BÁO: Nhấp đúp (Double-Click) để kích hoạt. Cannot revert until rejoin!",
-    Func = function()
-        Toggles.ExtremeFPSBoost = { Value = true }
+    Default = false,
+    Tooltip = "⚡ Tối đa hóa FPS kịch khung: Ép Smooth Plastic, xóa Decal/Texture/Light, ẩn cây cối thảm thực vật, tắt Particles/Shadows/Fog (KHÔNG tắt 3D Render).",
+    Callback = function(val)
         applyExtremeFPSBoost()
     end,
 })
