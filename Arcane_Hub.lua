@@ -2398,6 +2398,7 @@ local function isQTEActive(qteName)
         if qteName == "Dagger" then return qteMap["Dagger (Weakpoints)"] == true end
         if qteName == "Hammer" then return qteMap["Hammer (Power Bar)"] == true end
         if qteName == "Axe" then return qteMap["Axe (Equilibrium)"] == true end
+        if qteName == "Magic" or qteName == "Staff" then return qteMap["Staff / Magic (Rune Matching)"] == true end
         if qteName == "Fist" then return qteMap["Fist / Cestus (Combos)"] == true end
         if qteName == "Spear" then return qteMap["Spear (Taps, Lines & Curves)"] == true end
         if qteName == "Lockpick" then return qteMap["Chest Lockpick"] == true end
@@ -2412,9 +2413,11 @@ local AutoQTE = {
     lastDaggerHit = 0,
     isHammerHolding = false,
     lastAxePress = 0,
+    lastMagicHit = 0,
     lastFistHit = 0,
     swordHitTable = {},
     hitWeakpoints = {},
+    magicSlottedTable = {},
     spearSolvedTable = {},
 }
 
@@ -2599,7 +2602,7 @@ local function handleHammerQTE(hammerQTE)
     end
 end
 
--- 5. AXE QTE (THRESHOLD EQUILIBRIUM TAPPER)
+-- 5. AXE QTE (PRECISION THRESHOLD EQUILIBRIUM TAPPER - ANTI-OVERSHOOT)
 local function handleAxeQTE(axeQTE)
     if not isQTEActive("Axe") or not axeQTE or not axeQTE.Visible then return end
     local gauge = axeQTE:FindFirstChild("Gauge")
@@ -2610,17 +2613,95 @@ local function handleAxeQTE(axeQTE)
     local threshold = gauge:FindFirstChild("Threshold")
     if not fill or not threshold then return end
 
-    local fillRight = fill.AbsolutePosition.X + fill.AbsoluteSize.X
-    local targetMin = threshold.AbsolutePosition.X
-    local targetMax = targetMin + threshold.AbsoluteSize.X
-    local targetCenter = (targetMin + targetMax) / 2
+    local gaugeWidth = gauge.AbsoluteSize.X
+    if gaugeWidth <= 0 then gaugeWidth = 1 end
 
-    if fillRight < targetCenter then
+    local targetStart = (threshold.AbsolutePosition.X - gauge.AbsolutePosition.X) / gaugeWidth
+    local targetWidth = threshold.AbsoluteSize.X / gaugeWidth
+    local currentFill = fill.AbsoluteSize.X / gaugeWidth
+
+    -- Điểm kích hoạt an toàn: Chỉ bấm khi thanh tuột xuống dưới đáy hoặc rơi vào 15% phần dưới của vùng Threshold
+    -- Giúp ngăn chặn tuyệt đối việc nhảy lố (overshoot) ở các độ khó cao khi vùng Threshold bị thu hẹp
+    local targetBottomSafeZone = targetStart + (targetWidth * 0.15)
+
+    if currentFill <= targetBottomSafeZone then
         local now = os.clock()
-        if now - AutoQTE.lastAxePress > 0.05 then
+        if now - AutoQTE.lastAxePress > 0.16 then
             AutoQTE.lastAxePress = now
+            local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
+            if delayMs > 0 then task.wait(delayMs / 1000) end
             if spaceHint then singleClick(spaceHint) end
             pressKey(Enum.KeyCode.Space)
+        end
+    end
+end
+
+-- 6. STAFF / MAGIC QTE (INSTANT PRECISE RUNE MATCHING SOLVER)
+local function handleMagicQTE(magicQTE)
+    if not isQTEActive("Magic") or not magicQTE or not magicQTE.Visible then
+        AutoQTE.magicSlottedTable = {}
+        return
+    end
+
+    local bag = magicQTE:FindFirstChild("Bag")
+    local runeSlots = magicQTE:FindFirstChild("RuneSlots")
+    if not bag or not runeSlots then return end
+
+    local now = os.clock()
+    if now - AutoQTE.lastMagicHit < 0.08 then return end
+
+    for _, rune in ipairs(bag:GetChildren()) do
+        if rune:IsA("GuiObject") and rune.Visible and rune.Name ~= "Slotted" and rune.ImageTransparency < 0.9 and not AutoQTE.magicSlottedTable[rune] then
+            local runeName = rune.Name
+            local matchingSlot = nil
+            for _, slot in ipairs(runeSlots:GetChildren()) do
+                if slot:IsA("GuiObject") and slot.Name == runeName and slot.Name ~= "Slotted" then
+                    matchingSlot = slot
+                    break
+                end
+            end
+
+            if matchingSlot then
+                AutoQTE.lastMagicHit = now
+                AutoQTE.magicSlottedTable[rune] = true
+
+                local slotCenterX = matchingSlot.AbsolutePosition.X + (matchingSlot.AbsoluteSize.X / 2)
+                local slotCenterY = matchingSlot.AbsolutePosition.Y + (matchingSlot.AbsoluteSize.Y / 2)
+                local runeCenterX = rune.AbsolutePosition.X + (rune.AbsoluteSize.X / 2)
+                local runeCenterY = rune.AbsolutePosition.Y + (rune.AbsoluteSize.Y / 2)
+
+                local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
+                if delayMs > 0 then task.wait(delayMs / 1000) end
+
+                local inputData = {
+                    UserInputType = Enum.UserInputType.MouseButton1,
+                    Position = Vector3.new(slotCenterX, slotCenterY, 0)
+                }
+
+                -- 1. Hardware mouse move to matching slot
+                pcall(function()
+                    VirtualInputManager:SendMouseMoveEvent(slotCenterX, slotCenterY, game)
+                end)
+
+                -- 2. Software firesignal drag & drop
+                if firesignal then
+                    pcall(function() firesignal(rune.InputBegan, inputData) end)
+                    pcall(function() firesignal(rune.InputEnded, inputData) end)
+                end
+
+                -- 3. Hardware drag & drop simulation
+                pcall(function()
+                    VirtualInputManager:SendMouseMoveEvent(runeCenterX, runeCenterY, game)
+                    VirtualInputManager:SendMouseButtonEvent(runeCenterX, runeCenterY, 0, true, game, 0)
+                    task.wait(0.01)
+                    VirtualInputManager:SendMouseMoveEvent(slotCenterX, slotCenterY, game)
+                    VirtualInputManager:SendMouseButtonEvent(slotCenterX, slotCenterY, 0, false, game, 0)
+                end)
+
+                singleClick(rune)
+                singleClick(matchingSlot)
+                break
+            end
         end
     end
 end
@@ -2844,6 +2925,11 @@ registerConnection(RunService.RenderStepped:Connect(function()
 
     if hammerQTE and hammerQTE.Visible then handleHammerQTE(hammerQTE) end
     if axeQTE and axeQTE.Visible then handleAxeQTE(axeQTE) end
+    if magicQTE and magicQTE.Visible then
+        handleMagicQTE(magicQTE)
+    else
+        AutoQTE.magicSlottedTable = {}
+    end
     if fistQTE and fistQTE.Visible then handleFistQTE(fistQTE) end
     if spearQTE and spearQTE.Visible then
         handleSpearQTE(spearQTE)
@@ -3675,6 +3761,7 @@ CombatGroup:AddDropdown("EnabledQTEList", {
         "Dagger (Weakpoints)",
         "Hammer (Power Bar)",
         "Axe (Equilibrium)",
+        "Staff / Magic (Rune Matching)",
         "Fist / Cestus (Combos)",
         "Spear (Taps, Lines & Curves)",
         "Chest Lockpick"
@@ -3685,6 +3772,7 @@ CombatGroup:AddDropdown("EnabledQTEList", {
         "Dagger (Weakpoints)",
         "Hammer (Power Bar)",
         "Axe (Equilibrium)",
+        "Staff / Magic (Rune Matching)",
         "Fist / Cestus (Combos)",
         "Spear (Taps, Lines & Curves)",
         "Chest Lockpick"
