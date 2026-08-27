@@ -3152,7 +3152,6 @@ local SuperTrainers = {
 local MajorBosses = {
     ["🐉 Boss: Yar'thul, the Blazing Dragon (Mount Thul Door)"] = Vector3.new(40.5, 581.6, -4113.5),
     ["💀 Boss: Thorian, the Rotten (Remnants Entrance Gate)"]    = Vector3.new(8328.1, 645.0, -1544.1),
-    ["💀 Boss: Thorian, the Rotten (Arena Inside)"]            = Vector3.new(8327.2, 628.7, -722.5),
     ["✨ Boss: Seraphon (Light Boss / Illustris Door)"]          = Vector3.new(710.5, 3449.1, -5678.1),
     ["🦅 Boss: Arkhaia (Temple of Norn Door)"]                 = Vector3.new(14710.9, 550.7, 7133.7),
     ["🐍 Boss: Handaconda (Desert Room Entrance)"]              = Vector3.new(3134.1, 179.1, -852.2),
@@ -3216,17 +3215,6 @@ local KeyLocations = {
 local Teleporter = {
     active = false,
 }
-
-local function respawnCharacter()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local root = char:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-
-    print("[Respawn] 🔄 Triggering Character Respawn via 10M stud Sky-Failsafe...")
-    char:PivotTo(root.CFrame * CFrame.new(0, 10000000, 0))
-    Library:Notify("🔄 Character respawned to safe spawn!", 3)
-end
 
 local function teleportToLocation(targetPos)
     if not targetPos or typeof(targetPos) ~= "Vector3" then
@@ -4074,18 +4062,11 @@ TownWarpGroup:AddButton("⛪ Church", function() teleportToLocation(KeyLocations
 TownWarpGroup:AddButton("⚔️ Sanctuary", function() teleportToLocation(KeyLocations["⚔️ Sanctuary of Blades"] or KeyLocations["⚔️ Sanctuary"]) end)
 TownWarpGroup:AddLabel("--- Boss Quick Warps ---")
 TownWarpGroup:AddButton("🐉 Yar'thul (Mount Thul Door)", function() teleportToLocation(MajorBosses["🐉 Boss: Yar'thul, the Blazing Dragon (Mount Thul Door)"]) end)
-TownWarpGroup:AddButton("💀 Thorian (Cessgrounds Door)", function() teleportToLocation(MajorBosses["💀 Boss: Thorian, the Rotten (Cessgrounds Door)"]) end)
+TownWarpGroup:AddButton("💀 Thorian (Remnants Gate)", function() teleportToLocation(MajorBosses["💀 Boss: Thorian, the Rotten (Remnants Entrance Gate)"]) end)
 TownWarpGroup:AddButton("✨ Seraphon (Illustris Door)", function() teleportToLocation(MajorBosses["✨ Boss: Seraphon (Light Boss / Illustris Door)"]) end)
 TownWarpGroup:AddButton("🦅 Arkhaia (Temple of Norn Door)", function() teleportToLocation(MajorBosses["🦅 Boss: Arkhaia (Temple of Norn Door)"]) end)
 TownWarpGroup:AddButton("🐍 Handaconda (Desert Room)", function() teleportToLocation(MajorBosses["🐍 Boss: Handaconda (Desert Room Entrance)"]) end)
 TownWarpGroup:AddButton("👁️ Metrom (Dungeon Entrance)", function() teleportToLocation(MajorBosses["👁️ Boss: Metrom's Vessel (Dungeon Entrance Spawn)"]) end)
-TownWarpGroup:AddLabel("--- Respawn & Recovery ---")
-TownWarpGroup:AddButton({
-    Text = "🔄 Respawn Character (Fast Reset)",
-    DoubleClick = true,
-    Tooltip = "Dịch chuyển lên tầng khí quyển để kích hoạt Reset về điểm hồi sinh (Spawn) tức thì không mất mạng",
-    Func = respawnCharacter,
-})
 
 -- -----------------------------------------------------------------------------
 -- TAB 5: VISUALS & FPS BOOSTER
