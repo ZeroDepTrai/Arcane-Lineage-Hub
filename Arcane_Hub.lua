@@ -22,6 +22,13 @@
     ========================================================================================
 --]]
 
+local globalEnv = (getgenv and getgenv()) or _G
+local currentInitTime = os.clock()
+if globalEnv._ArcaneHubInitLock and (currentInitTime - globalEnv._ArcaneHubInitLock < 3) then
+    return
+end
+globalEnv._ArcaneHubInitLock = currentInitTime
+
 if not game:IsLoaded() then
     local loaded = false
     local conn
@@ -97,6 +104,13 @@ local HttpRequest = (syn and syn.request) or (http and http.request) or http_req
 
 local function getQueuePayload()
     return [=[
+local genv = (getgenv and getgenv()) or _G
+local now = os.clock()
+if genv._ArcaneHubTeleportQueuedExec and (now - genv._ArcaneHubTeleportQueuedExec < 5) then
+    return
+end
+genv._ArcaneHubTeleportQueuedExec = now
+
 task.spawn(function()
     local startWait = os.clock()
     if not game:IsLoaded() then
@@ -113,6 +127,10 @@ task.spawn(function()
     end
 
     task.wait(1.5)
+
+    if genv._ArcaneHubRunning or (shared and shared.ArcaneHub) then
+        return
+    end
 
     local executed = false
 
@@ -174,14 +192,30 @@ end)
 ]=]
 end
 
-local function queueTeleportScript()
+local lastQueueTimestamp = 0
+local function queueTeleportScript(force)
+    local now = os.clock()
+    if not force and (now - lastQueueTimestamp < 4) then
+        return true
+    end
+    lastQueueTimestamp = now
+
+    local clearQueueFn = clearqueueonteleport 
+        or clearteleportqueue 
+        or clear_teleport_queue 
+        or (syn and syn.clear_teleport_queue)
+        or (getgenv and (getgenv().clearqueueonteleport or getgenv().clearteleportqueue or getgenv().clear_teleport_queue))
+
+    if clearQueueFn then
+        pcall(clearQueueFn)
+    end
+
     local queueFn = queue_on_teleport 
         or queueonteleport 
         or (syn and syn.queue_on_teleport) 
         or (fluxus and fluxus.queue_on_teleport) 
         or (Krnl and Krnl.queue_on_teleport)
-        or (getgenv and getgenv().queue_on_teleport)
-        or (getgenv and getgenv().queueonteleport)
+        or (getgenv and (getgenv().queue_on_teleport or getgenv().queueonteleport))
 
     if queueFn then
         local ok, err = pcall(function()
@@ -4218,6 +4252,8 @@ local function unloadHub()
     pcall(function() Library:Unload() end)
     
     shared.ArcaneHub = nil
+    globalEnv._ArcaneHubRunning = nil
+    globalEnv._ArcaneHubInitLock = nil
     print("[ArcaneHub] ✅ Đã Unload sạch sẽ 100% tất cả chức năng và giải phóng tài nguyên!")
 end
 
@@ -4248,8 +4284,10 @@ MenuGroup:AddToggle("AutoLoadOnChangingServer", {
 pcall(function()
     if LocalPlayer and LocalPlayer.OnTeleport then
         registerConnection(LocalPlayer.OnTeleport:Connect(function(state)
-            if Toggles and Toggles.AutoLoadOnChangingServer and Toggles.AutoLoadOnChangingServer.Value then
-                queueTeleportScript()
+            if state == Enum.TeleportState.Started or state == nil or state == 0 then
+                if Toggles and Toggles.AutoLoadOnChangingServer and Toggles.AutoLoadOnChangingServer.Value then
+                    queueTeleportScript()
+                end
             end
         end))
     end
@@ -4495,6 +4533,7 @@ end)
 -- =============================================================================
 -- KHỞI CHẠY CHU TRÌNH TỰ ĐỘNG & LƯU GLOBAL STATE
 -- =============================================================================
+globalEnv._ArcaneHubRunning = true
 shared.ArcaneHub = {
     Unload = unloadHub,
     Library = Library,
