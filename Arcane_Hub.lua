@@ -1875,6 +1875,50 @@ local function executeCombatTurn()
     end
 end
 
+local function isNightTime()
+    local ct = (Lighting and Lighting.ClockTime) or 12
+    return (ct >= 17.5 or ct < 6.5)
+end
+
+local function handleDeeprootNightSafe(targetSpot, targetDesc)
+    local avoidNight = Toggles.DeeprootNightFailsafe == nil or Toggles.DeeprootNightFailsafe.Value == true
+    if not avoidNight then return false end
+
+    local isDeeproot = (targetSpot - LevelFarmer.farmSpotLv30_50).Magnitude < 25 
+        or (targetDesc and targetDesc:lower():find("deeproot"))
+        or (Options.FarmLevelMode and Options.FarmLevelMode.Value and Options.FarmLevelMode.Value:find("Deeproot"))
+
+    if isDeeproot and isNightTime() then
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if root then
+            local skyPos = Vector3.new(targetSpot.X, 1200, targetSpot.Z)
+            if (root.Position.Y < 1000) then
+                print(string.format("[AutoFarmLevel] 🌙 Phát hiện trời tối (ClockTime: %.1fh) tại Deeproot Forest -> Bay lên tầng mây (Y: 1200) đứng né Sentinel of Darkness...", Lighting.ClockTime))
+                flyToFarmSpot(skyPos)
+                enableLevelFarmerNoclip()
+            end
+
+            -- Đứng lơ lửng an toàn trên mây cho đến khi trời sáng hoặc bị kéo vào trận
+            while HubState.running and LevelFarmer.running and isNightTime() and not isInCombat() do
+                local curRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if curRoot and curRoot.Position.Y < 1000 then
+                    curRoot.CFrame = CFrame.new(skyPos)
+                end
+                task.wait(1.5)
+            end
+
+            if HubState.running and LevelFarmer.running and not isNightTime() and not isInCombat() then
+                print(string.format("[AutoFarmLevel] ☀️ Trời đã sáng trở lại (ClockTime: %.1fh) -> Bay xuống bãi farm Deeproot Forest tiếp tục chiến đấu...", Lighting.ClockTime))
+                flyToFarmSpot(targetSpot)
+                enableLevelFarmerNoclip()
+            end
+            return true
+        end
+    end
+    return false
+end
+
 function LevelFarmer.runCycle()
     LevelFarmer.running = true
 
@@ -1882,9 +1926,12 @@ function LevelFarmer.runCycle()
         local spot, spotDesc = getActiveFarmSpot()
         print(string.format("[AutoFarmLevel] ⚔️ Bắt đầu Auto Farm Level - Vị trí: %s", tostring(spotDesc)))
 
-        -- Bay tới bãi farm an toàn bằng Sky-Tween & bật Noclip liên tục
-        flyToFarmSpot(spot)
-        enableLevelFarmerNoclip()
+        -- Kiểm tra né ban đêm tại Deeproot Forest nếu đang là ban đêm
+        if not handleDeeprootNightSafe(spot, spotDesc) then
+            -- Bay tới bãi farm an toàn bằng Sky-Tween & bật Noclip liên tục
+            flyToFarmSpot(spot)
+            enableLevelFarmerNoclip()
+        end
 
         local currentAssignedSpot = spot
 
@@ -1942,20 +1989,22 @@ function LevelFarmer.runCycle()
                 -- Tự động kiểm tra vị trí bãi farm và level khi đứng chờ ngoài trận
                 if not isInSoulCorridor() then
                     local targetSpot, targetDesc = getActiveFarmSpot()
-                    local char = LocalPlayer.Character
-                    local root = char and char:FindFirstChild("HumanoidRootPart")
-                    if root then
-                        local isLv1_30 = (targetSpot - LevelFarmer.farmSpotLv1_30).Magnitude < 5
-                        local checkY = isLv1_30 and (targetSpot.Y + 4.0) or targetSpot.Y
-                        local dist = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(targetSpot.X, 0, targetSpot.Z)).Magnitude
-                        local yDiff = math.abs(root.Position.Y - checkY)
+                    if not handleDeeprootNightSafe(targetSpot, targetDesc) then
+                        local char = LocalPlayer.Character
+                        local root = char and char:FindFirstChild("HumanoidRootPart")
+                        if root then
+                            local isLv1_30 = (targetSpot - LevelFarmer.farmSpotLv1_30).Magnitude < 5
+                            local checkY = isLv1_30 and (targetSpot.Y + 4.0) or targetSpot.Y
+                            local dist = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(targetSpot.X, 0, targetSpot.Z)).Magnitude
+                            local yDiff = math.abs(root.Position.Y - checkY)
 
-                        -- Nếu cấp độ thay đổi khiến đổi bãi farm hoặc bị văng ra xa -> Sky-Tween bay tới bãi mới
-                        if targetSpot ~= currentAssignedSpot or dist > 15 or yDiff > 10 then
-                            currentAssignedSpot = targetSpot
-                            print(string.format("[AutoFarmLevel] 🔄 Cập nhật bãi farm (%s) -> Tiến hành Sky-Tween...", targetDesc))
-                            flyToFarmSpot(targetSpot)
-                            enableLevelFarmerNoclip()
+                            -- Nếu cấp độ thay đổi khiến đổi bãi farm hoặc bị văng ra xa -> Sky-Tween bay tới bãi mới
+                            if targetSpot ~= currentAssignedSpot or dist > 15 or yDiff > 10 then
+                                currentAssignedSpot = targetSpot
+                                print(string.format("[AutoFarmLevel] 🔄 Cập nhật bãi farm (%s) -> Tiến hành Sky-Tween...", targetDesc))
+                                flyToFarmSpot(targetSpot)
+                                enableLevelFarmerNoclip()
+                            end
                         end
                     end
                 end
@@ -3599,6 +3648,12 @@ LevelGroup:AddToggle("AutoMeditate", {
     Tooltip = "Tự động phát hiện khi Essence dừng tăng (đạt Cap level) -> Tự động đi thiền mô phỏng phím M gặp Aretim để thăng cấp rồi trở về",
 })
 
+LevelGroup:AddToggle("DeeprootNightFailsafe", {
+    Text = "🌙 Deeproot Night Safe Hover (Avoid Sentinel)",
+    Default = true,
+    Tooltip = "Khi farm tại Deeproot Forest / Westwood: Nếu trời tối (17:30 - 06:30), tự động bay lên tầng mây (Y: 1200) đứng đợi trời sáng để tránh gặp siêu quái Sentinel of Darkness.",
+})
+
 StatsGroup:AddToggle("AutoAllocateStats", {
     Text = "Enable Auto Stats Build",
     Default = true,
@@ -4481,37 +4536,14 @@ FilterGroup:AddDropdown("ESPWhitelist", {
     Text = "Whitelist Selection",
 })
 
-FPSGroup:AddToggle("EnableFPSBoost", {
-    Text = "Master FPS Boost (No Fog/Shadows)",
-    Default = false,
-    Callback = function(val)
-        applyFPSBoost()
-    end
-})
-
-FPSGroup:AddToggle("ExtremeFPSBoost", {
-    Text = "🔥 Extreme FPS Boost (Potato Mode)",
-    Default = false,
-    Tooltip = "Tối đa hóa FPS kịch khung: Chuyển toàn bộ vật thể về Smooth Plastic, xóa Decal/Texture/Light, tắt toàn bộ Particles/Hiệu ứng (KHÔNG tắt 3D Render).",
-    Callback = function(val)
+FPSGroup:AddButton({
+    Text = "🔥 FPS Boost (Potato Mode)",
+    DoubleClick = true,
+    Tooltip = "⚡ Tối đa hóa FPS kịch khung: Ép Smooth Plastic, xóa Decal/Texture/Light, ẩn cây cối thảm thực vật, tắt Particles/Shadows/Fog (KHÔNG tắt 3D Render).\n⚠️ CẢNH BÁO: Nhấp đúp (Double-Click) để kích hoạt. Cannot revert until rejoin!",
+    Func = function()
+        Toggles.ExtremeFPSBoost = { Value = true }
         applyExtremeFPSBoost()
-    end
-})
-
-FPSGroup:AddToggle("RemoveTrees", {
-    Text = "Remove Trees / Foliage / Grass",
-    Default = false,
-    Callback = function(val)
-        applyTreeRemoval()
-    end
-})
-
-FPSGroup:AddToggle("LowGraphics", {
-    Text = "Smooth Plastic / No Particles",
-    Default = false,
-    Callback = function(val)
-        applyLowGraphics()
-    end
+    end,
 })
 
 FPSGroup:AddSlider("FPSCap", {
