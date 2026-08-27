@@ -2636,71 +2636,137 @@ local function handleAxeQTE(axeQTE)
     end
 end
 
--- 6. STAFF / MAGIC QTE (INSTANT PRECISE RUNE MATCHING SOLVER)
+local GospelKeycodes = { Enum.KeyCode.Q, Enum.KeyCode.W, Enum.KeyCode.E, Enum.KeyCode.R }
+
+-- 6. STAFF / MAGIC QTE (DUAL ENGINE: REWORKED GOSPEL KEYBOARD Q/W/E/R & LEGACY RUNE SLOTS)
 local function handleMagicQTE(magicQTE)
     if not isQTEActive("Magic") or not magicQTE or not magicQTE.Visible then
         AutoQTE.magicSlottedTable = {}
         return
     end
 
-    local bag = magicQTE:FindFirstChild("Bag")
-    local runeSlots = magicQTE:FindFirstChild("RuneSlots")
-    if not bag or not runeSlots then return end
-
     local now = os.clock()
-    if now - AutoQTE.lastMagicHit < 0.08 then return end
+    if now - AutoQTE.lastMagicHit < 0.06 then return end
 
-    for _, rune in ipairs(bag:GetChildren()) do
-        if rune:IsA("GuiObject") and rune.Visible and rune.Name ~= "Slotted" and rune.ImageTransparency < 0.9 and not AutoQTE.magicSlottedTable[rune] then
-            local runeName = rune.Name
-            local matchingSlot = nil
-            for _, slot in ipairs(runeSlots:GetChildren()) do
-                if slot:IsA("GuiObject") and slot.Name == runeName and slot.Name ~= "Slotted" then
-                    matchingSlot = slot
-                    break
+    -- =========================================================================
+    -- A. XỬ LÝ REWORKED GOSPEL KEYBOARD MINIGAME (BẤM PHÍM Q, W, E, R THEO RUNE)
+    -- =========================================================================
+    local inv = magicQTE:FindFirstChild("inventory", true)
+    local activeWord = magicQTE:FindFirstChild("ActiveWord", true)
+
+    if inv and activeWord then
+        -- 1. Quét 4 phím bàn phím ở inventory (PadKey_1 .. PadKey_4 tương ứng Q, W, E, R)
+        local padKeys = {}
+        for i = 1, 4 do
+            local padObj = inv:FindFirstChild("PadKey_" .. i, true)
+            if padObj then
+                local textImg = padObj:FindFirstChild("Text", true) or padObj:FindFirstChild("TextOutline", true) or (padObj:IsA("ImageLabel") and padObj)
+                if textImg and (textImg:IsA("ImageLabel") or textImg:IsA("ImageButton")) then
+                    padKeys[i] = {
+                        offset = textImg.ImageRectOffset,
+                        obj = padObj,
+                        btn = padObj:FindFirstChildWhichIsA("GuiButton", true) or (padObj:IsA("GuiButton") and padObj)
+                    }
                 end
             end
+        end
 
-            if matchingSlot then
-                AutoQTE.lastMagicHit = now
-                AutoQTE.magicSlottedTable[rune] = true
+        -- 2. Tìm Slot cần điền hiện tại trong ActiveWord (chưa sáng / Unlit)
+        local activeSlot = nil
+        local lowestSlotNum = math.huge
 
-                local slotCenterX = matchingSlot.AbsolutePosition.X + (matchingSlot.AbsoluteSize.X / 2)
-                local slotCenterY = matchingSlot.AbsolutePosition.Y + (matchingSlot.AbsoluteSize.Y / 2)
-                local runeCenterX = rune.AbsolutePosition.X + (rune.AbsoluteSize.X / 2)
-                local runeCenterY = rune.AbsolutePosition.Y + (rune.AbsoluteSize.Y / 2)
+        for _, child in ipairs(activeWord:GetChildren()) do
+            if child:IsA("GuiObject") and child.Visible and child.Name:find("Slot_") then
+                local num = tonumber(child.Name:match("%d+")) or 999
+                local textImg = child:FindFirstChild("Text", true) or child:FindFirstChild("TextOutline", true) or (child:IsA("ImageLabel") and child)
+                if textImg and (textImg:IsA("ImageLabel") or textImg:IsA("ImageButton")) then
+                    local isLit = (textImg.ImageColor3.R > 0.75 and textImg.ImageColor3.G > 0.75 and textImg.ImageColor3.B > 0.75)
+                    if not isLit and num < lowestSlotNum then
+                        lowestSlotNum = num
+                        activeSlot = textImg
+                    end
+                end
+            end
+        end
 
-                local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
-                if delayMs > 0 then task.wait(delayMs / 1000) end
+        -- 3. So khớp biểu tượng ImageRectOffset và bấm ngay phím Q/W/E/R tương ứng
+        if activeSlot then
+            local targetOffset = activeSlot.ImageRectOffset
+            for i = 1, 4 do
+                local pad = padKeys[i]
+                if pad and pad.offset == targetOffset then
+                    AutoQTE.lastMagicHit = now
+                    local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
+                    if delayMs > 0 then task.wait(delayMs / 1000) end
 
-                local inputData = {
-                    UserInputType = Enum.UserInputType.MouseButton1,
-                    Position = Vector3.new(slotCenterX, slotCenterY, 0)
-                }
+                    local targetKey = GospelKeycodes[i]
+                    if targetKey then
+                        pressKey(targetKey)
+                    end
+                    if pad.btn then
+                        singleClick(pad.btn)
+                    end
+                    return
+                end
+            end
+        end
+    end
 
-                -- 1. Hardware mouse move to matching slot
-                pcall(function()
-                    VirtualInputManager:SendMouseMoveEvent(slotCenterX, slotCenterY, game)
-                end)
-
-                -- 2. Software firesignal drag & drop
-                if firesignal then
-                    pcall(function() firesignal(rune.InputBegan, inputData) end)
-                    pcall(function() firesignal(rune.InputEnded, inputData) end)
+    -- =========================================================================
+    -- B. XỬ LÝ LEGACY RUNE DRAG / DROP MINIGAME (KÉO RUNE VÀO SLOT)
+    -- =========================================================================
+    local bag = magicQTE:FindFirstChild("Bag")
+    local runeSlots = magicQTE:FindFirstChild("RuneSlots")
+    if bag and runeSlots then
+        for _, rune in ipairs(bag:GetChildren()) do
+            if rune:IsA("GuiObject") and rune.Visible and rune.Name ~= "Slotted" and rune.ImageTransparency < 0.9 and not AutoQTE.magicSlottedTable[rune] then
+                local runeName = rune.Name
+                local matchingSlot = nil
+                for _, slot in ipairs(runeSlots:GetChildren()) do
+                    if slot:IsA("GuiObject") and slot.Name == runeName and slot.Name ~= "Slotted" then
+                        matchingSlot = slot
+                        break
+                    end
                 end
 
-                -- 3. Hardware drag & drop simulation
-                pcall(function()
-                    VirtualInputManager:SendMouseMoveEvent(runeCenterX, runeCenterY, game)
-                    VirtualInputManager:SendMouseButtonEvent(runeCenterX, runeCenterY, 0, true, game, 0)
-                    task.wait(0.01)
-                    VirtualInputManager:SendMouseMoveEvent(slotCenterX, slotCenterY, game)
-                    VirtualInputManager:SendMouseButtonEvent(slotCenterX, slotCenterY, 0, false, game, 0)
-                end)
+                if matchingSlot then
+                    AutoQTE.lastMagicHit = now
+                    AutoQTE.magicSlottedTable[rune] = true
 
-                singleClick(rune)
-                singleClick(matchingSlot)
-                break
+                    local slotCenterX = matchingSlot.AbsolutePosition.X + (matchingSlot.AbsoluteSize.X / 2)
+                    local slotCenterY = matchingSlot.AbsolutePosition.Y + (matchingSlot.AbsoluteSize.Y / 2)
+                    local runeCenterX = rune.AbsolutePosition.X + (rune.AbsoluteSize.X / 2)
+                    local runeCenterY = rune.AbsolutePosition.Y + (rune.AbsoluteSize.Y / 2)
+
+                    local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
+                    if delayMs > 0 then task.wait(delayMs / 1000) end
+
+                    local inputData = {
+                        UserInputType = Enum.UserInputType.MouseButton1,
+                        Position = Vector3.new(slotCenterX, slotCenterY, 0)
+                    }
+
+                    pcall(function()
+                        VirtualInputManager:SendMouseMoveEvent(slotCenterX, slotCenterY, game)
+                    end)
+
+                    if firesignal then
+                        pcall(function() firesignal(rune.InputBegan, inputData) end)
+                        pcall(function() firesignal(rune.InputEnded, inputData) end)
+                    end
+
+                    pcall(function()
+                        VirtualInputManager:SendMouseMoveEvent(runeCenterX, runeCenterY, game)
+                        VirtualInputManager:SendMouseButtonEvent(runeCenterX, runeCenterY, 0, true, game, 0)
+                        task.wait(0.01)
+                        VirtualInputManager:SendMouseMoveEvent(slotCenterX, slotCenterY, game)
+                        VirtualInputManager:SendMouseButtonEvent(slotCenterX, slotCenterY, 0, false, game, 0)
+                    end)
+
+                    singleClick(rune)
+                    singleClick(matchingSlot)
+                    break
+                end
             end
         end
     end
@@ -2905,6 +2971,8 @@ registerConnection(RunService.RenderStepped:Connect(function()
     local daggerQTE = combatGui:FindFirstChild("DaggerQTE")
     local hammerQTE = combatGui:FindFirstChild("HammerQTE")
     local axeQTE = combatGui:FindFirstChild("AxeQTE")
+    local magicQTE = combatGui:FindFirstChild("MagicQTE")
+    local mochiiMagicQTE = combatGui:FindFirstChild("MochiiMagicQTE")
     local fistQTE = combatGui:FindFirstChild("FistQTE")
     local spearQTE = combatGui:FindFirstChild("SpearQTE")
     local lockpickQTE = combatGui:FindFirstChild("LockpickQTE")
@@ -2927,6 +2995,8 @@ registerConnection(RunService.RenderStepped:Connect(function()
     if axeQTE and axeQTE.Visible then handleAxeQTE(axeQTE) end
     if magicQTE and magicQTE.Visible then
         handleMagicQTE(magicQTE)
+    elseif mochiiMagicQTE and mochiiMagicQTE.Visible then
+        handleMagicQTE(mochiiMagicQTE)
     else
         AutoQTE.magicSlottedTable = {}
     end
