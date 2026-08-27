@@ -4119,7 +4119,99 @@ local FPSBooster = {
     originalFogEnd = (Lighting and Lighting.FogEnd) or 100000,
     originalFogStart = (Lighting and Lighting.FogStart) or 0,
     originalGlobalShadows = (Lighting and Lighting.GlobalShadows) or true,
+    originalBrightness = (Lighting and Lighting.Brightness) or 2,
 }
+
+local ExtremeFPS = {
+    active = false,
+    connection = nil,
+}
+
+local function applyExtremePart(p)
+    if not p then return end
+    if p:IsA("BasePart") then
+        p.Material = Enum.Material.SmoothPlastic
+        p.Reflectance = 0
+        p.CastShadow = false
+    elseif p:IsA("Decal") or p:IsA("Texture") then
+        p.Transparency = 1
+    elseif p:IsA("ParticleEmitter") or p:IsA("Trail") or p:IsA("Beam") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") then
+        p.Enabled = false
+    elseif p:IsA("PointLight") or p:IsA("SpotLight") or p:IsA("SurfaceLight") then
+        p.Enabled = false
+    elseif p:IsA("Highlight") then
+        p.Enabled = false
+    elseif p:IsA("PostEffect") or p:IsA("BloomEffect") or p:IsA("BlurEffect") or p:IsA("SunRaysEffect") or p:IsA("DepthOfFieldEffect") or p:IsA("ColorCorrectionEffect") or p:IsA("Atmosphere") or p:IsA("Clouds") then
+        p.Enabled = false
+    end
+end
+
+local function applyExtremeFPSBoost()
+    task.spawn(function()
+        pcall(function()
+            local isExtreme = Toggles.ExtremeFPSBoost and Toggles.ExtremeFPSBoost.Value
+            ExtremeFPS.active = isExtreme
+
+            if isExtreme then
+                -- 1. Tối ưu Lighting & Atmosphere
+                Lighting.GlobalShadows = false
+                Lighting.FogEnd = 9e9
+                Lighting.FogStart = 9e9
+                Lighting.Brightness = 1
+                pcall(function()
+                    sethiddenproperty(Lighting, "Technology", Enum.Technology.Compatibility)
+                end)
+
+                for _, effect in ipairs(Lighting:GetChildren()) do
+                    if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("Atmosphere") or effect:IsA("Clouds") then
+                        effect.Enabled = false
+                    end
+                end
+
+                -- 2. Tối ưu Terrain & Water
+                local terrain = workspace:FindFirstChildOfClass("Terrain")
+                if terrain then
+                    terrain.Decoration = false
+                    terrain.WaterWaveSize = 0
+                    terrain.WaterWaveSpeed = 0
+                    terrain.WaterReflectance = 0
+                    terrain.WaterTransparency = 0
+                end
+
+                -- 3. Quét và chuyển toàn bộ Texture/Material về SmoothPlastic & tắt toàn bộ Particle
+                for _, obj in ipairs(workspace:GetDescendants()) do
+                    applyExtremePart(obj)
+                end
+
+                -- 4. Tự động xử lý ngay lập tức khi có quái/hiệu ứng mới sinh ra
+                if not ExtremeFPS.connection then
+                    ExtremeFPS.connection = workspace.DescendantAdded:Connect(function(child)
+                        if ExtremeFPS.active then
+                            task.defer(function()
+                                applyExtremePart(child)
+                            end)
+                        end
+                    end)
+                    registerConnection(ExtremeFPS.connection)
+                end
+
+                -- 5. Thu dọn RAM
+                collectgarbage("collect")
+                Library:Notify("🔥 Extreme FPS Booster (Potato Mode) Activated!", 3)
+            else
+                if ExtremeFPS.connection then
+                    ExtremeFPS.connection:Disconnect()
+                    ExtremeFPS.connection = nil
+                end
+                Lighting.GlobalShadows = FPSBooster.originalGlobalShadows or true
+                Lighting.FogEnd = FPSBooster.originalFogEnd or 100000
+                Lighting.FogStart = FPSBooster.originalFogStart or 0
+                Lighting.Brightness = FPSBooster.originalBrightness or 2
+                Library:Notify("Extreme FPS Booster Deactivated.", 3)
+            end
+        end)
+    end)
+end
 
 local function applyFPSBoost()
     task.spawn(function()
@@ -4249,6 +4341,15 @@ FPSGroup:AddToggle("EnableFPSBoost", {
     end
 })
 
+FPSGroup:AddToggle("ExtremeFPSBoost", {
+    Text = "🔥 Extreme FPS Boost (Potato Mode)",
+    Default = false,
+    Tooltip = "Tối đa hóa FPS kịch khung: Chuyển toàn bộ vật thể về Smooth Plastic, xóa Decal/Texture/Light, tắt toàn bộ Particles/Hiệu ứng (KHÔNG tắt 3D Render).",
+    Callback = function(val)
+        applyExtremeFPSBoost()
+    end
+})
+
 FPSGroup:AddToggle("RemoveTrees", {
     Text = "Remove Trees / Foliage / Grass",
     Default = false,
@@ -4296,12 +4397,6 @@ OptGroup:AddButton("🌫️ Remove All Fog Permanently", function()
     if atmo then atmo.Density = 0 end
     Library:Notify("All Fog & Haze removed!", 3)
 end)
-
-OptGroup:AddToggle("BypassNoPainHP", {
-    Text = "Reveal 'I Feel No Pain' Real HP & Mana",
-    Default = true,
-    Tooltip = "Hiển thị chỉ số máu, thanh HP và thanh Mana/Energy thực tế khi đang chịu hiệu ứng ẩn từ Trial 'I Feel No Pain!'",
-})
 
 -- -----------------------------------------------------------------------------
 -- TAB 6: SETTINGS / CONFIG
