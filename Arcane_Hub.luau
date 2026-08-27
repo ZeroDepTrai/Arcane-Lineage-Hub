@@ -1685,9 +1685,42 @@ local function executeCombatTurn()
 
     local actionChoice = Options.SelectedCombatAction and Options.SelectedCombatAction.Value or "Auto Smart (Best Skill -> Strike)"
     local targetPrio = Options.TargetPriority and Options.TargetPriority.Value or "First Enemy"
+    local shouldMeditateIfNoSkill = Toggles.AutoMeditateInCombat and Toggles.AutoMeditateInCombat.Value
 
-    -- 1. Chuyển sang AttacksPage nếu đang ở ContextPage
     local ctxPage = actionBG:FindFirstChild("ContextPage")
+    local atkPage = actionBG:FindFirstChild("AttacksPage")
+    local header = actionBG:FindFirstChild("Header")
+
+    -- Hàm kích hoạt Meditate trong trận (hồi phục Energy / Mana / Stamina)
+    local function doCombatMeditate()
+        print("[AutoFarmLevel] 🧘 Không có skill khả dụng -> Đang kích hoạt Meditate trong trận để hồi phục Energy / Stamina...")
+
+        -- 1. Nếu đang ở AttacksPage hoặc bảng phụ, bấm Return về ContextPage
+        local returnBtn = header and header:FindFirstChild("Return")
+        if returnBtn and returnBtn.Visible then
+            safeClickButton(returnBtn)
+            task.wait(0.35) -- Đợi vượt qua 0.3s internal debounce của game
+        end
+
+        local medBtn = ctxPage and ctxPage:FindFirstChild("MeditateButton")
+        if medBtn then
+            safeClickButton(medBtn)
+            task.wait(0.1)
+            if firesignal then
+                pcall(function() firesignal(medBtn.MouseButton1Click) end)
+            end
+        end
+
+        -- 2. Dự phòng remote trực tiếp của game
+        pcall(function()
+            local pti = game.ReplicatedStorage:FindFirstChild("PlayerTurnInput")
+            if pti and pti:IsA("RemoteFunction") then
+                pti:InvokeServer("Meditate", false)
+            end
+        end)
+    end
+
+    -- 1. Chuyển sang AttacksPage nếu đang ở ContextPage để đọc danh sách skill
     if ctxPage and ctxPage.Visible then
         local atkBtn = ctxPage:FindFirstChild("AttackButton")
         if atkBtn then
@@ -1697,7 +1730,6 @@ local function executeCombatTurn()
     end
 
     -- 2. Lựa chọn chiêu thức trong AttacksPage
-    local atkPage = actionBG:FindFirstChild("AttacksPage")
     local attackFrame = atkPage and atkPage:FindFirstChild("Attack")
     local scrollFrame = attackFrame and attackFrame:FindFirstChild("ScrollingFrame")
 
@@ -1728,7 +1760,7 @@ local function executeCombatTurn()
             return nil
         end
 
-        -- A. Cơ chế 1: Custom Skill (Ưu tiên theo thứ tự Slot 1 -> 2 -> 3 -> 4)
+        -- A. Cơ chế 1: Custom Skill Priority (Ưu tiên theo thứ tự Slot 1 -> 2 -> 3 -> 4)
         if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
             local slots = {
                 Options.CustomSkillSlot1 and Options.CustomSkillSlot1.Value,
@@ -1745,33 +1777,15 @@ local function executeCombatTurn()
                 end
             end
 
-            -- Nếu toàn bộ skill ưu tiên đang hồi chiêu hoặc không đủ Energy/Stamina
+            -- Nếu toàn bộ skill ưu tiên không khả dụng (đang CD, thiếu Energy, sealed...)
             if not selectedSkillBtn then
-                local shouldMeditate = Toggles.AutoMeditateInCombat and Toggles.AutoMeditateInCombat.Value
-                if shouldMeditate then
-                    -- Quay trở lại ContextPage để bấm Meditate hồi Stamina/Energy
-                    local returnBtn = actionBG:FindFirstChild("Header") and actionBG.Header:FindFirstChild("Return")
-                    if returnBtn then
-                        safeClickButton(returnBtn)
-                        task.wait(0.2)
-                    end
-
-                    local medBtn = ctxPage and ctxPage:FindFirstChild("MeditateButton")
-                    if medBtn then
-                        print("[AutoFarmLevel] 🧘 Không có skill khả dụng -> Đang kích hoạt Meditate trong trận để hồi phục Energy...")
-                        safeClickButton(medBtn)
-                        task.wait(0.25)
-
-                        local goBtn = combatGui:FindFirstChild("Go")
-                        if goBtn and goBtn.Visible then
-                            safeClickButton(goBtn)
-                        end
-                        return
-                    end
+                if shouldMeditateIfNoSkill then
+                    doCombatMeditate()
+                    return
+                else
+                    -- Fallback về Strike đánh thường
+                    selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChild("Magic Missile")
                 end
-
-                -- Nếu không bật Meditate: Fallback về Strike đánh thường
-                selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChild("Magic Missile")
             end
         end
 
@@ -1780,7 +1794,7 @@ local function executeCombatTurn()
             local bestSkill = nil
             local maxCost = -1
             for _, btn in ipairs(scrollFrame:GetChildren()) do
-                if isSkillReady(btn) and btn.Name ~= "Strike" and btn.Name ~= "Magic Missile" then
+                if isSkillReady(btn) and btn.Name ~= "Strike" and btn.Name ~= "Magic Missile" and btn.Name ~= "Frame" then
                     local costText = btn:FindFirstChild("Cost") and btn.Cost:FindFirstChild("TextLabel") and btn.Cost.TextLabel.Text or "0"
                     local costNum = tonumber(costText:match("%d+")) or 0
                     if costNum > maxCost then
@@ -1789,8 +1803,17 @@ local function executeCombatTurn()
                     end
                 end
             end
+
             if bestSkill then
                 selectedSkillBtn = bestSkill
+            else
+                -- Không có skill đặc biệt nào sẵn sàng
+                if shouldMeditateIfNoSkill then
+                    doCombatMeditate()
+                    return
+                else
+                    selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChild("Magic Missile")
+                end
             end
         end
 
@@ -1799,7 +1822,7 @@ local function executeCombatTurn()
             selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChild("Magic Missile")
             if not selectedSkillBtn or not isSkillReady(selectedSkillBtn) then
                 for _, btn in ipairs(scrollFrame:GetChildren()) do
-                    if isSkillReady(btn) then
+                    if isSkillReady(btn) and btn.Name ~= "Frame" and btn:IsA("GuiButton") then
                         selectedSkillBtn = btn
                         break
                     end
@@ -1812,6 +1835,9 @@ local function executeCombatTurn()
             print(string.format("[AutoFarmLevel] ⚔️ Đang kích hoạt đòn đánh: '%s'", skillName))
             safeClickButton(selectedSkillBtn)
             task.wait(0.25)
+        elseif shouldMeditateIfNoSkill then
+            doCombatMeditate()
+            return
         end
     end
 
