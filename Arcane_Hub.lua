@@ -4120,99 +4120,165 @@ local FPSBooster = {
     originalFogStart = (Lighting and Lighting.FogStart) or 0,
     originalGlobalShadows = (Lighting and Lighting.GlobalShadows) or true,
     originalBrightness = (Lighting and Lighting.Brightness) or 2,
+    originalAmbient = (Lighting and Lighting.Ambient) or Color3.fromRGB(0, 0, 0),
+    originalOutdoorAmbient = (Lighting and Lighting.OutdoorAmbient) or Color3.fromRGB(128, 128, 128),
+    originalShadowSoftness = (Lighting and Lighting.ShadowSoftness) or 0.2,
 }
 
-local ExtremeFPS = {
-    active = false,
-    connection = nil,
+local OptimizationState = {
+    extremeActive = false,
+    extremeConnection = nil,
+    lowGraphicsActive = false,
+    lowGraphicsConnection = nil,
+    removeTreesActive = false,
+    removeTreesConnection = nil,
 }
 
-local function applyExtremePart(p)
-    if not p then return end
-    if p:IsA("BasePart") then
-        p.Material = Enum.Material.SmoothPlastic
-        p.Reflectance = 0
-        p.CastShadow = false
-    elseif p:IsA("Decal") or p:IsA("Texture") then
-        p.Transparency = 1
-    elseif p:IsA("ParticleEmitter") or p:IsA("Trail") or p:IsA("Beam") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") then
-        p.Enabled = false
-    elseif p:IsA("PointLight") or p:IsA("SpotLight") or p:IsA("SurfaceLight") then
-        p.Enabled = false
-    elseif p:IsA("Highlight") then
-        p.Enabled = false
-    elseif p:IsA("PostEffect") or p:IsA("BloomEffect") or p:IsA("BlurEffect") or p:IsA("SunRaysEffect") or p:IsA("DepthOfFieldEffect") or p:IsA("ColorCorrectionEffect") or p:IsA("Atmosphere") or p:IsA("Clouds") then
-        p.Enabled = false
+-- 1. XỬ LÝ ẨN CÂY CỐI & THẢM THỰC VẬT (REMOVE TREES / FOLIAGE / GRASS)
+local function applyPartTreeRemoval(obj, hideTrees)
+    if not obj then return end
+    local name = obj.Name:lower()
+    local isTreeFoliage = name:find("tree") or name:find("bush") or name:find("leaf") or name:find("leaves")
+        or name:find("foliage") or name:find("grass") or name:find("plant") or name:find("flora")
+        or name:find("canopy") or name:find("trunk") or name:find("vine") or name:find("wood")
+
+    if obj:IsA("Model") and isTreeFoliage and not obj:FindFirstChildOfClass("Humanoid") and not obj:FindFirstChild("ClickDetector") then
+        for _, p in ipairs(obj:GetDescendants()) do
+            if p:IsA("BasePart") then
+                p.Transparency = hideTrees and 1 or 0
+                p.CastShadow = not hideTrees
+                p.CanCollide = not hideTrees
+            end
+        end
+    elseif obj:IsA("BasePart") and isTreeFoliage and not (LocalPlayer.Character and obj:IsDescendantOf(LocalPlayer.Character)) then
+        obj.Transparency = hideTrees and 1 or 0
+        obj.CastShadow = not hideTrees
+        obj.CanCollide = not hideTrees
     end
 end
 
-local function applyExtremeFPSBoost()
+local function applyTreeRemoval()
     task.spawn(function()
         pcall(function()
-            local isExtreme = Toggles.ExtremeFPSBoost and Toggles.ExtremeFPSBoost.Value
-            ExtremeFPS.active = isExtreme
+            local hideTrees = Toggles.RemoveTrees and Toggles.RemoveTrees.Value or false
+            OptimizationState.removeTreesActive = hideTrees
 
-            if isExtreme then
-                -- 1. Tối ưu Lighting & Atmosphere
-                Lighting.GlobalShadows = false
-                Lighting.FogEnd = 9e9
-                Lighting.FogStart = 9e9
-                Lighting.Brightness = 1
-                pcall(function()
-                    sethiddenproperty(Lighting, "Technology", Enum.Technology.Compatibility)
-                end)
-
-                for _, effect in ipairs(Lighting:GetChildren()) do
-                    if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("Atmosphere") or effect:IsA("Clouds") then
-                        effect.Enabled = false
+            -- Quét thư mục rác MapGarbage & toàn bộ workspace
+            local mapGarbage = workspace:FindFirstChild("MapGarbage")
+            if mapGarbage then
+                local treeGarb = mapGarbage:FindFirstChild("TreeGarbage")
+                if treeGarb then
+                    for _, m in ipairs(treeGarb:GetDescendants()) do
+                        if m:IsA("BasePart") then
+                            m.Transparency = hideTrees and 1 or 0
+                            m.CastShadow = not hideTrees
+                        end
                     end
                 end
+            end
 
-                -- 2. Tối ưu Terrain & Water
-                local terrain = workspace:FindFirstChildOfClass("Terrain")
-                if terrain then
-                    terrain.Decoration = false
-                    terrain.WaterWaveSize = 0
-                    terrain.WaterWaveSpeed = 0
-                    terrain.WaterReflectance = 0
-                    terrain.WaterTransparency = 0
-                end
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                applyPartTreeRemoval(obj, hideTrees)
+            end
 
-                -- 3. Quét và chuyển toàn bộ Texture/Material về SmoothPlastic & tắt toàn bộ Particle
-                for _, obj in ipairs(workspace:GetDescendants()) do
-                    applyExtremePart(obj)
-                end
-
-                -- 4. Tự động xử lý ngay lập tức khi có quái/hiệu ứng mới sinh ra
-                if not ExtremeFPS.connection then
-                    ExtremeFPS.connection = workspace.DescendantAdded:Connect(function(child)
-                        if ExtremeFPS.active then
+            if hideTrees then
+                if not OptimizationState.removeTreesConnection then
+                    OptimizationState.removeTreesConnection = workspace.DescendantAdded:Connect(function(child)
+                        if OptimizationState.removeTreesActive then
                             task.defer(function()
-                                applyExtremePart(child)
+                                applyPartTreeRemoval(child, true)
                             end)
                         end
                     end)
-                    registerConnection(ExtremeFPS.connection)
+                    registerConnection(OptimizationState.removeTreesConnection)
                 end
-
-                -- 5. Thu dọn RAM
-                collectgarbage("collect")
-                Library:Notify("🔥 Extreme FPS Booster (Potato Mode) Activated!", 3)
             else
-                if ExtremeFPS.connection then
-                    ExtremeFPS.connection:Disconnect()
-                    ExtremeFPS.connection = nil
+                if OptimizationState.removeTreesConnection then
+                    OptimizationState.removeTreesConnection:Disconnect()
+                    OptimizationState.removeTreesConnection = nil
                 end
-                Lighting.GlobalShadows = FPSBooster.originalGlobalShadows or true
-                Lighting.FogEnd = FPSBooster.originalFogEnd or 100000
-                Lighting.FogStart = FPSBooster.originalFogStart or 0
-                Lighting.Brightness = FPSBooster.originalBrightness or 2
-                Library:Notify("Extreme FPS Booster Deactivated.", 3)
             end
         end)
     end)
 end
 
+-- 2. XỬ LÝ ĐỒ HỌA MƯỢT & TẮT PARTICLE (LOW GRAPHICS)
+local function applyPartLowGraphics(p, isLow)
+    if not p then return end
+    if LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character) then return end
+
+    if p:IsA("BasePart") then
+        if isLow then
+            p.Material = Enum.Material.SmoothPlastic
+            p.Reflectance = 0
+            p.CastShadow = false
+        end
+    elseif p:IsA("MeshPart") then
+        if isLow then
+            p.Material = Enum.Material.SmoothPlastic
+            p.Reflectance = 0
+            p.CastShadow = false
+            p.TextureID = ""
+        end
+    elseif p:IsA("SpecialMesh") then
+        if isLow then
+            p.TextureId = ""
+        end
+    elseif p:IsA("Decal") or p:IsA("Texture") then
+        if isLow then
+            p.Transparency = 1
+        end
+    elseif p:IsA("SurfaceAppearance") then
+        if isLow then
+            p:Destroy()
+        end
+    elseif p:IsA("ParticleEmitter") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") or p:IsA("Trail") or p:IsA("Beam") or p:IsA("Highlight") then
+        p.Enabled = not isLow
+    elseif p:IsA("PointLight") or p:IsA("SpotLight") or p:IsA("SurfaceLight") then
+        p.Enabled = not isLow
+    end
+end
+
+local function applyLowGraphics()
+    task.spawn(function()
+        pcall(function()
+            local isLow = Toggles.LowGraphics and Toggles.LowGraphics.Value or false
+            OptimizationState.lowGraphicsActive = isLow
+
+            if isLow then
+                pcall(function() settings().Rendering.QualityLevel = 1 end)
+                local terrain = workspace:FindFirstChildOfClass("Terrain")
+                if terrain then
+                    terrain.Decoration = false
+                end
+            end
+
+            for _, p in ipairs(workspace:GetDescendants()) do
+                applyPartLowGraphics(p, isLow)
+            end
+
+            if isLow then
+                if not OptimizationState.lowGraphicsConnection then
+                    OptimizationState.lowGraphicsConnection = workspace.DescendantAdded:Connect(function(child)
+                        if OptimizationState.lowGraphicsActive then
+                            task.defer(function()
+                                applyPartLowGraphics(child, true)
+                            end)
+                        end
+                    end)
+                    registerConnection(OptimizationState.lowGraphicsConnection)
+                end
+            else
+                if OptimizationState.lowGraphicsConnection then
+                    OptimizationState.lowGraphicsConnection:Disconnect()
+                    OptimizationState.lowGraphicsConnection = nil
+                end
+            end
+        end)
+    end)
+end
+
+-- 3. XỬ LÝ MASTER FPS BOOST (XÓA SƯƠNG MÙ / HIỆU ỨNG ÁNH SÁNG)
 local function applyFPSBoost()
     task.spawn(function()
         pcall(function()
@@ -4221,6 +4287,7 @@ local function applyFPSBoost()
                 Lighting.GlobalShadows = false
                 Lighting.FogEnd = 9e9
                 Lighting.FogStart = 9e9
+                Lighting.ShadowSoftness = 0
 
                 local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
                 if atmosphere then
@@ -4230,7 +4297,7 @@ local function applyFPSBoost()
                 end
 
                 for _, effect in ipairs(Lighting:GetChildren()) do
-                    if effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") then
+                    if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") then
                         effect.Enabled = false
                     end
                 end
@@ -4246,6 +4313,7 @@ local function applyFPSBoost()
                 Lighting.GlobalShadows = FPSBooster.originalGlobalShadows or true
                 Lighting.FogEnd = FPSBooster.originalFogEnd or 100000
                 Lighting.FogStart = FPSBooster.originalFogStart or 0
+                Lighting.ShadowSoftness = FPSBooster.originalShadowSoftness or 0.2
                 local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
                 if atmosphere then
                     atmosphere.Density = 0.3
@@ -4255,43 +4323,123 @@ local function applyFPSBoost()
     end)
 end
 
-local function applyTreeRemoval()
+-- 4. XỬ LÝ EXTREME FPS BOOSTER (POTATO MODE TOÀN DIỆN - KHÔNG TẮT 3D RENDER)
+local function applyExtremePart(p)
+    if not p then return end
+    if p:IsA("BasePart") then
+        p.Material = Enum.Material.SmoothPlastic
+        p.Reflectance = 0
+        p.CastShadow = false
+    elseif p:IsA("MeshPart") then
+        p.Material = Enum.Material.SmoothPlastic
+        p.Reflectance = 0
+        p.CastShadow = false
+        p.TextureID = ""
+    elseif p:IsA("SpecialMesh") then
+        p.TextureId = ""
+    elseif p:IsA("Decal") or p:IsA("Texture") then
+        p.Transparency = 1
+    elseif p:IsA("SurfaceAppearance") then
+        p:Destroy()
+    elseif p:IsA("ParticleEmitter") or p:IsA("Trail") or p:IsA("Beam") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") or p:IsA("Highlight") or p:IsA("Explosion") then
+        p.Enabled = false
+    elseif p:IsA("PointLight") or p:IsA("SpotLight") or p:IsA("SurfaceLight") then
+        p.Enabled = false
+    elseif p:IsA("PostEffect") or p:IsA("BloomEffect") or p:IsA("BlurEffect") or p:IsA("SunRaysEffect") or p:IsA("DepthOfFieldEffect") or p:IsA("ColorCorrectionEffect") or p:IsA("Atmosphere") or p:IsA("Clouds") then
+        p.Enabled = false
+    end
+end
+
+local function applyExtremeFPSBoost()
     task.spawn(function()
         pcall(function()
-            local hideTrees = Toggles.RemoveTrees and Toggles.RemoveTrees.Value
-            for _, obj in ipairs(workspace:GetDescendants()) do
-                if obj:IsA("Model") and not obj:FindFirstChildOfClass("Humanoid") and not obj:FindFirstChild("ClickDetector") then
-                    local name = obj.Name:lower()
-                    if name:find("tree") or name:find("bush") or name:find("leaf") or name:find("foliage") or name:find("grass") or name:find("plant") then
-                        for _, p in ipairs(obj:GetDescendants()) do
-                            if p:IsA("BasePart") then
-                                p.Transparency = hideTrees and 1 or 0
-                                p.CastShadow = not hideTrees
+            local isExtreme = Toggles.ExtremeFPSBoost and Toggles.ExtremeFPSBoost.Value or false
+            OptimizationState.extremeActive = isExtreme
+
+            if isExtreme then
+                -- A. Cấu hình Engine Renderer & GPU Settings thấp nhất tuyệt đối
+                pcall(function() settings().Rendering.QualityLevel = 1 end)
+                pcall(function() sethiddenproperty(Lighting, "Technology", Enum.Technology.Compatibility) end)
+
+                -- B. Triệt tiêu toàn bộ hiệu ứng ánh sáng / sương mù / bóng đổ
+                Lighting.GlobalShadows = false
+                Lighting.FogEnd = 9e9
+                Lighting.FogStart = 9e9
+                Lighting.Brightness = 1
+                Lighting.ShadowSoftness = 0
+                Lighting.ClockTime = 14
+                Lighting.Ambient = Color3.fromRGB(130, 130, 130)
+                Lighting.OutdoorAmbient = Color3.fromRGB(130, 130, 130)
+
+                for _, effect in ipairs(Lighting:GetChildren()) do
+                    if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("Atmosphere") or effect:IsA("Clouds") then
+                        effect.Enabled = false
+                    end
+                end
+
+                -- C. Triệt tiêu toàn bộ thảm thực vật & cây cối
+                local mapGarbage = workspace:FindFirstChild("MapGarbage")
+                if mapGarbage then
+                    local treeGarb = mapGarbage:FindFirstChild("TreeGarbage")
+                    if treeGarb then
+                        for _, m in ipairs(treeGarb:GetDescendants()) do
+                            if m:IsA("BasePart") then
+                                m.Transparency = 1
+                                m.CastShadow = false
+                                m.CanCollide = false
                             end
                         end
                     end
                 end
-            end
-        end)
-    end)
-end
 
-local function applyLowGraphics()
-    task.spawn(function()
-        pcall(function()
-            local isLow = Toggles.LowGraphics and Toggles.LowGraphics.Value
-            for _, p in ipairs(workspace:GetDescendants()) do
-                if p:IsA("BasePart") and not (LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character)) then
-                    if isLow then
-                        p.Material = Enum.Material.SmoothPlastic
-                        p.Reflectance = 0
-                        p.CastShadow = false
-                    end
-                elseif p:IsA("ParticleEmitter") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") or p:IsA("Trail") then
-                    if not (LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character)) then
-                        p.Enabled = not isLow
-                    end
+                -- D. Triệt tiêu Terrain Water & Decorations
+                local terrain = workspace:FindFirstChildOfClass("Terrain")
+                if terrain then
+                    terrain.Decoration = false
+                    terrain.WaterWaveSize = 0
+                    terrain.WaterWaveSpeed = 0
+                    terrain.WaterReflectance = 0
+                    terrain.WaterTransparency = 0
                 end
+
+                -- E. Quét toàn bộ vật thể trong Workspace
+                for _, obj in ipairs(workspace:GetDescendants()) do
+                    applyExtremePart(obj)
+                    applyPartTreeRemoval(obj, true)
+                end
+
+                -- F. Lắng nghe vật thể mới sinh ra và lập tức ép về dạng Potato
+                if not OptimizationState.extremeConnection then
+                    OptimizationState.extremeConnection = workspace.DescendantAdded:Connect(function(child)
+                        if OptimizationState.extremeActive then
+                            task.defer(function()
+                                applyExtremePart(child)
+                                applyPartTreeRemoval(child, true)
+                            end)
+                        end
+                    end)
+                    registerConnection(OptimizationState.extremeConnection)
+                end
+
+                -- G. Dọn dẹp bộ nhớ RAM
+                collectgarbage("collect")
+                Library:Notify("🔥 Extreme Potato FPS Mode (Max FPS) Activated!", 3)
+            else
+                if OptimizationState.extremeConnection then
+                    OptimizationState.extremeConnection:Disconnect()
+                    OptimizationState.extremeConnection = nil
+                end
+
+                Lighting.GlobalShadows = FPSBooster.originalGlobalShadows or true
+                Lighting.FogEnd = FPSBooster.originalFogEnd or 100000
+                Lighting.FogStart = FPSBooster.originalFogStart or 0
+                Lighting.Brightness = FPSBooster.originalBrightness or 2
+                Lighting.Ambient = FPSBooster.originalAmbient or Color3.fromRGB(0, 0, 0)
+                Lighting.OutdoorAmbient = FPSBooster.originalOutdoorAmbient or Color3.fromRGB(128, 128, 128)
+                Lighting.ShadowSoftness = FPSBooster.originalShadowSoftness or 0.2
+
+                applyFPSBoost()
+                Library:Notify("Extreme FPS Booster Deactivated.", 3)
             end
         end)
     end)
