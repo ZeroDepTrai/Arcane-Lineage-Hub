@@ -34,7 +34,14 @@ if not game:IsLoaded() then
 end
 
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local LocalPlayer = Players.LocalPlayer
+if not LocalPlayer then
+    local startWait = os.clock()
+    while not Players.LocalPlayer and (os.clock() - startWait < 10) do
+        task.wait(0.1)
+    end
+    LocalPlayer = Players.LocalPlayer
+end
 local PlayerGui = LocalPlayer and (LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5))
 
 if shared.ArcaneHub then
@@ -63,9 +70,11 @@ end
 -- Force destroy any lingering old Linoria GUIs
 pcall(function()
     local parentObj = (gethui and gethui()) or game:GetService("CoreGui") or PlayerGui
-    for _, gui in ipairs(parentObj:GetChildren()) do
-        if gui.Name == "LinoriaLib" or gui.Name == "Arcane Hub" then
-            gui:Destroy()
+    if parentObj then
+        for _, gui in ipairs(parentObj:GetChildren()) do
+            if gui.Name == "LinoriaLib" or gui.Name == "Arcane Hub" then
+                gui:Destroy()
+            end
         end
     end
 end)
@@ -86,26 +95,101 @@ end)
 
 local HttpRequest = (syn and syn.request) or (http and http.request) or http_request or request
 
-local function queueTeleportScript()
-    local queueFn = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
-    if queueFn then
-        pcall(function()
-            queueFn([[
-                repeat task.wait() until game:IsLoaded()
-                local fn = loadfile("Arcane_Hub.lua") or loadfile("Arcane_Hub.luau")
-                if fn then
-                    pcall(fn)
-                elseif readfile then
-                    local ok, src = pcall(readfile, "Arcane_Hub.lua")
-                    if not ok then ok, src = pcall(readfile, "Arcane_Hub.luau") end
-                    if ok and src then
-                        local loaded = loadstring(src)
-                        if loaded then pcall(loaded) end
+local function getQueuePayload()
+    return [=[
+task.spawn(function()
+    local startWait = os.clock()
+    if not game:IsLoaded() then
+        pcall(function() game.Loaded:Wait() end)
+    end
+    while not game:IsLoaded() and (os.clock() - startWait < 15) do
+        task.wait(0.2)
+    end
+
+    local players = game:GetService("Players")
+    local playerWait = os.clock()
+    while not players.LocalPlayer and (os.clock() - playerWait < 15) do
+        task.wait(0.2)
+    end
+
+    task.wait(1.5)
+
+    local executed = false
+
+    -- 1. Ưu tiên nạp từ local script của executor
+    local fileCandidates = {
+        "Arcane_Hub.lua",
+        "Arcane_Hub.luau",
+        "scripts/Arcane_Hub.lua",
+        "scripts/Arcane_Hub.luau"
+    }
+
+    for _, path in ipairs(fileCandidates) do
+        if not executed and loadfile then
+            local ok, fn = pcall(loadfile, path)
+            if ok and type(fn) == "function" then
+                local runOk, err = pcall(fn)
+                if runOk then
+                    executed = true
+                    break
+                end
+            end
+        end
+        if not executed and readfile then
+            local ok, src = pcall(readfile, path)
+            if ok and type(src) == "string" and #src > 100 then
+                local loadOk, fn = pcall(loadstring, src)
+                if loadOk and type(fn) == "function" then
+                    local runOk, err = pcall(fn)
+                    if runOk then
+                        executed = true
+                        break
                     end
                 end
-            ]])
-        end)
+            end
+        end
     end
+
+    -- 2. Fallback tải trực tiếp từ GitHub / Gist
+    if not executed then
+        local remoteUrls = {
+            "https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/Arcane_Hub.lua",
+            "https://gist.githubusercontent.com/ZeroDepTrai/c81661682d9297b3f8130a53bc900df8/raw/Arcane_Hub.lua"
+        }
+        for _, url in ipairs(remoteUrls) do
+            local ok, code = pcall(function() return game:HttpGet(url) end)
+            if ok and type(code) == "string" and #code > 100 then
+                local loadOk, fn = pcall(loadstring, code)
+                if loadOk and type(fn) == "function" then
+                    local runOk, err = pcall(fn)
+                    if runOk then
+                        executed = true
+                        break
+                    end
+                end
+            end
+        end
+    end
+end)
+]=]
+end
+
+local function queueTeleportScript()
+    local queueFn = queue_on_teleport 
+        or queueonteleport 
+        or (syn and syn.queue_on_teleport) 
+        or (fluxus and fluxus.queue_on_teleport) 
+        or (Krnl and Krnl.queue_on_teleport)
+        or (getgenv and getgenv().queue_on_teleport)
+        or (getgenv and getgenv().queueonteleport)
+
+    if queueFn then
+        local ok, err = pcall(function()
+            queueFn(getQueuePayload())
+        end)
+        return ok
+    end
+    return false
 end
 
 -- =============================================================================
@@ -4149,25 +4233,13 @@ MenuGroup:AddToggle("AutoLoadOnChangingServer", {
     Tooltip = "Tự động nạp lại Arcane Hub ngay khi chuyển server, server hop hoặc teleport trong game",
     Callback = function(Value)
         if Value then
-            queueTeleportScript()
-            pcall(function()
-                if writefile then
-                    writefile("../autoexec/Arcane_Hub_Autoexec.lua", [[
-repeat task.wait() until game:IsLoaded()
-local fn = loadfile("Arcane_Hub.lua") or loadfile("Arcane_Hub.luau")
-if fn then
-    pcall(fn)
-end
-]])
-                end
-            end)
-            Library:Notify("✅ Đã bật tự động nạp Hub khi đổi Server!", 3)
+            local queued = queueTeleportScript()
+            if queued then
+                Library:Notify("✅ Đã bật Auto Load on Changing Server (Đã nạp Teleport Queue)!", 3)
+            else
+                Library:Notify("⚠️ Executor không hỗ trợ queue_on_teleport!", 3)
+            end
         else
-            pcall(function()
-                if delfile then
-                    delfile("../autoexec/Arcane_Hub_Autoexec.lua")
-                end
-            end)
             Library:Notify("❌ Đã tắt tự động nạp Hub khi đổi Server!", 3)
         end
     end
@@ -4176,7 +4248,7 @@ end
 pcall(function()
     if LocalPlayer and LocalPlayer.OnTeleport then
         registerConnection(LocalPlayer.OnTeleport:Connect(function(state)
-            if Toggles.AutoLoadOnChangingServer and Toggles.AutoLoadOnChangingServer.Value then
+            if Toggles and Toggles.AutoLoadOnChangingServer and Toggles.AutoLoadOnChangingServer.Value then
                 queueTeleportScript()
             end
         end))
@@ -4195,6 +4267,14 @@ pcall(function()
     if SaveManager then
         SaveManager:LoadAutoloadConfig()
     end
+end)
+
+task.defer(function()
+    pcall(function()
+        if Toggles and Toggles.AutoLoadOnChangingServer and Toggles.AutoLoadOnChangingServer.Value then
+            queueTeleportScript()
+        end
+    end)
 end)
 
 -- =============================================================================
