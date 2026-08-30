@@ -4926,7 +4926,7 @@ local OptGroup = Tabs.Visuals:AddRightGroupbox("🛠️ Optimization & RAM")
 
 QOLGroup:AddToggle("EnemyAttackPredictor", {
     Text = "🔮 Enemy Skill Predictor & Combat HUD",
-    Default = true,
+    Default = false,
     Tooltip = "Hiển thị bảng phân tích dự đoán chiêu thức tiếp theo của quái, thanh Energy thời gian thực và bắt chiêu ngay khi quái vung đòn",
 })
 
@@ -4940,7 +4940,7 @@ end)
 
 QOLGroup:AddToggle("PredictorWorldESP", {
     Text = "🏷️ Show Predictor On Enemy Heads (ESP)",
-    Default = true,
+    Default = false,
     Tooltip = "Hiển thị thanh Energy & Chiêu dự đoán trực tiếp dạng Billboard trên đầu quái vật",
 })
 
