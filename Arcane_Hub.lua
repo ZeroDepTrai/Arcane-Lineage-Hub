@@ -468,6 +468,154 @@ local function sendDiscordReport(harvestedMap, totalHarvested)
 end
 
 -- =============================================================================
+
+-- =============================================================================
+-- CORRUPT SERVER DETECTOR & HUNTER ENGINE
+-- =============================================================================
+local CorruptHunter = {
+    running = false,
+    thread = nil,
+}
+
+local function checkIsCorruptServer()
+    local isCorrupt = false
+    local eventName = "None"
+
+    -- 1. Check CurrentEvent in ReplicatedStorage
+    local ev = ReplicatedStorage:FindFirstChild("CurrentEvent")
+    if ev and ev:IsA("StringValue") and ev.Value ~= "" and ev.Value ~= "None" then
+        isCorrupt = true
+        eventName = ev.Value
+    end
+
+    -- 2. Check ShadowSky in ReplicatedStorage
+    local ss = ReplicatedStorage:FindFirstChild("ShadowSky")
+    if ss and ss:IsA("BoolValue") and ss.Value == true then
+        isCorrupt = true
+        if eventName == "None" then eventName = "Shadow Sky (Corrupted)" end
+    end
+
+    -- 3. Check Lighting PostEffects
+    local lighting = game:GetService("Lighting")
+    if lighting then
+        local sc = lighting:FindFirstChild("ShadowCorrupt")
+        if sc and sc:IsA("PostEffect") and sc.Enabled then
+            isCorrupt = true
+            if eventName == "None" then eventName = "Shadow Corrupt Effect" end
+        end
+        local cs = lighting:FindFirstChild("CursedSky")
+        if cs and cs:IsA("PostEffect") and cs.Enabled then
+            isCorrupt = true
+            if eventName == "None" then eventName = "Cursed Sky Effect" end
+        end
+        local lss = lighting:FindFirstChild("ShadowSky")
+        if lss and lss:IsA("PostEffect") and lss.Enabled then
+            isCorrupt = true
+            if eventName == "None" then eventName = "Shadow Sky Effect" end
+        end
+    end
+
+    -- 4. Check for Aberrant mobs in Living
+    local living = workspace:FindFirstChild("Living")
+    if living then
+        for _, m in ipairs(living:GetChildren()) do
+            local mn = m.Name:lower()
+            if mn:find("aberrant") or mn:find("corrupt") then
+                isCorrupt = true
+                if eventName == "None" then eventName = "Aberrant Spawn: " .. m.Name end
+                break
+            end
+        end
+    end
+
+    return isCorrupt, eventName
+end
+
+local function sendCorruptServerWebhook(eventName)
+    local webhookUrl = Options.DiscordWebhook and Options.DiscordWebhook.Value or ""
+    if #webhookUrl < 10 or not HttpRequest then return end
+
+    task.spawn(function()
+        local pingContent = Toggles.CorruptPingRole and Toggles.CorruptPingRole.Value and "@everyone" or nil
+        local reg = tostring(ReplicatedStorage:FindFirstChild("Region") and ReplicatedStorage.Region.Value or "Unknown")
+        local pCount = #Players:GetPlayers()
+        local pMax = Players.MaxPlayers or 20
+
+        local payload = {
+            username = "Arcane Lineage • Corrupt Server Alert",
+            avatar_url = "https://cdn-icons-png.flaticon.com/512/1042/1042340.png",
+            content = pingContent,
+            embeds = {{
+                title = "🔮 PHÁT HIỆN CORRUPT SERVER (EVENT SERVER)! 🔮",
+                description = string.format("Đã tìm thấy Server có sự kiện đặc biệt: **%s**!", eventName),
+                color = 0x9B59B6,
+                fields = {
+                    { name = "🌌 Sự Kiện (Event)", value = string.format("**%s**", eventName), inline = true },
+                    { name = "👥 Người Chơi", value = string.format("%d / %d", pCount, pMax), inline = true },
+                    { name = "🌍 Khu Vực (Region)", value = string.format("`%s`", reg), inline = true },
+                    { name = "🆔 Server JobId", value = string.format("```%s```", game.JobId), inline = false },
+                    { name = "📋 Script Teleport Vào Server", value = string.format("```lua\ngame:GetService('TeleportService'):TeleportToPlaceInstance(%d, '%s', game.Players.LocalPlayer)\n```", game.PlaceId, game.JobId), inline = false },
+                    { name = "👤 Phát Hiện Bởi", value = string.format("`%s` (%s)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true }
+                },
+                footer = { text = "Arcane Lineage Master Hub • Corrupt Hunter" },
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            }}
+        }
+        pcall(function()
+            HttpRequest({
+                Url = webhookUrl,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode(payload)
+            })
+        end)
+    end)
+end
+
+function CorruptHunter.start()
+    if CorruptHunter.running then return end
+    CorruptHunter.running = true
+    print("[CorruptHunter] 🔮 Bắt đầu quy trình tìm kiếm Corrupted Server...")
+    Library:Notify("🔮 Bắt đầu tìm kiếm Corrupted Server...", 4)
+
+    CorruptHunter.thread = task.spawn(function()
+        task.wait(2.5) -- Đợi game load ReplicatedStorage và Lighting đầy đủ
+        while CorruptHunter.running do
+            local isCorrupt, eventName = checkIsCorruptServer()
+            if isCorrupt then
+                print(string.format("[CorruptHunter] 🌟 PHÁT HIỆN CORRUPT SERVER: '%s'!", eventName))
+                Library:Notify(string.format("🔮 PHÁT HIỆN CORRUPT SERVER: %s!", eventName), 10)
+                sendCorruptServerWebhook(eventName)
+                
+                local stay = Toggles.StayInCorruptServer and Toggles.StayInCorruptServer.Value
+                if stay ~= false then
+                    print("[CorruptHunter] 🛑 Đã dừng Server Hop để ở lại Corrupt Server!")
+                    CorruptHunter.running = false
+                    if Toggles.HuntCorruptServer then
+                        Toggles.HuntCorruptServer:SetValue(false)
+                    end
+                    break
+                end
+            else
+                print("[CorruptHunter] ⏳ Server hiện tại không phải Corrupt Server. Đang chuẩn bị chuyển server tiếp theo...")
+                Library:Notify("⏳ Không phải Corrupt Server. Đang đổi server...", 3)
+                task.wait(1.5)
+                ServerHopper.hop()
+                task.wait(10) -- Chờ teleport
+            end
+            task.wait(4)
+        end
+    end)
+end
+
+function CorruptHunter.stop()
+    CorruptHunter.running = false
+    if CorruptHunter.thread then
+        task.cancel(CorruptHunter.thread)
+        CorruptHunter.thread = nil
+    end
+end
+
 -- AUTO START & MENU-SKIP
 -- =============================================================================
 local function handleAutoStart()
@@ -1713,13 +1861,13 @@ local function executeCombatTurn()
             local returnBtn = header and header:FindFirstChild("Return")
             if returnBtn and returnBtn.Visible then
                 safeClickButton(returnBtn)
-                task.wait(0.35) -- Đợi vượt qua 0.3s internal debounce của game
+                task.wait(1.0) -- Đợi 1.0s vượt qua internal animation & debounce của game
             end
 
             local medBtn = ctxPage and ctxPage:FindFirstChild("MeditateButton")
             if medBtn then
                 safeClickButton(medBtn)
-                task.wait(0.1)
+                task.wait(0.3)
                 if firesignal then
                     pcall(function() firesignal(medBtn.MouseButton1Click) end)
                 end
@@ -1732,6 +1880,164 @@ local function executeCombatTurn()
                     pti:InvokeServer("Meditate", false)
                 end
             end)
+            task.wait(1.0)
+        end
+
+        -- 1. Chuyển sang AttacksPage nếu đang ở ContextPage để đọc danh sách skill
+        if ctxPage and ctxPage.Visible then
+            local atkBtn = ctxPage:FindFirstChild("AttackButton")
+            if atkBtn then
+                safeClickButton(atkBtn)
+                task.wait(1.0) -- Tăng lên 1.0s để GUI chuyển trang hoàn tất, chống softlock
+            end
+        end
+
+        -- 2. Lựa chọn chiêu thức trong AttacksPage
+        local attackFrame = atkPage and atkPage:FindFirstChild("Attack")
+        local scrollFrame = attackFrame and attackFrame:FindFirstChild("ScrollingFrame")
+
+        if scrollFrame and scrollFrame.Visible then
+            local selectedSkillBtn = nil
+
+            local function isSkillReady(btn)
+                if not btn or not btn.Parent then return false end
+                local cd = btn:FindFirstChild("CD", true)
+                if cd and cd.Visible == true then return false end
+                local sealed = btn:FindFirstChild("Sealed", true)
+                if sealed and sealed.Visible == true then return false end
+                return true
+            end
+
+            local function findSkillByName(targetName)
+                if not targetName or targetName == "" or targetName == "None" then return nil end
+                local lowerTarget = targetName:lower()
+                for _, btn in ipairs(scrollFrame:GetChildren()) do
+                    if isSkillReady(btn) then
+                        local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
+                        local textToMatch = nameLabel and nameLabel.Text or btn.Name
+                        if textToMatch:lower():find(lowerTarget) then
+                            return btn
+                        end
+                    end
+                end
+                return nil
+            end
+
+            -- A. Cơ chế 1: Custom Skill Priority (Ưu tiên theo thứ tự Slot 1 -> 2 -> 3 -> 4)
+            if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
+                local slots = {
+                    Options.CustomSkillSlot1 and Options.CustomSkillSlot1.Value,
+                    Options.CustomSkillSlot2 and Options.CustomSkillSlot2.Value,
+                    Options.CustomSkillSlot3 and Options.CustomSkillSlot3.Value,
+                    Options.CustomSkillSlot4 and Options.CustomSkillSlot4.Value,
+                }
+
+                for _, slotName in ipairs(slots) do
+                    local foundBtn = findSkillByName(slotName)
+                    if foundBtn then
+                        selectedSkillBtn = foundBtn
+                        break
+                    end
+                end
+
+                -- Nếu toàn bộ skill ưu tiên không khả dụng (đang CD, thiếu Energy, sealed...)
+                if not selectedSkillBtn then
+                    if shouldMeditateIfNoSkill then
+                        doCombatMeditate()
+                        return
+                    else
+                        -- Fallback về Strike đánh thường
+                        selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChild("Magic Missile")
+                    end
+                end
+            end
+
+            -- B. Cơ chế 2: Auto Smart (Chọn skill mạnh nhất / tốn Energy cao nhất đang SẴN SÀNG)
+            if not selectedSkillBtn and actionChoice:find("Auto Smart") then
+                local bestSkill = nil
+                local maxCost = -1
+                for _, btn in ipairs(scrollFrame:GetChildren()) do
+                    if isSkillReady(btn) and btn.Name ~= "Strike" and btn.Name ~= "Magic Missile" and btn.Name ~= "Frame" then
+                        local costText = btn:FindFirstChild("Cost") and btn.Cost:FindFirstChild("TextLabel") and btn.Cost.TextLabel.Text or "0"
+                        local costNum = tonumber(costText:match("%d+")) or 0
+                        if costNum > maxCost then
+                            maxCost = costNum
+                            bestSkill = btn
+                        end
+                    end
+                end
+
+                if bestSkill then
+                    selectedSkillBtn = bestSkill
+                else
+                    -- Không có skill đặc biệt nào sẵn sàng
+                    if shouldMeditateIfNoSkill then
+                        doCombatMeditate()
+                        return
+                    else
+                        selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChild("Magic Missile")
+                    end
+                end
+            end
+
+            -- C. Cơ chế 3 / Fallback mặc định: Strike (Basic Attack)
+            if not selectedSkillBtn or not isSkillReady(selectedSkillBtn) then
+                selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChild("Magic Missile")
+                if not selectedSkillBtn or not isSkillReady(selectedSkillBtn) then
+                    for _, btn in ipairs(scrollFrame:GetChildren()) do
+                        if isSkillReady(btn) and btn.Name ~= "Frame" and btn:IsA("GuiButton") then
+                            selectedSkillBtn = btn
+                            break
+                        end
+                    end
+                end
+            end
+
+            if selectedSkillBtn then
+                local skillName = selectedSkillBtn.Name
+                print(string.format("[Combat] ⚔️ Đang kích hoạt đòn đánh: '%s'", skillName))
+                safeClickButton(selectedSkillBtn)
+                task.wait(1.0) -- Tăng delay lên 1.0s để game mở bảng Enemies hoặc xử lý đòn đánh an toàn
+            elseif shouldMeditateIfNoSkill then
+                doCombatMeditate()
+                return
+            end
+        end
+
+        -- 3. Chọn mục tiêu quái (nếu là skill đánh quái mở bảng Enemies)
+        local enemiesFrame = atkPage and atkPage:FindFirstChild("Enemies")
+        local enemiesScroll = enemiesFrame and (enemiesFrame:FindFirstChild("ScrollingFrame") or enemiesFrame)
+
+        if enemiesFrame and enemiesFrame.Visible and enemiesScroll then
+            local enemyButtons = {}
+            for _, btn in ipairs(enemiesScroll:GetChildren()) do
+                if btn:IsA("GuiButton") and btn.Visible and btn.Name ~= "Return" and btn.Name ~= "Template" then
+                    table.insert(enemyButtons, btn)
+                end
+            end
+
+            if #enemyButtons > 0 then
+                local chosenEnemy = enemyButtons[1]
+                if targetPrio == "Last Enemy" then
+                    chosenEnemy = enemyButtons[#enemyButtons]
+                elseif targetPrio == "Random Enemy" then
+                    chosenEnemy = enemyButtons[math.random(1, #enemyButtons)]
+                end
+
+                if chosenEnemy then
+                    safeClickButton(chosenEnemy)
+                    task.wait(1.0) -- Tăng delay lên 1.0s sau khi click quái
+                end
+            end
+        end
+
+        -- 4. Click Go confirmation button nếu xuất hiện
+        local goBtn = combatGui:FindFirstChild("Go")
+        if goBtn and goBtn.Visible then
+            safeClickButton(goBtn)
+            task.wait(1.0)
+        end
+    end)
         end
 
         -- 1. Chuyển sang AttacksPage nếu đang ở ContextPage để đọc danh sách skill
@@ -3774,10 +4080,54 @@ StatsGroup:AddButton({
 -- Fully automated Level Farming (No manual buttons needed)
 
 HopGroup:AddToggle("AutoServerHop", {
-    Text = "Auto Server Hop",
+    Text = "Auto Server Hop (Farm Items)",
     Default = false,
     Tooltip = "Tự động đổi server khi lụm xong hoặc khi server không có nguyên liệu",
 })
+
+HopGroup:AddDivider()
+
+HopGroup:AddToggle("HuntCorruptServer", {
+    Text = "🔮 Auto Hop Hunt Corrupt Server",
+    Default = false,
+    Tooltip = "Tự động đổi server liên tục cho đến khi tìm thấy Corrupted Server (Event Server)!",
+})
+
+Toggles.HuntCorruptServer:OnChanged(function()
+    if Toggles.HuntCorruptServer.Value then
+        CorruptHunter.start()
+    else
+        CorruptHunter.stop()
+    end
+end)
+
+HopGroup:AddToggle("StayInCorruptServer", {
+    Text = "🛑 Stay In Corrupt Server When Found",
+    Default = true,
+    Tooltip = "Tự động dừng hop khi đã tìm thấy Corrupt Server",
+})
+
+HopGroup:AddToggle("CorruptPingRole", {
+    Text = "🔔 Webhook Ping @everyone on Corrupt",
+    Default = false,
+    Tooltip = "Gắn thẻ @everyone khi gửi thông báo tìm thấy Corrupt Server qua Discord",
+})
+
+HopGroup:AddButton({
+    Text = "🔍 Check Current Server Event",
+    Func = function()
+        local isCorrupt, evName = checkIsCorruptServer()
+        if isCorrupt then
+            Library:Notify(string.format("🔮 ĐANG LÀ CORRUPT SERVER: %s!", evName), 6)
+            sendCorruptServerWebhook(evName)
+        else
+            Library:Notify("ℹ️ Server hiện tại bình thường (Không có Event Corrupt).", 4)
+        end
+    end,
+    DoubleClick = false,
+})
+
+HopGroup:AddDivider()
 
 HopGroup:AddSlider("MaxPlayerBuffer", {
     Text = "Free Slots Required",
@@ -3995,10 +4345,11 @@ FightGroup:AddDropdown("TargetPriority", {
 
 FightGroup:AddSlider("CombatDelay", {
     Text = "Turn Action Delay (s)",
-    Default = 0.4,
-    Min = 0.1,
-    Max = 2.0,
+    Default = 1.0,
+    Min = 0.5,
+    Max = 3.0,
     Rounding = 1,
+    Tooltip = "Độ trễ an toàn giữa các lượt đánh (mặc định 1.0s để tránh softlock do game chưa load kịp UI)",
 })
 
 -- -----------------------------------------------------------------------------
@@ -4684,7 +5035,8 @@ local function unloadHub()
             FlightController.noclipConn = nil
         end
     end
-    if ServerHopper then
+    if CorruptHunter then CorruptHunter.stop() end
+        if ServerHopper then
         ServerHopper.isHopping = false
     end
 
