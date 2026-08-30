@@ -4875,8 +4875,7 @@ function EnemyPredictor.start()
 
                                 if bb and bb:FindFirstChild("Label") then
                                     local topPred = pData.predictions[1] and pData.predictions[1].name or "Strike"
-                                    bb.Label.Text = string.format("⚡ <b>%d/%d Energy</b>
-🔮 <b>Next: %s</b>", pData.curEnergy, pData.maxEnergy, topPred)
+                                    bb.Label.Text = string.format("⚡ <b>%d/%d Energy</b>\n🔮 <b>Next: %s</b>", pData.curEnergy, pData.maxEnergy, topPred)
                                 end
                             end
                         end
@@ -4889,8 +4888,7 @@ function EnemyPredictor.start()
 
                 local contentLabel = hud and hud:FindFirstChild("Content")
                 if contentLabel then
-                    contentLabel.Text = table.concat(hudLines, "
-")
+                    contentLabel.Text = table.concat(hudLines, "\n")
                 end
             else
                 if hud then hud.Visible = false end
