@@ -4570,9 +4570,452 @@ TownWarpGroup:AddButton("👁️ Metrom (Dungeon Entrance)", function() teleport
 -- -----------------------------------------------------------------------------
 local ESPGroup = Tabs.Visuals:AddLeftGroupbox("👁️ Ingredient ESP")
 local FilterGroup = Tabs.Visuals:AddLeftGroupbox("🎯 Filters & Categories")
+
+-- =============================================================================
+-- ENEMY SKILL PREDICTOR & COMBAT HUD ENGINE (QOL VISUAL SUITE)
+-- =============================================================================
+local EnemyPredictor = {
+    running = false,
+    thread = nil,
+    gui = nil,
+    billboards = {},
+    skillsCache = {},
+    npcCache = {},
+    lastIndicatedSkill = nil,
+    lastIndicatedTime = 0,
+    currentDecidingEnemy = nil,
+}
+
+-- Khởi tạo Cache dữ liệu Kỹ năng và NPC từ ReplicatedStorage
+local function initPredictorData()
+    pcall(function()
+        local skillsMod = ReplicatedStorage:FindFirstChild("Constants") and ReplicatedStorage.Constants:FindFirstChild("Skills")
+        if skillsMod then
+            local ok, data = pcall(require, skillsMod)
+            if ok and type(data) == "table" then
+                EnemyPredictor.skillsCache = data
+            end
+        end
+    end)
+
+    pcall(function()
+        local npcFolder = ReplicatedStorage:FindFirstChild("NPCs")
+        if npcFolder then
+            for _, mod in ipairs(npcFolder:GetChildren()) do
+                if mod:IsA("ModuleScript") then
+                    local ok, data = pcall(require, mod)
+                    if ok and type(data) == "table" then
+                        EnemyPredictor.npcCache[mod.Name] = data
+                    end
+                end
+            end
+        end
+    end)
+end
+initPredictorData()
+
+-- Lắng nghe AttackIndicate và Deciding từ Server để bắt chiêu sớm nhất
+pcall(function()
+    local fightRemotes = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Fight")
+    if fightRemotes then
+        local atkInd = fightRemotes:FindFirstChild("AttackIndicate")
+        if atkInd and atkInd:IsA("RemoteEvent") then
+            atkInd.OnClientEvent:Connect(function(skillName)
+                if not skillName then return end
+                EnemyPredictor.lastIndicatedSkill = tostring(skillName)
+                EnemyPredictor.lastIndicatedTime = os.clock()
+                EnemyPredictor.currentDecidingEnemy = nil
+
+                if Toggles.EnemyAttackPredictor and Toggles.EnemyAttackPredictor.Value then
+                    local skInfo = EnemyPredictor.skillsCache[tostring(skillName)]
+                    local aff = skInfo and skInfo.Affinity or "Unknown"
+                    local dmg = skInfo and skInfo.Damage or "?"
+                    local sType = skInfo and skInfo.Type or "Attack"
+
+                    print(string.format("[Predictor] ⚡ QUÁI TUNG CHIÊU: '%s' | Hệ: %s | Sát thương: %s | Loại: %s", tostring(skillName), aff, tostring(dmg), sType))
+
+                    -- Cảnh báo âm thanh nếu là chiêu nguy hiểm
+                    if Toggles.PredictorSoundAlert and Toggles.PredictorSoundAlert.Value then
+                        local lowerS = tostring(skillName):lower()
+                        if lowerS:find("pillar") or lowerS:find("inferno") or lowerS:find("armageddon") or lowerS:find("beam") or lowerS:find("eruption") or lowerS:find("crush") then
+                            local sound = Instance.new("Sound")
+                            sound.SoundId = "rbxassetid://6534948092" -- Warning beep
+                            sound.Volume = 1.5
+                            sound.Parent = game:GetService("SoundService")
+                            sound:Play()
+                            game:GetService("Debris"):AddItem(sound, 3)
+                        end
+                    end
+                end
+            end)
+        end
+
+        local deciding = fightRemotes:FindFirstChild("Deciding")
+        if deciding and deciding:IsA("RemoteEvent") then
+            deciding.OnClientEvent:Connect(function(enemyName)
+                EnemyPredictor.currentDecidingEnemy = enemyName
+            end)
+        end
+    end
+end)
+
+-- Tạo Giao diện HUD trên màn hình
+local function createPredictorScreenHUD()
+    if EnemyPredictor.gui then return EnemyPredictor.gui end
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "ArcaneEnemyPredictorHUD"
+    sg.ResetOnSpawn = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 320, 0, 180)
+    mainFrame.Position = UDim2.new(0.02, 0, 0.45, 0)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+    mainFrame.BackgroundTransparency = 0.15
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Visible = false
+    mainFrame.Parent = sg
+
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, 8)
+    uiCorner.Parent = mainFrame
+
+    local uiStroke = Instance.new("UIStroke")
+    uiStroke.Color = Color3.fromRGB(155, 89, 182) -- Purple neon
+    uiStroke.Thickness = 1.5
+    uiStroke.Parent = mainFrame
+
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Size = UDim2.new(1, -20, 0, 26)
+    title.Position = UDim2.new(0, 10, 0, 6)
+    title.BackgroundTransparency = 1
+    title.Text = "🔮 ENEMY SKILL PREDICTOR"
+    title.TextColor3 = Color3.fromRGB(240, 240, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 13
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = mainFrame
+
+    local contentLabel = Instance.new("TextLabel")
+    contentLabel.Name = "Content"
+    contentLabel.Size = UDim2.new(1, -20, 1, -38)
+    contentLabel.Position = UDim2.new(0, 10, 0, 32)
+    contentLabel.BackgroundTransparency = 1
+    contentLabel.Text = "Đang quét trận đấu..."
+    contentLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+    contentLabel.Font = Enum.Font.Gotham
+    contentLabel.TextSize = 11
+    contentLabel.TextXAlignment = Enum.TextXAlignment.Left
+    contentLabel.TextYAlignment = Enum.TextYAlignment.Top
+    contentLabel.TextWrapped = true
+    contentLabel.RichText = true
+    contentLabel.Parent = mainFrame
+
+    -- Hỗ trợ kéo thả HUD
+    local dragging, dragInput, dragStart, startPos
+    mainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = mainFrame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    mainFrame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    pcall(function()
+        local coreGui = game:GetService("CoreGui")
+        sg.Parent = coreGui
+    end)
+    if not sg.Parent then
+        sg.Parent = PlayerGui
+    end
+
+    EnemyPredictor.gui = sg
+    return sg
+end
+
+-- Tính toán dự đoán chiêu thức cho 1 quái vật
+local function predictEnemySkills(enemyModel)
+    if not enemyModel or not enemyModel.Parent then return nil end
+
+    local enemyName = enemyModel.Name
+    local cleanName = enemyName:gsub("%s*%(.*%)", ""):gsub("%d+$", ""):gsub("^%s*(.-)%s*$", "%1")
+
+    -- 1. Lấy thông tin máu
+    local hum = enemyModel:FindFirstChildOfClass("Humanoid")
+    local curHp = hum and math.floor(hum.Health) or 0
+    local maxHp = hum and math.floor(hum.MaxHealth) or 100
+
+    -- 2. Lấy thông tin Năng lượng (Energy)
+    local energyVal = enemyModel:FindFirstChild("Status") and enemyModel.Status:FindFirstChild("Energy")
+    local curEnergy = energyVal and energyVal.Value or 0
+
+    -- 3. Lấy chiêu vừa dùng
+    local lastAttackVal = enemyModel:FindFirstChild("Effects") and enemyModel.Effects:FindFirstChild("LastUsedAttack")
+    local lastAttack = lastAttackVal and lastAttackVal.Value or "Chưa rõ"
+
+    -- 4. Tìm dữ liệu NPC gốc
+    local npcData = EnemyPredictor.npcCache[cleanName] or EnemyPredictor.npcCache[enemyName]
+    local maxEnergy = npcData and npcData.MaxEnergy or 6
+    local attackPool = npcData and npcData.Attacks or {}
+
+    local damageSkills = attackPool.Damage or {}
+    local specialSkills = attackPool.Special or {}
+    local noEnergySkills = attackPool.NoEnergy or {}
+
+    -- 5. Thuật toán dự đoán dựa trên Energy và Cooldown
+    local predictedList = {}
+    
+    if curEnergy == 0 then
+        -- Chắc chắn chỉ có thể dùng NoEnergy skills hoặc Strike
+        if #noEnergySkills > 0 then
+            for _, sk in ipairs(noEnergySkills) do
+                table.insert(predictedList, { name = sk, chance = "Cao (100% khi hết Energy)", danger = false })
+            end
+        else
+            table.insert(predictedList, { name = "Strike (Đánh thường)", chance = "Cao (100%)", danger = false })
+        end
+    else
+        -- Có Energy: Lọc các chiêu có Cost <= curEnergy
+        for _, sk in ipairs(damageSkills) do
+            local skInfo = EnemyPredictor.skillsCache[sk]
+            local cost = skInfo and skInfo.Cost or 1
+            if cost <= curEnergy then
+                local isRecent = (lastAttack == sk)
+                local chanceStr = isRecent and "Trung bình (Vừa dùng)" or "Rất Cao"
+                local isDanger = (sk:lower():find("pillar") or sk:lower():find("beam") or sk:lower():find("hellfire") or sk:lower():find("crush"))
+                table.insert(predictedList, { name = sk, cost = cost, chance = chanceStr, danger = isDanger })
+            end
+        end
+
+        for _, sk in ipairs(specialSkills) do
+            local skInfo = EnemyPredictor.skillsCache[sk]
+            local cost = skInfo and skInfo.Cost or 2
+            if cost <= curEnergy then
+                local isRecent = (lastAttack == sk)
+                local chanceStr = isRecent and "Thấp (Cooldown)" or "Cao (Special)"
+                table.insert(predictedList, { name = sk, cost = cost, chance = chanceStr, danger = true })
+            end
+        end
+
+        if #predictedList == 0 then
+            table.insert(predictedList, { name = "Strike (Đánh thường)", chance = "100%", danger = false })
+        end
+    end
+
+    return {
+        model = enemyModel,
+        name = enemyName,
+        curHp = curHp,
+        maxHp = maxHp,
+        curEnergy = curEnergy,
+        maxEnergy = maxEnergy,
+        lastAttack = lastAttack,
+        predictions = predictedList
+    }
+end
+
+-- Vòng lặp cập nhật Predictor
+function EnemyPredictor.start()
+    if EnemyPredictor.running then return end
+    EnemyPredictor.running = true
+    createPredictorScreenHUD()
+
+    EnemyPredictor.thread = task.spawn(function()
+        while EnemyPredictor.running do
+            local inCombat = isInCombat()
+            local hud = EnemyPredictor.gui and EnemyPredictor.gui:FindFirstChild("MainFrame")
+
+            if inCombat and Toggles.EnemyAttackPredictor and Toggles.EnemyAttackPredictor.Value then
+                if hud then hud.Visible = true end
+
+                -- Lấy danh sách quái trong trận
+                local activeEnemies = {}
+                local living = workspace:FindFirstChild("Living")
+                local char = LocalPlayer.Character
+                local myFightVal = char and char:FindFirstChild("FightInProgress")
+                local myFightId = myFightVal and myFightVal.Value
+
+                if living then
+                    for _, m in ipairs(living:GetChildren()) do
+                        if m ~= char and m:FindFirstChildOfClass("Humanoid") then
+                            local fVal = m:FindFirstChild("FightInProgress")
+                            if not myFightId or not fVal or fVal.Value == myFightId then
+                                local hum = m:FindFirstChildOfClass("Humanoid")
+                                if hum and hum.Health > 0 and not Players:GetPlayerFromCharacter(m) then
+                                    table.insert(activeEnemies, m)
+                                end
+                            end
+                        end
+                    end
+                end
+
+                -- Xây dựng văn bản hiển thị HUD
+                local hudLines = {}
+
+                -- Hiển thị cảnh báo thời gian thực nếu vừa có AttackIndicate (< 2.5s)
+                local now = os.clock()
+                if EnemyPredictor.lastIndicatedSkill and (now - EnemyPredictor.lastIndicatedTime < 2.5) then
+                    local skName = EnemyPredictor.lastIndicatedSkill
+                    local skInfo = EnemyPredictor.skillsCache[skName]
+                    local aff = skInfo and skInfo.Affinity or "Fire/Physical"
+                    table.insert(hudLines, string.format("⚡ <b><font color='#FF5555'>ĐANG TUNG CHIÊU: %s</font></b> <font color='#F1C40F'>[%s]</font>", skName, aff))
+                    table.insert(hudLines, "────────────────────────────")
+                elseif EnemyPredictor.currentDecidingEnemy then
+                    table.insert(hudLines, string.format("⏳ <i><font color='#F39C12'>%s đang suy nghĩ lượt...</font></i>", EnemyPredictor.currentDecidingEnemy))
+                    table.insert(hudLines, "────────────────────────────")
+                end
+
+                for idx, enemyModel in ipairs(activeEnemies) do
+                    local pData = predictEnemySkills(enemyModel)
+                    if pData then
+                        local hpPercent = math.clamp(pData.curHp / math.max(1, pData.maxHp), 0, 1)
+                        local hpColor = hpPercent > 0.5 and "#2ECC71" or (hpPercent > 0.25 and "#F39C12" or "#E74C3C")
+                        local energyStr = string.format("⚡ Energy: <font color='#3498DB'><b>%d / %d</b></font>", pData.curEnergy, pData.maxEnergy)
+
+                        table.insert(hudLines, string.format("👹 <b>%s</b> (<font color='%s'>%d/%d HP</font>) | %s", pData.name, hpColor, pData.curHp, pData.maxHp, energyStr))
+                        table.insert(hudLines, string.format("  • <i>Chiêu vừa ra:</i> <font color='#BDC3C7'>%s</font>", pData.lastAttack))
+                        
+                        local predStrList = {}
+                        for _, pr in ipairs(pData.predictions) do
+                            local color = pr.danger and "#FF7675" or "#55EFC4"
+                            table.insert(predStrList, string.format("<font color='%s'>%s</font>", color, pr.name))
+                        end
+                        table.insert(hudLines, "  • 🔮 <b>Dự đoán:</b> " .. table.concat(predStrList, " | "))
+                        if idx < #activeEnemies then
+                            table.insert(hudLines, "")
+                        end
+
+                        -- Cập nhật World Billboard trên đầu quái
+                        if Toggles.PredictorWorldESP and Toggles.PredictorWorldESP.Value then
+                            local head = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
+                            if head then
+                                local bb = EnemyPredictor.billboards[enemyModel]
+                                if not bb or not bb.Parent then
+                                    bb = Instance.new("BillboardGui")
+                                    bb.Name = "EnemyPredictorBB"
+                                    bb.Size = UDim2.new(0, 160, 0, 45)
+                                    bb.StudsOffset = Vector3.new(0, 3.2, 0)
+                                    bb.AlwaysOnTop = true
+                                    bb.Adornee = head
+                                    
+                                    local bbLabel = Instance.new("TextLabel")
+                                    bbLabel.Name = "Label"
+                                    bbLabel.Size = UDim2.new(1, 0, 1, 0)
+                                    bbLabel.BackgroundTransparency = 0.4
+                                    bbLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+                                    bbLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                                    bbLabel.Font = Enum.Font.GothamBold
+                                    bbLabel.TextSize = 10
+                                    bbLabel.RichText = true
+                                    bbLabel.Parent = bb
+
+                                    local crn = Instance.new("UICorner")
+                                    crn.CornerRadius = UDim.new(0, 4)
+                                    crn.Parent = bbLabel
+
+                                    bb.Parent = head
+                                    EnemyPredictor.billboards[enemyModel] = bb
+                                end
+
+                                if bb and bb:FindFirstChild("Label") then
+                                    local topPred = pData.predictions[1] and pData.predictions[1].name or "Strike"
+                                    bb.Label.Text = string.format("⚡ <b>%d/%d Energy</b>
+🔮 <b>Next: %s</b>", pData.curEnergy, pData.maxEnergy, topPred)
+                                end
+                            end
+                        end
+                    end
+                end
+
+                if #activeEnemies == 0 then
+                    table.insert(hudLines, "<i>Đang tìm mục tiêu quái trong trận...</i>")
+                end
+
+                local contentLabel = hud and hud:FindFirstChild("Content")
+                if contentLabel then
+                    contentLabel.Text = table.concat(hudLines, "
+")
+                end
+            else
+                if hud then hud.Visible = false end
+                -- Ẩn hoặc dọn dẹp billboards
+                for model, bb in pairs(EnemyPredictor.billboards) do
+                    if bb and bb.Parent then pcall(function() bb:Destroy() end) end
+                end
+                EnemyPredictor.billboards = {}
+            end
+
+            task.wait(0.25)
+        end
+    end)
+end
+
+function EnemyPredictor.stop()
+    EnemyPredictor.running = false
+    if EnemyPredictor.thread then
+        task.cancel(EnemyPredictor.thread)
+        EnemyPredictor.thread = nil
+    end
+    if EnemyPredictor.gui then
+        pcall(function() EnemyPredictor.gui:Destroy() end)
+        EnemyPredictor.gui = nil
+    end
+    for model, bb in pairs(EnemyPredictor.billboards) do
+        if bb and bb.Parent then pcall(function() bb:Destroy() end) end
+    end
+    EnemyPredictor.billboards = {}
+end
+
 local QOLGroup = Tabs.Visuals:AddRightGroupbox("✨ Quality of Life (QOL)")
 local FPSGroup = Tabs.Visuals:AddRightGroupbox("⚡ FPS Booster")
 local OptGroup = Tabs.Visuals:AddRightGroupbox("🛠️ Optimization & RAM")
+
+QOLGroup:AddToggle("EnemyAttackPredictor", {
+    Text = "🔮 Enemy Skill Predictor & Combat HUD",
+    Default = true,
+    Tooltip = "Hiển thị bảng phân tích dự đoán chiêu thức tiếp theo của quái, thanh Energy thời gian thực và bắt chiêu ngay khi quái vung đòn",
+})
+
+Toggles.EnemyAttackPredictor:OnChanged(function()
+    if Toggles.EnemyAttackPredictor.Value then
+        EnemyPredictor.start()
+    else
+        EnemyPredictor.stop()
+    end
+end)
+
+QOLGroup:AddToggle("PredictorWorldESP", {
+    Text = "🏷️ Show Predictor On Enemy Heads (ESP)",
+    Default = true,
+    Tooltip = "Hiển thị thanh Energy & Chiêu dự đoán trực tiếp dạng Billboard trên đầu quái vật",
+})
+
+QOLGroup:AddToggle("PredictorSoundAlert", {
+    Text = "🔔 Sound Alert On Danger Skills",
+    Default = false,
+    Tooltip = "Phát chuông cảnh báo âm thanh khi boss/quái bắt đầu tung chiêu nguy hiểm (Magma Pillar, Inferno, v.v.)",
+})
+
+QOLGroup:AddDivider()
 
 QOLGroup:AddToggle("BypassNoPainHP", {
     Text = "Reveal 'I Feel No Pain' HP & Mana",
@@ -5035,7 +5478,8 @@ local function unloadHub()
             FlightController.noclipConn = nil
         end
     end
-    if CorruptHunter then CorruptHunter.stop() end
+    if EnemyPredictor then EnemyPredictor.stop() end
+        if CorruptHunter then CorruptHunter.stop() end
         if ServerHopper then
         ServerHopper.isHopping = false
     end
