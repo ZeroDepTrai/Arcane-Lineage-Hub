@@ -63,7 +63,7 @@ Tài liệu này tổng hợp toàn bộ thông tin kiến trúc, tính năng, c
 #### 2. ⚔️ Tab Combat (`Tabs.AutoQTE`)
 * **⚡ Auto Combat & Minigames QTE**:
   * **100% Perfect Dodge / Block**: Tự động né hoàn hảo không mất máu (ưu tiên Dodge, dự phòng Block).
-  * Giải QTE toàn bộ vũ khí: Sword (Single-click $0.25\text{s}$ debounce), Dagger (bắt Weakpoint), Hammer (PID Power Bar), Axe (Equilibrium), Staff/Magic (Rune matching), Fist/Cestus (Combo), Spear (Taps, Lines & Curves), Mở khóa rương (Chest Lockpick).
+  * Giải QTE toàn bộ vũ khí: Sword (Single-click $0.25\text{s}$ debounce), Dagger (bắt Weakpoint), Hammer (PID Power Bar), Axe (Equilibrium), Staff/Magic (Classic Rune Drag & Drop Matching), Fist/Cestus (Combo), Spear (Taps, Lines & Curves), Mở khóa rương (Chest Lockpick).
   * `ReactionDelayMs`: Tùy chỉnh độ trễ mô phỏng người chơi ($0 \rightarrow 150\text{ ms}$).
 * **⚔️ Auto Fight Engine & 🔒 Strict Custom Skill Priority**:
   * `Enable Auto Fight`: Tự động tung chiêu / đánh thường / thiền khi đến lượt trong trận đấu (hoạt động độc lập ngoài trận).

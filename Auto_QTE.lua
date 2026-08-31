@@ -77,6 +77,8 @@ local AutoQTE = {
     lastDaggerHit = 0,
     lastHammerHit = 0,
     lastAxePress = 0,
+    lastMagicHit = 0,
+    isMagicSolving = false,
     lastFistHit = 0,
     lastSpearHit = 0,
     swordHitIndices = {},
@@ -275,6 +277,88 @@ local function handleAxeQTE(axeQTE)
     end
 end
 
+-- 6. XỬ LÝ STAFF / MAGIC QTE (RUNE MATCHING & DRAG-AND-DROP SOLVER)
+local function handleMagicQTE(magicQTE)
+    if not Config.AutoMagic or not magicQTE or not magicQTE.Visible then
+        AutoQTE.isMagicSolving = false
+        return
+    end
+
+    if AutoQTE.isMagicSolving then return end
+
+    local now = os.clock()
+    if now - AutoQTE.lastMagicHit < 0.25 then return end
+
+    local bag = magicQTE:FindFirstChild("Bag")
+    local runeSlots = magicQTE:FindFirstChild("RuneSlots")
+    if not bag or not runeSlots then return end
+
+    local targetRune = nil
+    local targetSlot = nil
+
+    for _, rune in ipairs(bag:GetChildren()) do
+        if rune:IsA("GuiObject") and rune.Visible and rune.Name ~= "Slotted" and rune.ImageTransparency < 0.9 then
+            local runeName = rune.Name
+            for _, slot in ipairs(runeSlots:GetChildren()) do
+                if slot:IsA("GuiObject") and slot.Name == runeName and slot.Name ~= "Slotted" then
+                    targetRune = rune
+                    targetSlot = slot
+                    break
+                end
+            end
+            if targetRune and targetSlot then
+                break
+            end
+        end
+    end
+
+    if targetRune and targetSlot then
+        AutoQTE.lastMagicHit = now
+        AutoQTE.isMagicSolving = true
+
+        task.spawn(function()
+            if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
+
+            local runePos = targetRune.AbsolutePosition + (targetRune.AbsoluteSize / 2)
+            local slotPos = targetSlot.AbsolutePosition + (targetSlot.AbsoluteSize / 2)
+
+            pcall(function()
+                VirtualInputManager:SendMouseMoveEvent(runePos.X, runePos.Y, game)
+            end)
+            task.wait(0.015)
+            pcall(function()
+                VirtualInputManager:SendMouseButtonEvent(runePos.X, runePos.Y, 0, true, game, 0)
+            end)
+            task.wait(0.025)
+
+            pcall(function()
+                VirtualInputManager:SendMouseMoveEvent(slotPos.X, slotPos.Y, game)
+            end)
+            task.wait(0.025)
+
+            pcall(function()
+                VirtualInputManager:SendMouseButtonEvent(slotPos.X, slotPos.Y, 0, false, game, 0)
+            end)
+
+            if firesignal then
+                local inputStart = {
+                    UserInputType = Enum.UserInputType.MouseButton1,
+                    Position = Vector3.new(runePos.X, runePos.Y, 0)
+                }
+                local inputEnd = {
+                    UserInputType = Enum.UserInputType.MouseButton1,
+                    Position = Vector3.new(slotPos.X, slotPos.Y, 0)
+                }
+                pcall(function() firesignal(targetRune.InputBegan, inputStart) end)
+                pcall(function() firesignal(targetRune.InputEnded, inputEnd) end)
+            end
+
+            task.wait(0.22)
+            AutoQTE.isMagicSolving = false
+        end)
+    end
+end
+
 -- 6. FIST / CESTUS QTE (SEQUENTIAL COMBO ARROWS)
 local function handleFistQTE(fistQTE)
     if not Config.AutoFist or not fistQTE or not fistQTE.Visible then return end
@@ -357,6 +441,8 @@ function AutoQTE.init()
     local daggerQTE = combatGui:WaitForChild("DaggerQTE", 5)
     local hammerQTE = combatGui:WaitForChild("HammerQTE", 5)
     local axeQTE = combatGui:WaitForChild("AxeQTE", 5)
+    local magicQTE = combatGui:WaitForChild("MagicQTE", 5)
+    local mochiiMagicQTE = combatGui:WaitForChild("MochiiMagicQTE", 5)
     local fistQTE = combatGui:WaitForChild("FistQTE", 5)
     local spearQTE = combatGui:WaitForChild("SpearQTE", 5)
     local lockpickQTE = combatGui:WaitForChild("LockpickQTE", 5)
@@ -368,6 +454,7 @@ function AutoQTE.init()
         if daggerQTE and daggerQTE.Visible then handleDaggerQTE(daggerQTE) end
         if hammerQTE and hammerQTE.Visible then handleHammerQTE(hammerQTE) end
         if axeQTE and axeQTE.Visible then handleAxeQTE(axeQTE) end
+        if magicQTE and magicQTE.Visible then handleMagicQTE(magicQTE) elseif mochiiMagicQTE and mochiiMagicQTE.Visible then handleMagicQTE(mochiiMagicQTE) else AutoQTE.isMagicSolving = false end
         if fistQTE and fistQTE.Visible then handleFistQTE(fistQTE) end
         if lockpickQTE and lockpickQTE.Visible then handleLockpickQTE(lockpickQTE) end
     end)
