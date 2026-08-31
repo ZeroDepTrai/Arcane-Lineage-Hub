@@ -3008,33 +3008,7 @@ local function handleAxeQTE(axeQTE)
     end
 end
 
-local function ensureMagicQTEHook()
-    if _G.__ArcaneMagicQTEHookApplied then return end
-    local rawGetGuiObjects = PlayerGui.GetGuiObjectsAtPosition
-    if hookfunction then
-        pcall(function()
-            hookfunction(PlayerGui.GetGuiObjectsAtPosition, function(self, x, y)
-                if AutoQTE.currentTargetRuneName then
-                    local combat = PlayerGui:FindFirstChild("Combat")
-                    local magicQTE = combat and combat:FindFirstChild("MagicQTE")
-                    if magicQTE and magicQTE.Visible then
-                        local runeSlots = magicQTE:FindFirstChild("RuneSlots")
-                        if runeSlots then
-                            local slot = runeSlots:FindFirstChild(AutoQTE.currentTargetRuneName)
-                            if slot then
-                                return { slot }
-                            end
-                        end
-                    end
-                end
-                return rawGetGuiObjects(self, x, y)
-            end)
-            _G.__ArcaneMagicQTEHookApplied = true
-        end)
-    end
-end
-
--- 6. STAFF / MAGIC QTE (CLASSIC RUNE MATCHING & DRAG-AND-DROP SOLVER)
+-- 6. STAFF / MAGIC QTE (INSTANT NATIVE CLOSURE SOLVER + DRAG FALLBACK)
 local function handleMagicQTE(magicQTE)
     if not isQTEActive("Magic") or not magicQTE or not magicQTE.Visible then
         AutoQTE.isMagicSolving = false
@@ -3045,14 +3019,9 @@ local function handleMagicQTE(magicQTE)
 
     if AutoQTE.isMagicSolving then return end
 
-    local now = os.clock()
-    if now - AutoQTE.lastMagicHit < 0.22 then return end
-
     local bag = magicQTE:FindFirstChild("Bag")
     local runeSlots = magicQTE:FindFirstChild("RuneSlots")
     if not bag or not runeSlots then return end
-
-    ensureMagicQTEHook()
 
     -- Quét tìm rune chưa ghép trong Bag và ô Slot mục tiêu tương ứng trong RuneSlots
     local targetRune = nil
@@ -3075,7 +3044,7 @@ local function handleMagicQTE(magicQTE)
     end
 
     if targetRune and targetSlot then
-        AutoQTE.lastMagicHit = now
+        AutoQTE.lastMagicHit = os.clock()
         AutoQTE.isMagicSolving = true
         local runeName = targetRune.Name
         AutoQTE.currentTargetRuneName = runeName
@@ -3084,45 +3053,75 @@ local function handleMagicQTE(magicQTE)
             local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
             if delayMs > 0 then task.wait(delayMs / 1000) end
 
-            local runePos = targetRune.AbsolutePosition + (targetRune.AbsoluteSize / 2)
-            local slotPos = targetSlot.AbsolutePosition + (targetSlot.AbsoluteSize / 2)
+            local slotted = false
 
-            local fakeStart = {
-                UserInputType = Enum.UserInputType.MouseButton1,
-                Position = Vector3.new(runePos.X, runePos.Y, 0)
-            }
-            local fakeEnd = {
-                UserInputType = Enum.UserInputType.MouseButton1,
-                Position = Vector3.new(slotPos.X, slotPos.Y, 0)
-            }
+            -- Phương pháp 1: Native Closure Injection (Can thiệp trực tiếp hàm InputEnded nội bộ của game)
+            local getconns = getconnections
+            local getuvs = getupvalues or debug.getupvalues
+            local setuv = setupvalue or debug.setupvalue
 
-            -- 1. Di chuyển chuột và kích hoạt drag trên Rune
-            pcall(function()
-                VirtualInputManager:SendMouseMoveEvent(runePos.X, runePos.Y, game)
-            end)
-            task.wait(0.015)
-            pcall(function()
-                VirtualInputManager:SendMouseButtonEvent(runePos.X, runePos.Y, 0, true, game, 0)
-            end)
-            if firesignal then
-                pcall(function() firesignal(targetRune.InputBegan, fakeStart) end)
-            end
-            task.wait(0.025)
+            if getconns and setuv then
+                local conns = getconns(targetRune.InputEnded)
+                if conns and #conns > 0 then
+                    local fn = conns[1].Function
+                    if fn then
+                        pcall(function()
+                            setuv(fn, 2, true) -- u11 = true (isDragging)
+                            setuv(fn, 3, targetRune) -- u12 = rune (draggedRune)
+                            setuv(fn, 4, function() return targetSlot end) -- GetHoveringOnGuiName
+                            setuv(fn, 6, function() return targetSlot end) -- GetHoveringOnGuiNameWithOrigin
+                            setuv(fn, 8, false) -- u10 = false (clear debounce)
 
-            -- 2. Kéo chuột tới Slot và nhả chuột để slot rune
-            pcall(function()
-                VirtualInputManager:SendMouseMoveEvent(slotPos.X, slotPos.Y, game)
-            end)
-            task.wait(0.025)
-            pcall(function()
-                VirtualInputManager:SendMouseButtonEvent(slotPos.X, slotPos.Y, 0, false, game, 0)
-            end)
-            if firesignal then
-                pcall(function() firesignal(targetRune.InputEnded, fakeEnd) end)
+                            local fakeInput = {
+                                UserInputType = Enum.UserInputType.MouseButton1,
+                                Position = Vector3.new(0, 0, 0)
+                            }
+                            fn(fakeInput)
+                            slotted = true
+                        end)
+                    end
+                end
             end
 
-            -- Đợi game xử lý debounce nội bộ (game script có task.wait(0.2)) trước khi giải rune tiếp theo
-            task.wait(0.20)
+            -- Phương pháp 2: Fallback qua VirtualInputManager & firesignal
+            if not slotted or targetRune.Name ~= "Slotted" then
+                local runePos = targetRune.AbsolutePosition + (targetRune.AbsoluteSize / 2)
+                local slotPos = targetSlot.AbsolutePosition + (targetSlot.AbsoluteSize / 2)
+
+                local fakeStart = {
+                    UserInputType = Enum.UserInputType.MouseButton1,
+                    Position = Vector3.new(runePos.X, runePos.Y, 0)
+                }
+                local fakeEnd = {
+                    UserInputType = Enum.UserInputType.MouseButton1,
+                    Position = Vector3.new(slotPos.X, slotPos.Y, 0)
+                }
+
+                pcall(function()
+                    VirtualInputManager:SendMouseMoveEvent(runePos.X, runePos.Y, game)
+                end)
+                task.wait(0.015)
+                pcall(function()
+                    VirtualInputManager:SendMouseButtonEvent(runePos.X, runePos.Y, 0, true, game, 0)
+                end)
+                if firesignal then
+                    pcall(function() firesignal(targetRune.InputBegan, fakeStart) end)
+                end
+                task.wait(0.025)
+
+                pcall(function()
+                    VirtualInputManager:SendMouseMoveEvent(slotPos.X, slotPos.Y, game)
+                end)
+                task.wait(0.025)
+                pcall(function()
+                    VirtualInputManager:SendMouseButtonEvent(slotPos.X, slotPos.Y, 0, false, game, 0)
+                end)
+                if firesignal then
+                    pcall(function() firesignal(targetRune.InputEnded, fakeEnd) end)
+                end
+            end
+
+            task.wait(0.08)
             AutoQTE.currentTargetRuneName = nil
             AutoQTE.isMagicSolving = false
         end)
