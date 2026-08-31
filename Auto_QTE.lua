@@ -277,21 +277,50 @@ local function handleAxeQTE(axeQTE)
     end
 end
 
+local function ensureMagicQTEHook()
+    if _G.__ArcaneMagicQTEHookApplied then return end
+    local rawGetGuiObjects = PlayerGui.GetGuiObjectsAtPosition
+    if hookfunction then
+        pcall(function()
+            hookfunction(PlayerGui.GetGuiObjectsAtPosition, function(self, x, y)
+                if AutoQTE.currentTargetRuneName then
+                    local combat = PlayerGui:FindFirstChild("Combat")
+                    local magicQTE = combat and combat:FindFirstChild("MagicQTE")
+                    if magicQTE and magicQTE.Visible then
+                        local runeSlots = magicQTE:FindFirstChild("RuneSlots")
+                        if runeSlots then
+                            local slot = runeSlots:FindFirstChild(AutoQTE.currentTargetRuneName)
+                            if slot then
+                                return { slot }
+                            end
+                        end
+                    end
+                end
+                return rawGetGuiObjects(self, x, y)
+            end)
+            _G.__ArcaneMagicQTEHookApplied = true
+        end)
+    end
+end
+
 -- 6. XỬ LÝ STAFF / MAGIC QTE (RUNE MATCHING & DRAG-AND-DROP SOLVER)
 local function handleMagicQTE(magicQTE)
     if not Config.AutoMagic or not magicQTE or not magicQTE.Visible then
         AutoQTE.isMagicSolving = false
+        AutoQTE.currentTargetRuneName = nil
         return
     end
 
     if AutoQTE.isMagicSolving then return end
 
     local now = os.clock()
-    if now - AutoQTE.lastMagicHit < 0.25 then return end
+    if now - AutoQTE.lastMagicHit < 0.22 then return end
 
     local bag = magicQTE:FindFirstChild("Bag")
     local runeSlots = magicQTE:FindFirstChild("RuneSlots")
     if not bag or not runeSlots then return end
+
+    ensureMagicQTEHook()
 
     local targetRune = nil
     local targetSlot = nil
@@ -315,12 +344,23 @@ local function handleMagicQTE(magicQTE)
     if targetRune and targetSlot then
         AutoQTE.lastMagicHit = now
         AutoQTE.isMagicSolving = true
+        local runeName = targetRune.Name
+        AutoQTE.currentTargetRuneName = runeName
 
         task.spawn(function()
             if Config.ReactionDelayMs > 0 then task.wait(Config.ReactionDelayMs / 1000) end
 
             local runePos = targetRune.AbsolutePosition + (targetRune.AbsoluteSize / 2)
             local slotPos = targetSlot.AbsolutePosition + (targetSlot.AbsoluteSize / 2)
+
+            local fakeStart = {
+                UserInputType = Enum.UserInputType.MouseButton1,
+                Position = Vector3.new(runePos.X, runePos.Y, 0)
+            }
+            local fakeEnd = {
+                UserInputType = Enum.UserInputType.MouseButton1,
+                Position = Vector3.new(slotPos.X, slotPos.Y, 0)
+            }
 
             pcall(function()
                 VirtualInputManager:SendMouseMoveEvent(runePos.X, runePos.Y, game)
@@ -329,31 +369,24 @@ local function handleMagicQTE(magicQTE)
             pcall(function()
                 VirtualInputManager:SendMouseButtonEvent(runePos.X, runePos.Y, 0, true, game, 0)
             end)
+            if firesignal then
+                pcall(function() firesignal(targetRune.InputBegan, fakeStart) end)
+            end
             task.wait(0.025)
 
             pcall(function()
                 VirtualInputManager:SendMouseMoveEvent(slotPos.X, slotPos.Y, game)
             end)
             task.wait(0.025)
-
             pcall(function()
                 VirtualInputManager:SendMouseButtonEvent(slotPos.X, slotPos.Y, 0, false, game, 0)
             end)
-
             if firesignal then
-                local inputStart = {
-                    UserInputType = Enum.UserInputType.MouseButton1,
-                    Position = Vector3.new(runePos.X, runePos.Y, 0)
-                }
-                local inputEnd = {
-                    UserInputType = Enum.UserInputType.MouseButton1,
-                    Position = Vector3.new(slotPos.X, slotPos.Y, 0)
-                }
-                pcall(function() firesignal(targetRune.InputBegan, inputStart) end)
-                pcall(function() firesignal(targetRune.InputEnded, inputEnd) end)
+                pcall(function() firesignal(targetRune.InputEnded, fakeEnd) end)
             end
 
-            task.wait(0.22)
+            task.wait(0.20)
+            AutoQTE.currentTargetRuneName = nil
             AutoQTE.isMagicSolving = false
         end)
     end
