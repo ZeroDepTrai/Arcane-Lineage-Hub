@@ -2765,123 +2765,109 @@ local function handleAxeQTE(axeQTE)
     end
 end
 
--- 6. STAFF / MAGIC QTE (INSTANT NATIVE CLOSURE SOLVER + DRAG FALLBACK)
+-- 6. STAFF / MAGIC QTE (CONTINUOUS BATCH NATIVE CLOSURE SOLVER WITH DUPLICATE TRACKING)
 local function handleMagicQTE(magicQTE)
     if not isQTEActive("Magic") or not magicQTE or not magicQTE.Visible then
-        AutoQTE.isMagicSolving = false
         AutoQTE.magicSlottedTable = {}
-        AutoQTE.currentTargetRuneName = nil
         return
     end
-
-    if AutoQTE.isMagicSolving then return end
 
     local bag = magicQTE:FindFirstChild("Bag")
     local runeSlots = magicQTE:FindFirstChild("RuneSlots")
     if not bag or not runeSlots then return end
 
-    -- Quét tìm rune chưa ghép trong Bag và ô Slot mục tiêu tương ứng trong RuneSlots
-    local targetRune = nil
-    local targetSlot = nil
+    local bagRunes = bag:GetChildren()
+    local slotChildren = runeSlots:GetChildren()
+    if #bagRunes == 0 or #slotChildren == 0 then return end
 
-    for _, rune in ipairs(bag:GetChildren()) do
+    local getconns = getconnections
+    local setuv = setupvalue or (debug and debug.setupvalue)
+
+    local usedSlots = {}
+    local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
+
+    for _, rune in ipairs(bagRunes) do
         if rune:IsA("GuiObject") and rune.Visible and rune.Name ~= "Slotted" and rune.ImageTransparency < 0.9 and not AutoQTE.magicSlottedTable[rune] then
             local runeName = rune.Name
-            for _, slot in ipairs(runeSlots:GetChildren()) do
-                if slot:IsA("GuiObject") and slot.Name == runeName and slot.Name ~= "Slotted" then
-                    targetRune = rune
-                    targetSlot = slot
+
+            -- Tìm ô Slot mục tiêu tương ứng chưa được sử dụng trong round này
+            local matchingSlot = nil
+            for _, slot in ipairs(slotChildren) do
+                if slot:IsA("GuiObject") and slot.Name == runeName and slot.Name ~= "Slotted" and not usedSlots[slot] then
+                    matchingSlot = slot
+                    usedSlots[slot] = true
                     break
                 end
             end
-            if targetRune and targetSlot then
-                break
+
+            if matchingSlot then
+                AutoQTE.magicSlottedTable[rune] = true
+                
+                task.spawn(function()
+                    if delayMs > 0 then task.wait(delayMs / 1000) end
+
+                    local slotted = false
+
+                    -- Phương pháp 1: Native Closure Injection trực tiếp vào closure InputEnded
+                    if getconns and setuv then
+                        local conns = getconns(rune.InputEnded)
+                        if conns and #conns > 0 then
+                            local fn = conns[1].Function
+                            if fn then
+                                pcall(function()
+                                    setuv(fn, 2, true)  -- u11 = true (isDragging)
+                                    setuv(fn, 3, rune)  -- u12 = rune (draggedRune)
+                                    setuv(fn, 4, function() return matchingSlot end) -- GetHoveringOnGuiName
+                                    setuv(fn, 6, function() return matchingSlot end) -- GetHoveringOnGuiNameWithOrigin
+                                    setuv(fn, 8, false) -- u10 = false (clear debounce)
+
+                                    local fakeInput = {
+                                        UserInputType = Enum.UserInputType.MouseButton1,
+                                        Position = Vector3.new(0, 0, 0)
+                                    }
+                                    fn(fakeInput)
+                                    slotted = true
+                                end)
+                            end
+                        end
+                    end
+
+                    -- Cập nhật trực quan và phát âm thanh slot
+                    rune.Name = "Slotted"
+                    rune.ImageTransparency = 1
+                    rune.Visible = false
+                    matchingSlot.Name = "Slotted"
+                    matchingSlot.ImageColor3 = Color3.new(1, 1, 1)
+
+                    if magicQTE:FindFirstChild("RuneSlotIn") then
+                        pcall(function() magicQTE.RuneSlotIn:Play() end)
+                    end
+
+                    -- Phương pháp 2: Fallback chuột giả lập nếu closure không khả dụng
+                    if not slotted then
+                        local runePos = rune.AbsolutePosition + (rune.AbsoluteSize / 2)
+                        local slotPos = matchingSlot.AbsolutePosition + (matchingSlot.AbsoluteSize / 2)
+
+                        pcall(function()
+                            VirtualInputManager:SendMouseMoveEvent(runePos.X, runePos.Y, game)
+                            VirtualInputManager:SendMouseButtonEvent(runePos.X, runePos.Y, 0, true, game, 0)
+                        end)
+                        task.wait(0.015)
+                        pcall(function()
+                            VirtualInputManager:SendMouseMoveEvent(slotPos.X, slotPos.Y, game)
+                            VirtualInputManager:SendMouseButtonEvent(slotPos.X, slotPos.Y, 0, false, game, 0)
+                        end)
+                        if firesignal then
+                            local fakeEnd = {
+                                UserInputType = Enum.UserInputType.MouseButton1,
+                                Position = Vector3.new(slotPos.X, slotPos.Y, 0)
+                            }
+                            pcall(function() firesignal(rune.InputEnded, fakeEnd) end)
+                        end
+                    end
+                end)
             end
         end
-    end
-
-    if targetRune and targetSlot then
-        AutoQTE.lastMagicHit = os.clock()
-        AutoQTE.isMagicSolving = true
-        local runeName = targetRune.Name
-        AutoQTE.currentTargetRuneName = runeName
-
-        task.spawn(function()
-            local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
-            if delayMs > 0 then task.wait(delayMs / 1000) end
-
-            local slotted = false
-
-            -- Phương pháp 1: Native Closure Injection (Can thiệp trực tiếp hàm InputEnded nội bộ của game)
-            local getconns = getconnections
-            local getuvs = getupvalues or debug.getupvalues
-            local setuv = setupvalue or debug.setupvalue
-
-            if getconns and setuv then
-                local conns = getconns(targetRune.InputEnded)
-                if conns and #conns > 0 then
-                    local fn = conns[1].Function
-                    if fn then
-                        pcall(function()
-                            setuv(fn, 2, true) -- u11 = true (isDragging)
-                            setuv(fn, 3, targetRune) -- u12 = rune (draggedRune)
-                            setuv(fn, 4, function() return targetSlot end) -- GetHoveringOnGuiName
-                            setuv(fn, 6, function() return targetSlot end) -- GetHoveringOnGuiNameWithOrigin
-                            setuv(fn, 8, false) -- u10 = false (clear debounce)
-
-                            local fakeInput = {
-                                UserInputType = Enum.UserInputType.MouseButton1,
-                                Position = Vector3.new(0, 0, 0)
-                            }
-                            fn(fakeInput)
-                            slotted = true
-                        end)
-                    end
-                end
-            end
-
-            -- Phương pháp 2: Fallback qua VirtualInputManager & firesignal
-            if not slotted or targetRune.Name ~= "Slotted" then
-                local runePos = targetRune.AbsolutePosition + (targetRune.AbsoluteSize / 2)
-                local slotPos = targetSlot.AbsolutePosition + (targetSlot.AbsoluteSize / 2)
-
-                local fakeStart = {
-                    UserInputType = Enum.UserInputType.MouseButton1,
-                    Position = Vector3.new(runePos.X, runePos.Y, 0)
-                }
-                local fakeEnd = {
-                    UserInputType = Enum.UserInputType.MouseButton1,
-                    Position = Vector3.new(slotPos.X, slotPos.Y, 0)
-                }
-
-                pcall(function()
-                    VirtualInputManager:SendMouseMoveEvent(runePos.X, runePos.Y, game)
-                end)
-                task.wait(0.015)
-                pcall(function()
-                    VirtualInputManager:SendMouseButtonEvent(runePos.X, runePos.Y, 0, true, game, 0)
-                end)
-                if firesignal then
-                    pcall(function() firesignal(targetRune.InputBegan, fakeStart) end)
-                end
-                task.wait(0.025)
-
-                pcall(function()
-                    VirtualInputManager:SendMouseMoveEvent(slotPos.X, slotPos.Y, game)
-                end)
-                task.wait(0.025)
-                pcall(function()
-                    VirtualInputManager:SendMouseButtonEvent(slotPos.X, slotPos.Y, 0, false, game, 0)
-                end)
-                if firesignal then
-                    pcall(function() firesignal(targetRune.InputEnded, fakeEnd) end)
-                end
-            end
-
-            task.wait(0.08)
-            AutoQTE.currentTargetRuneName = nil
-            AutoQTE.isMagicSolving = false
-        end)
     end
 end
 
