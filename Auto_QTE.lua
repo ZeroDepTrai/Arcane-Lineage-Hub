@@ -83,6 +83,7 @@ local AutoQTE = {
     lastSpearHit = 0,
     swordHitIndices = {},
     hitWeakpoints = {},
+    spearSolvedTable = {},
 }
 
 -- 1. XỬ LÝ DODGE QTE (NÉ TRÁNH HOÀN HẢO)
@@ -431,7 +432,99 @@ local function handleFistQTE(fistQTE)
     end
 end
 
--- 7. LOCKPICK QTE (CHEST UNLOCKER)
+-- 7. SPEAR QTE (INSTANT NATIVE CLOSURE RESOLVER FOR TAPS, LINES & CURVES)
+local function handleSpearQTE(spearQTE)
+    if not Config.AutoSpear or not spearQTE or not spearQTE.Visible then
+        AutoQTE.spearSolvedTable = {}
+        return
+    end
+
+    local container = spearQTE:FindFirstChild("Container")
+    if not container then return end
+
+    local getconns = getconnections
+    local getuvs = getupvalues or (debug and debug.getupvalues)
+    local delayMs = Config.ReactionDelayMs or 0
+
+    for _, targetFrame in ipairs(container:GetChildren()) do
+        if targetFrame:IsA("GuiObject") and targetFrame.Visible and targetFrame.Name:match("^C%d+") and not AutoQTE.spearSolvedTable[targetFrame] then
+            local btn = targetFrame:FindFirstChild("InputButton", true) or targetFrame:FindFirstChildWhichIsA("ImageButton", true) or targetFrame:FindFirstChildWhichIsA("TextButton", true)
+
+            if btn and btn.Active == true then
+                AutoQTE.spearSolvedTable[targetFrame] = true
+
+                task.spawn(function()
+                    if delayMs > 0 then task.wait(delayMs / 1000) end
+
+                    local resolved = false
+
+                    -- Phương pháp 1: Native Closure Resolution (Giải trực tiếp Tap, Line slider và Curve slider)
+                    if getconns and getuvs then
+                        local connsAct = getconns(btn.Activated)
+                        local connsBeg = getconns(btn.InputBegan)
+
+                        -- A. Tap Target (Activated connection)
+                        if connsAct and #connsAct > 0 then
+                            local fn = connsAct[1].Function
+                            if fn then
+                                pcall(fn)
+                                resolved = true
+                            end
+                        end
+
+                        -- B. Line / Curve Slider (InputBegan connection -> resolveFn)
+                        if not resolved and connsBeg and #connsBeg > 0 then
+                            local fn = connsBeg[1].Function
+                            if fn then
+                                local uvs = getuvs(fn)
+                                local targetTable = nil
+                                local resolveFn = nil
+
+                                for _, v in pairs(uvs) do
+                                    if type(v) == "table" and (v.kind == "line" or v.kind == "curve" or v.kind == "tap" or v.frame == targetFrame) then
+                                        targetTable = v
+                                    elseif type(v) == "function" then
+                                        resolveFn = v
+                                    end
+                                end
+
+                                if targetTable and resolveFn and not targetTable.resolved then
+                                    pcall(function()
+                                        resolveFn(targetTable, true)
+                                    end)
+                                    resolved = true
+                                end
+                            end
+                        end
+                    end
+
+                    -- Phương pháp 2: Hardware & Software Signal Fallback
+                    if not resolved then
+                        local btnCenterX = btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2
+                        local btnCenterY = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2
+                        local startInput = {
+                            UserInputType = Enum.UserInputType.MouseButton1,
+                            Position = Vector3.new(btnCenterX, btnCenterY, 0)
+                        }
+
+                        if firesignal then
+                            pcall(function() firesignal(btn.Activated) end)
+                            pcall(function() firesignal(btn.MouseButton1Click) end)
+                            pcall(function() firesignal(btn.InputBegan, startInput) end)
+                        end
+                        pcall(function()
+                            VirtualInputManager:SendMouseButtonEvent(btnCenterX, btnCenterY, 0, true, game, 0)
+                            task.wait(0.01)
+                            VirtualInputManager:SendMouseButtonEvent(btnCenterX, btnCenterY, 0, false, game, 0)
+                        end)
+                    end
+                end)
+            end
+        end
+    end
+end
+
+-- 8. LOCKPICK QTE (CHEST UNLOCKER)
 local function handleLockpickQTE(lockpickQTE)
     if not Config.AutoLockpick or not lockpickQTE or not lockpickQTE.Visible then return end
     local stopBtn = lockpickQTE:FindFirstChild("Stop", true) or lockpickQTE:FindFirstChildWhichIsA("TextButton", true)
@@ -476,6 +569,7 @@ function AutoQTE.init()
         if axeQTE and axeQTE.Visible then handleAxeQTE(axeQTE) end
         if magicQTE and magicQTE.Visible then handleMagicQTE(magicQTE) elseif mochiiMagicQTE and mochiiMagicQTE.Visible then handleMagicQTE(mochiiMagicQTE) else AutoQTE.isMagicSolving = false end
         if fistQTE and fistQTE.Visible then handleFistQTE(fistQTE) end
+        if spearQTE and spearQTE.Visible then handleSpearQTE(spearQTE) end
         if lockpickQTE and lockpickQTE.Visible then handleLockpickQTE(lockpickQTE) end
     end)
 

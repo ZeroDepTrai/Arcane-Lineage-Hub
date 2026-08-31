@@ -2923,115 +2923,94 @@ local function handleFistQTE(fistQTE)
     end
 end
 
--- 7. SPEAR QTE (PERFECT STUTTER-FREE DUAL HARDWARE & SOFTWARE SOLVER)
+-- 7. SPEAR QTE (INSTANT NATIVE CLOSURE RESOLVER FOR TAPS, LINES & CURVES)
 local function handleSpearQTE(spearQTE)
-    if not isQTEActive("Spear") or not spearQTE or not spearQTE.Visible then return end
+    if not isQTEActive("Spear") or not spearQTE or not spearQTE.Visible then
+        AutoQTE.spearSolvedTable = {}
+        return
+    end
+
     local container = spearQTE:FindFirstChild("Container")
     if not container then return end
 
-    local circles = {}
-    for _, child in ipairs(container:GetChildren()) do
-        if child:IsA("GuiObject") and child.Visible and not AutoQTE.spearSolvedTable[child] then
-            local num = child.Name:match("%d+")
-            local idx = tonumber(num) or 999
-            table.insert(circles, { idx = idx, obj = child })
-        end
-    end
-    table.sort(circles, function(a, b) return a.idx < b.idx end)
+    local getconns = getconnections
+    local getuvs = getupvalues or (debug and debug.getupvalues)
+    local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
 
-    for _, entry in ipairs(circles) do
-        local circle = entry.obj
-        local btn = circle:FindFirstChild("InputButton", true) or circle:FindFirstChildWhichIsA("ImageButton", true) or circle:FindFirstChildWhichIsA("TextButton", true)
+    for _, targetFrame in ipairs(container:GetChildren()) do
+        if targetFrame:IsA("GuiObject") and targetFrame.Visible and targetFrame.Name:match("^C%d+") and not AutoQTE.spearSolvedTable[targetFrame] then
+            local btn = targetFrame:FindFirstChild("InputButton", true) or targetFrame:FindFirstChildWhichIsA("ImageButton", true) or targetFrame:FindFirstChildWhichIsA("TextButton", true)
 
-        -- Chỉ xử lý vòng tròn đang có trạng thái Active == true từ game
-        if btn and btn.Active == true and btn.ImageTransparency < 0.8 then
-            AutoQTE.spearSolvedTable[circle] = true
+            if btn and btn.Active == true then
+                AutoQTE.spearSolvedTable[targetFrame] = true
 
-            local btnCenterX = btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2
-            local btnCenterY = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2
-            local startInput = {
-                UserInputType = Enum.UserInputType.MouseButton1,
-                Position = Vector3.new(btnCenterX, btnCenterY, 0)
-            }
+                task.spawn(function()
+                    if delayMs > 0 then task.wait(delayMs / 1000) end
 
-            -- 1. Kích hoạt Tap Event tức thì
-            if firesignal then
-                pcall(function() firesignal(btn.Activated) end)
-                pcall(function() firesignal(btn.MouseButton1Click) end)
-                pcall(function() firesignal(btn.InputBegan, startInput) end)
-            end
+                    local resolved = false
 
-            if getconnections then
-                pcall(function()
-                    for _, c in ipairs(getconnections(btn.Activated)) do
-                        if c.Function then c.Function() elseif c.Fire then c:Fire() end
-                    end
-                end)
-                pcall(function()
-                    for _, c in ipairs(getconnections(btn.InputBegan)) do
-                        if c.Function then c.Function(startInput) elseif c.Fire then c:Fire(startInput) end
-                    end
-                end)
-            end
+                    -- Phương pháp 1: Native Closure Resolution (Giải trực tiếp Tap, Line slider và Curve slider)
+                    if getconns and getuvs then
+                        local connsAct = getconns(btn.Activated)
+                        local connsBeg = getconns(btn.InputBegan)
 
-            -- 2. Giả lập Hardware Mouse Down & Drag di chuyển chuột thực tế (Khắc phục hoàn toàn khi chuột để im)
-            pcall(function()
-                VirtualInputManager:SendMouseButtonEvent(btnCenterX, btnCenterY, 0, true, game, 0)
-            end)
-
-            local isLine = circle:FindFirstChild("Goal_Line") ~= nil
-            local isCurve = circle:FindFirstChild("Goal_Curve") ~= nil
-
-            if isLine or isCurve or circle.Rotation ~= 0 then
-                local rot = circle.Rotation
-                local rad = math.rad(rot)
-                local dx = math.cos(rad)
-                local dy = math.sin(rad)
-
-                local dragPoints = {
-                    Vector3.new(btnCenterX + dx * 800, btnCenterY + dy * 800, 0),
-                    Vector3.new(btnCenterX - dx * 800, btnCenterY - dy * 800, 0),
-                    Vector3.new(btnCenterX - dy * 800, btnCenterY + dx * 800, 0),
-                    Vector3.new(btnCenterX + dy * 800, btnCenterY - dx * 800, 0)
-                }
-
-                for _, movePos in ipairs(dragPoints) do
-                    -- Hardware Mouse Move (Kích hoạt luồng chuột thật trong engine game)
-                    pcall(function()
-                        VirtualInputManager:SendMouseMoveEvent(movePos.X, movePos.Y, game)
-                    end)
-
-                    -- Software Signal
-                    local moveInput = {
-                        UserInputType = Enum.UserInputType.MouseMovement,
-                        Position = movePos
-                    }
-                    if firesignal then
-                        pcall(function() firesignal(UserInputService.InputChanged, moveInput) end)
-                    end
-                    if getconnections then
-                        pcall(function()
-                            for _, c in ipairs(getconnections(UserInputService.InputChanged)) do
-                                if c.Function then c.Function(moveInput) elseif c.Fire then c:Fire(moveInput) end
+                        -- A. Tap Target (Activated connection)
+                        if connsAct and #connsAct > 0 then
+                            local fn = connsAct[1].Function
+                            if fn then
+                                pcall(fn)
+                                resolved = true
                             end
+                        end
+
+                        -- B. Line / Curve Slider (InputBegan connection -> resolveFn)
+                        if not resolved and connsBeg and #connsBeg > 0 then
+                            local fn = connsBeg[1].Function
+                            if fn then
+                                local uvs = getuvs(fn)
+                                local targetTable = nil
+                                local resolveFn = nil
+
+                                for _, v in pairs(uvs) do
+                                    if type(v) == "table" and (v.kind == "line" or v.kind == "curve" or v.kind == "tap" or v.frame == targetFrame) then
+                                        targetTable = v
+                                    elseif type(v) == "function" then
+                                        resolveFn = v
+                                    end
+                                end
+
+                                if targetTable and resolveFn and not targetTable.resolved then
+                                    pcall(function()
+                                        resolveFn(targetTable, true)
+                                    end)
+                                    resolved = true
+                                end
+                            end
+                        end
+                    end
+
+                    -- Phương pháp 2: Hardware & Software Signal Fallback
+                    if not resolved then
+                        local btnCenterX = btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2
+                        local btnCenterY = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2
+                        local startInput = {
+                            UserInputType = Enum.UserInputType.MouseButton1,
+                            Position = Vector3.new(btnCenterX, btnCenterY, 0)
+                        }
+
+                        if firesignal then
+                            pcall(function() firesignal(btn.Activated) end)
+                            pcall(function() firesignal(btn.MouseButton1Click) end)
+                            pcall(function() firesignal(btn.InputBegan, startInput) end)
+                        end
+                        pcall(function()
+                            VirtualInputManager:SendMouseButtonEvent(btnCenterX, btnCenterY, 0, true, game, 0)
+                            task.wait(0.01)
+                            VirtualInputManager:SendMouseButtonEvent(btnCenterX, btnCenterY, 0, false, game, 0)
                         end)
                     end
-                end
+                end)
             end
-
-            -- 3. Gamepad Keycode bypass
-            for _, kc in ipairs({ Enum.KeyCode.ButtonA, Enum.KeyCode.ButtonB, Enum.KeyCode.ButtonX, Enum.KeyCode.ButtonY }) do
-                local keyInput = {
-                    KeyCode = kc,
-                    UserInputType = Enum.UserInputType.Gamepad1
-                }
-                if firesignal then
-                    pcall(function() firesignal(UserInputService.InputBegan, keyInput, false) end)
-                end
-            end
-
-            singleClick(btn)
-            break
         end
     end
 end
