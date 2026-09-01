@@ -1736,7 +1736,7 @@ local function executeCombatTurn()
         if goBtn and goBtn.Visible then
             print("[Combat] 🔘 Phát hiện nút Go sẵn sàng -> Bấm Go xác nhận đòn đánh...")
             safeClickButton(goBtn)
-            task.wait(1.0)
+            task.wait(0.25)
             return
         end
 
@@ -1748,13 +1748,13 @@ local function executeCombatTurn()
             local returnBtn = header and header:FindFirstChild("Return")
             if returnBtn and returnBtn.Visible then
                 safeClickButton(returnBtn)
-                task.wait(0.6)
+                task.wait(0.3)
             end
 
             local medBtn = ctxPage and ctxPage:FindFirstChild("MeditateButton")
             if medBtn and medBtn.Visible then
                 safeClickButton(medBtn)
-                task.wait(0.4)
+                task.wait(0.2)
                 if firesignal then
                     pcall(function() firesignal(medBtn.MouseButton1Click) end)
                 end
@@ -1767,7 +1767,7 @@ local function executeCombatTurn()
                     pti:InvokeServer("Meditate", false)
                 end
             end)
-            task.wait(1.2)
+            task.wait(0.5)
         end
 
         -- 3. Chuyển sang AttacksPage nếu đang ở ContextPage để đọc danh sách skill
@@ -1776,10 +1776,10 @@ local function executeCombatTurn()
             if atkBtn and atkBtn.Visible then
                 safeClickButton(atkBtn)
                 local waitAtk = os.clock()
-                while (not (atkPage and atkPage.Visible)) and os.clock() - waitAtk < 1.2 do
-                    task.wait(0.1)
+                while (not (atkPage and atkPage.Visible)) and os.clock() - waitAtk < 0.6 do
+                    task.wait(0.05)
                 end
-                task.wait(0.4)
+                task.wait(0.1)
             end
         end
 
@@ -1957,7 +1957,6 @@ local function executeCombatTurn()
             -- Fallback an toàn cuối cùng:
             if not selectedSkillBtn then
                 if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
-                    -- Trong chế độ Custom Skill: Tuyệt đối KHÔNG chọn skill lạ trong scrollFrame!
                     if shouldMeditateIfNoSkill then
                         doCombatMeditate()
                         return
@@ -1981,7 +1980,12 @@ local function executeCombatTurn()
                 local skillName = selectedSkillBtn.Name
                 print(string.format("[Combat] ⚔️ Đang kích hoạt đòn đánh: '%s'", skillName))
                 safeClickButton(selectedSkillBtn)
-                task.wait(1.0) -- Đợi 1.0s để game mở bảng Enemies hoặc xử lý đòn đánh an toàn
+                local waitSkill = os.clock()
+                local enemiesFrame = atkPage and atkPage:FindFirstChild("Enemies")
+                while (not (enemiesFrame and enemiesFrame.Visible)) and (not (goBtn and goBtn.Visible)) and isPlayerTurn() and os.clock() - waitSkill < 0.5 do
+                    task.wait(0.05)
+                end
+                task.wait(0.1)
             elseif shouldMeditateIfNoSkill then
                 doCombatMeditate()
                 return
@@ -2011,7 +2015,11 @@ local function executeCombatTurn()
                 if chosenEnemy then
                     print(string.format("[Combat] 🎯 Đã chọn mục tiêu quái: '%s'", chosenEnemy.Name))
                     safeClickButton(chosenEnemy)
-                    task.wait(1.0) -- Tăng delay lên 1.0s sau khi click quái
+                    local waitEnemy = os.clock()
+                    while (not (goBtn and goBtn.Visible)) and isPlayerTurn() and os.clock() - waitEnemy < 0.5 do
+                        task.wait(0.05)
+                    end
+                    task.wait(0.1)
                 end
             end
         end
@@ -2021,13 +2029,13 @@ local function executeCombatTurn()
         if goBtn and goBtn.Visible then
             print("[Combat] 🔘 Bấm nút Go xác nhận hoàn tất lượt...")
             safeClickButton(goBtn)
-            task.wait(1.0)
+            task.wait(0.25)
         end
 
         -- 7. Chờ chuyển lượt hoàn tất (ActionBG đóng hoặc TurnTimer biến mất)
         local endWait = os.clock()
-        while isPlayerTurn() and os.clock() - endWait < 3.0 do
-            task.wait(0.2)
+        while isPlayerTurn() and os.clock() - endWait < 1.5 do
+            task.wait(0.05)
         end
     end)
 
@@ -2048,19 +2056,61 @@ function AutoFight.start()
 
     AutoFight.thread = task.spawn(function()
         print("[AutoFight] ⚔️ Đã bật Auto Fight (Tự động đánh / tung chiêu khi đến lượt trong trận)!")
-        while HubState.running and AutoFight.running do
-            if isInCombat() then
-                if isPlayerTurn() then
-                    executeCombatTurn()
-                    local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 1.0
+        
+        -- Hook phản hồi tức thì qua PropertyChangedSignal của ActionBG và Go
+        local function onCombatStateChanged()
+            if HubState.running and AutoFight.running and isInCombat() and isPlayerTurn() and not combatTurnLock then
+                local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.1
+                if combatDelay > 0 then
                     task.wait(combatDelay)
-                else
-                    task.wait(0.3)
                 end
-            else
-                task.wait(0.5)
+                if isPlayerTurn() and not combatTurnLock then
+                    executeCombatTurn()
+                end
             end
         end
+
+        local pgui = PlayerGui
+        local combatGui = pgui and pgui:FindFirstChild("Combat")
+        local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
+        local goBtn = combatGui and combatGui:FindFirstChild("Go")
+
+        local conn1, conn2
+        if actionBG then
+            conn1 = actionBG:GetPropertyChangedSignal("Visible"):Connect(function()
+                if actionBG.Visible then
+                    task.spawn(onCombatStateChanged)
+                end
+            end)
+        end
+        if goBtn then
+            conn2 = goBtn:GetPropertyChangedSignal("Visible"):Connect(function()
+                if goBtn.Visible then
+                    task.spawn(onCombatStateChanged)
+                end
+            end)
+        end
+
+        while HubState.running and AutoFight.running do
+            if isInCombat() then
+                if isPlayerTurn() and not combatTurnLock then
+                    local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.1
+                    if combatDelay > 0 then
+                        task.wait(combatDelay)
+                    end
+                    if isPlayerTurn() and not combatTurnLock then
+                        executeCombatTurn()
+                    end
+                else
+                    task.wait(0.05)
+                end
+            else
+                task.wait(0.3)
+            end
+        end
+
+        if conn1 then conn1:Disconnect() end
+        if conn2 then conn2:Disconnect() end
         print("[AutoFight] ⏹️ Đã dừng Auto Fight.")
     end)
 end
@@ -2141,12 +2191,16 @@ function LevelFarmer.runCycle()
                     print(string.format("[AutoFarmLevel] ⚔️ Đã vào trận đánh mới! (Essence đầu trận: %d)", LevelFarmer.essenceBeforeCombat))
                 end
 
-                if isPlayerTurn() then
-                    executeCombatTurn()
-                    local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 1.0
-                    task.wait(combatDelay)
+                if isPlayerTurn() and not combatTurnLock then
+                    local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.1
+                    if combatDelay > 0 then
+                        task.wait(combatDelay)
+                    end
+                    if isPlayerTurn() and not combatTurnLock then
+                        executeCombatTurn()
+                    end
                 else
-                    task.wait(0.3)
+                    task.wait(0.05)
                 end
             else
                 if LevelFarmer.wasInCombat then
