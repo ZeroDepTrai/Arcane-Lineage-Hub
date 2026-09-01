@@ -1732,6 +1732,18 @@ end
 
 
 
+local function getCurrentTurnNumber()
+    local pgui = PlayerGui
+    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
+    local header = actionBG and actionBG:FindFirstChild("Header")
+    local title = header and header:FindFirstChild("Title")
+    if title and title.Text then
+        return tonumber(title.Text:match("%d+"))
+    end
+    return nil
+end
+
 local function isPlayerTurn()
     local char = LocalPlayer and LocalPlayer.Character
     if not char then return false end
@@ -1765,7 +1777,14 @@ local function isPlayerTurn()
     local actionBG = combatGui:FindFirstChild("ActionBG")
     if not actionBG or not actionBG.Visible then return false end
 
-    -- 6. ContextPage hoặc AttacksPage đang hiển thị bên trong ActionBG
+    -- 6. Kiểm tra Header.Title trên UI Combat (Turn 1, Turn 2, Turn 3...)
+    local header = actionBG:FindFirstChild("Header")
+    local title = header and header:FindFirstChild("Title")
+    if title and title.Text and title.Text:find("Turn") then
+        return true
+    end
+
+    -- 7. ContextPage hoặc AttacksPage đang hiển thị bên trong ActionBG
     local ctx = actionBG:FindFirstChild("ContextPage")
     local atk = actionBG:FindFirstChild("AttacksPage")
     if (ctx and ctx.Visible) or (atk and atk.Visible) then
@@ -2208,10 +2227,10 @@ function AutoFight.start()
     AutoFight.thread = task.spawn(function()
         print("[AutoFight] ⚔️ Đã bật Auto Fight (Tự động đánh / tung chiêu khi đến lượt trong trận)!")
         
-        -- Hook phản hồi tức thì qua PropertyChangedSignal của ActionBG và Go
+        -- Hook phản hồi tức thì qua PropertyChangedSignal của ActionBG, Title.Text, Go và Remote Events
         local function onCombatStateChanged()
             if HubState.running and AutoFight.running and isInCombat() and isPlayerTurn() and not combatTurnLock then
-                local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.1
+                local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.05
                 if combatDelay > 0 then
                     task.wait(combatDelay)
                 end
@@ -2224,9 +2243,17 @@ function AutoFight.start()
         local pgui = PlayerGui
         local combatGui = pgui and pgui:FindFirstChild("Combat")
         local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
+        local header = actionBG and actionBG:FindFirstChild("Header")
+        local title = header and header:FindFirstChild("Title")
         local goBtn = combatGui and combatGui:FindFirstChild("Go")
 
-        local conn1, conn2
+        local RS = game:GetService("ReplicatedStorage")
+        local remotes = RS:FindFirstChild("Remotes")
+        local fightRemotes = remotes and remotes:FindFirstChild("Fight")
+        local updateTurnRemote = fightRemotes and fightRemotes:FindFirstChild("UpdateTurnCount")
+        local startActionRemote = fightRemotes and fightRemotes:FindFirstChild("StartAction")
+
+        local conn1, conn2, conn3, conn4, conn5
         if actionBG then
             conn1 = actionBG:GetPropertyChangedSignal("Visible"):Connect(function()
                 if actionBG.Visible then
@@ -2234,18 +2261,33 @@ function AutoFight.start()
                 end
             end)
         end
+        if title then
+            conn2 = title:GetPropertyChangedSignal("Text"):Connect(function()
+                task.spawn(onCombatStateChanged)
+            end)
+        end
         if goBtn then
-            conn2 = goBtn:GetPropertyChangedSignal("Visible"):Connect(function()
+            conn3 = goBtn:GetPropertyChangedSignal("Visible"):Connect(function()
                 if goBtn.Visible then
                     task.spawn(onCombatStateChanged)
                 end
+            end)
+        end
+        if updateTurnRemote and updateTurnRemote:IsA("RemoteEvent") then
+            conn4 = updateTurnRemote.OnClientEvent:Connect(function()
+                task.spawn(onCombatStateChanged)
+            end)
+        end
+        if startActionRemote and startActionRemote:IsA("RemoteEvent") then
+            conn5 = startActionRemote.OnClientEvent:Connect(function()
+                task.spawn(onCombatStateChanged)
             end)
         end
 
         while HubState.running and AutoFight.running do
             if isInCombat() then
                 if isPlayerTurn() and not combatTurnLock then
-                    local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.1
+                    local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.05
                     if combatDelay > 0 then
                         task.wait(combatDelay)
                     end
@@ -2253,15 +2295,18 @@ function AutoFight.start()
                         executeCombatTurn()
                     end
                 else
-                    task.wait(0.05)
+                    task.wait(0.03)
                 end
             else
-                task.wait(0.3)
+                task.wait(0.2)
             end
         end
 
         if conn1 then conn1:Disconnect() end
         if conn2 then conn2:Disconnect() end
+        if conn3 then conn3:Disconnect() end
+        if conn4 then conn4:Disconnect() end
+        if conn5 then conn5:Disconnect() end
         print("[AutoFight] ⏹️ Đã dừng Auto Fight.")
     end)
 end
