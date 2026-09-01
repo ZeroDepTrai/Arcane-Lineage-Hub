@@ -1877,7 +1877,148 @@ local AutoFight = {
     thread = nil,
 }
 
-local combatTurnLock = false
+local function executeDirectRemoteTurn()
+    local pti = game.ReplicatedStorage:FindFirstChild("PlayerTurnInput")
+    if not pti or not pti:IsA("RemoteFunction") then return false end
+
+    local char = LocalPlayer.Character
+    local fip = char and char:FindFirstChild("FightInProgress")
+    if not fip then return false end
+
+    -- 1. Tìm quái mục tiêu từ GetOtherTeam
+    local targetEnemy = nil
+    pcall(function()
+        local otherTeam = game.ReplicatedStorage.Remotes.Data.GetOtherTeam:InvokeServer(fip.Value)
+        if otherTeam and #otherTeam > 0 then
+            local aliveEnemies = {}
+            for _, e in ipairs(otherTeam) do
+                if e and e.Parent and e:FindFirstChild("Humanoid") and e.Humanoid.Health > 0 then
+                    table.insert(aliveEnemies, e)
+                end
+            end
+            if #aliveEnemies > 0 then
+                local prio = Options.TargetPriority and Options.TargetPriority.Value or "First Enemy"
+                if prio == "Last Enemy" then
+                    targetEnemy = aliveEnemies[#aliveEnemies]
+                elseif prio == "Random Enemy" then
+                    targetEnemy = aliveEnemies[math.random(1, #aliveEnemies)]
+                else
+                    targetEnemy = aliveEnemies[1]
+                end
+            end
+        end
+    end)
+
+    -- 2. Đọc danh sách skill sẵn sàng từ ActionBG.AttacksPage hoặc UI
+    local pgui = PlayerGui
+    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
+    local atkPage = actionBG and actionBG:FindFirstChild("AttacksPage")
+    local scrollFrame = atkPage and atkPage:FindFirstChild("Attack") and atkPage.Attack:FindFirstChild("ScrollingFrame")
+
+    local function isSkillAvailable(skillName)
+        if not skillName or skillName == "" or skillName == "None" then return false end
+        if skillName == "Strike" then return true end
+        if scrollFrame then
+            local btn = scrollFrame:FindFirstChild(skillName)
+            if btn then
+                local cd = btn:FindFirstChild("CD", true) or btn:FindFirstChild("Cooldown", true)
+                if cd and cd.Visible == true then
+                    if cd:IsA("TextLabel") and (cd.Text == "" or cd.Text == "0" or cd.Text == "0s") then
+                    else
+                        return false
+                    end
+                end
+                local sealed = btn:FindFirstChild("Sealed", true) or btn:FindFirstChild("Disabled", true)
+                if sealed and sealed.Visible == true then return false end
+            end
+        end
+        return true
+    end
+
+    local skillToUse = "Strike"
+    local actionChoice = Options.SelectedCombatAction and Options.SelectedCombatAction.Value or "Auto Smart (Best Skill -> Strike)"
+    local shouldMeditateIfNoSkill = Toggles.AutoMeditateInCombat and Toggles.AutoMeditateInCombat.Value
+
+    if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
+        local slots = {
+            Options.CustomSkillSlot1 and Options.CustomSkillSlot1.Value,
+            Options.CustomSkillSlot2 and Options.CustomSkillSlot2.Value,
+            Options.CustomSkillSlot3 and Options.CustomSkillSlot3.Value,
+            Options.CustomSkillSlot4 and Options.CustomSkillSlot4.Value,
+        }
+        local matched = false
+        for _, s in ipairs(slots) do
+            if s and s ~= "" and s ~= "None" and isSkillAvailable(s) then
+                skillToUse = s
+                matched = true
+                break
+            end
+        end
+        if not matched and shouldMeditateIfNoSkill then
+            print("[DirectRemote] 🧘 Không có skill khả dụng -> Gửi Remote Meditate...")
+            task.spawn(function()
+                pcall(function() pti:InvokeServer("Meditate", false) end)
+            end)
+            task.wait(0.2)
+            return true
+        end
+    elseif actionChoice:find("Auto Smart") and scrollFrame then
+        local bestSkill = nil
+        local maxCost = -1
+        for _, btn in ipairs(scrollFrame:GetChildren()) do
+            if btn:IsA("GuiButton") and btn.Name ~= "Strike" and btn.Name ~= "Magic Missile" and btn.Name ~= "Frame" and btn.Name ~= "Template" and isSkillAvailable(btn.Name) then
+                local costText = btn:FindFirstChild("Cost") and btn.Cost:FindFirstChild("TextLabel") and btn.Cost.TextLabel.Text or "0"
+                local costNum = tonumber(costText:match("%d+")) or 0
+                if costNum > maxCost then
+                    maxCost = costNum
+                    bestSkill = btn.Name
+                end
+            end
+        end
+        if bestSkill then
+            skillToUse = bestSkill
+        end
+    end
+
+    print(string.format("[DirectRemote] ⚡ Gửi Remote chính: '%s' -> Mục tiêu: %s", skillToUse, targetEnemy and targetEnemy.Name or "None"))
+
+    -- 3. Gửi đòn đánh chính
+    task.spawn(function()
+        pcall(function()
+            if targetEnemy then
+                pti:InvokeServer("Attack", skillToUse, { Attacking = targetEnemy })
+            else
+                pti:InvokeServer("Attack", skillToUse, {})
+            end
+        end)
+    end)
+
+    -- 4. SUB-ACTIONS (Gửi thêm Meditate / Guard ngay trong cùng lượt!)
+    local subAction = Options.CombatSubAction and Options.CombatSubAction.Value or "None"
+    if subAction == "Auto Meditate (Recover Energy)" or subAction:find("Meditate") then
+        print("[DirectRemote] 🧘 Gửi Sub-Action: Meditate ngay trong cùng lượt!")
+        task.spawn(function()
+            pcall(function()
+                pti:InvokeServer("Meditate", false)
+            end)
+        end)
+    elseif subAction == "Auto Guard (Defend)" or subAction:find("Guard") then
+        print("[DirectRemote] 🛡️ Gửi Sub-Action: Guard ngay trong cùng lượt!")
+        task.spawn(function()
+            pcall(function()
+                if targetEnemy then
+                    pti:InvokeServer("Guard", false, { ProtectTarget = char })
+                else
+                    pti:InvokeServer("Guard", false)
+                end
+            end)
+        end)
+    end
+
+    task.wait(0.2)
+    return true
+end
 
 local function executeCombatTurn()
     if combatTurnLock then return end
@@ -1885,6 +2026,18 @@ local function executeCombatTurn()
 
     local ok, err = pcall(function()
         if not isPlayerTurn() then return end
+
+        local mode = Options.CombatExecutionMode and Options.CombatExecutionMode.Value or "Direct Remote (Fastest + Sub-actions)"
+        if mode:find("Direct Remote") then
+            local success = executeDirectRemoteTurn()
+            if success then
+                local endWait = os.clock()
+                while isPlayerTurn() and os.clock() - endWait < 1.0 do
+                    task.wait(0.05)
+                end
+                return
+            end
+        end
 
         local pgui = PlayerGui
         local combatGui = pgui and pgui:FindFirstChild("Combat")
@@ -4385,13 +4538,36 @@ FightGroup:AddDropdown("TargetPriority", {
     Text = "Enemy Target Priority",
 })
 
+FightGroup:AddDropdown("CombatExecutionMode", {
+    Values = {
+        "Direct Remote (Fastest + Sub-actions)",
+        "UI Emulation (Classic)"
+    },
+    Default = 1,
+    Multi = false,
+    Text = "Combat Execution Method",
+    Tooltip = "• Direct Remote: Bỏ qua giao diện UI, gửi trực tiếp Remote packet tới Server trong 0ms và hỗ trợ Sub-actions.\n• UI Emulation: Giả lập thao tác click chuột trên giao diện như người chơi thật.",
+})
+
+FightGroup:AddDropdown("CombatSubAction", {
+    Values = {
+        "None",
+        "Auto Meditate (Recover Energy)",
+        "Auto Guard (Defend)"
+    },
+    Default = 2,
+    Multi = false,
+    Text = "⚡ Sub-Action (Same-Turn Action)",
+    Tooltip = "Gửi thêm hành động phụ (Hồi Energy hoặc Bật thủ) ngay trong cùng 1 lượt đánh chính!",
+})
+
 FightGroup:AddSlider("CombatDelay", {
     Text = "Turn Action Delay (s)",
-    Default = 1.0,
-    Min = 0.5,
-    Max = 3.0,
-    Rounding = 1,
-    Tooltip = "Độ trễ an toàn giữa các lượt đánh (mặc định 1.0s để tránh softlock do game chưa load kịp UI)",
+    Default = 0.05,
+    Min = 0.0,
+    Max = 2.0,
+    Rounding = 2,
+    Tooltip = "Độ trễ phản xạ trước khi ra chiêu (0.0s = tức thì 0ms, 0.05s = mượt mà)",
 })
 
 -- -----------------------------------------------------------------------------
