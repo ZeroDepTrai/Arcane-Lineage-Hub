@@ -1043,6 +1043,8 @@ end
 local function safeClickButton(btn)
     if not btn then return false end
     local clicked = false
+
+    -- 1. firesignal on all click events
     if firesignal then
         pcall(function() firesignal(btn.MouseButton1Click) end)
         pcall(function() firesignal(btn.MouseButton1Down) end)
@@ -1050,6 +1052,8 @@ local function safeClickButton(btn)
         pcall(function() firesignal(btn.Activated) end)
         clicked = true
     end
+
+    -- 2. getconnections callback triggers
     if getconnections then
         pcall(function()
             for _, c in ipairs(getconnections(btn.MouseButton1Click)) do
@@ -1721,6 +1725,1235 @@ end
 -- =============================================================================
 -- AUTO FIGHT ENGINE (STANDALONE COMBAT TURN & SKILL EXECUTOR)
 -- =============================================================================
+
+-- Tự động dừng mọi instance AutoYarthul cũ đang chạy ngầm trước khi khởi tạo instance mới
+if shared.AutoYarthulInstance then
+    pcall(function() shared.AutoYarthulInstance.stop(true) end)
+    shared.AutoYarthulInstance = nil
+end
+
+-- =============================================================================
+-- AUTO BOSS FARM ENGINE: YAR'THUL, THE BLAZING DRAGON (MOUNT THUL)
+-- =============================================================================
+local AutoYarthul = {
+    running = false,
+    thread = nil,
+    lootThread = nil,
+    refightConn = nil,
+    state = "Idle",
+    bossKillCount = 0,
+    deathCount = 0,
+    floatingGui = nil,
+    PLACE_ID = 10595058975,                                -- Arcane Lineage Place ID
+    UNIVERSE_ID = 3846592040,                              -- Arcane Lineage Universe ID
+    gatePosition = Vector3.new(40.5, 581.6, -4113.5),      -- Mount Thul Boss Door (Begin Fight Gate)
+    spawnPosition = Vector3.new(99.15, 572.31, -4115.89),  -- Yar'thul Instance Spawn Point
+    arenaPosition = Vector3.new(-555.0, 645.6, -4235.4),   -- Yar'thul Arena Center
+    sessionFile = "Arcane_Yarthul_ActiveSession.json",
+    lastGateInteractTime = 0,
+    wasInCombat = false,
+    hasFoughtBoss = false,
+    isRestoring = false,
+    charAddedConn = nil,
+    lastUsedSkill = "",
+    turnExecutionLock = false,
+    inventoryBaseline = {},
+    lastDroppedSummary = "Chưa có drop mới",
+}
+
+shared.AutoYarthulInstance = AutoYarthul
+
+-- 1. Instance & Area Detection Helper (Nhận biết chính xác vị trí trong Instance Yar'thul vs Main Game qua tọa độ trục X)
+function AutoYarthul.isInsideInstance()
+    if isInCombat() then
+        return true
+    end
+
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if root then
+        -- Đấu trường Boss Yar'thul nằm ở tọa độ X < -200 (khoảng X=-555, Y=645, Z=-4235)
+        -- Trong khi Overworld / Main Game nằm ở tọa độ X > 0 (cửa Mount Thul X=40.5)
+        if root.Position.X < -200 then
+            return true
+        end
+    end
+
+    return false
+end
+
+-- 2. Đọc chính xác máu của Boss Yar'thul (HP & MaxHP)
+function AutoYarthul.getBossHealth()
+    -- A. Quét trong Workspace.Living
+    local living = workspace:FindFirstChild("Living")
+    if living then
+        for _, m in ipairs(living:GetChildren()) do
+            if m:IsA("Model") and (m.Name:lower():find("yar") or m.Name:lower():find("thul") or m.Name:lower():find("dragon")) then
+                local hum = m:FindFirstChildOfClass("Humanoid")
+                if hum then
+                    return hum.Health, hum.MaxHealth, m
+                end
+            end
+        end
+    end
+
+    -- B. Quét qua remote GetOtherTeam nếu có
+    pcall(function()
+        local char = LocalPlayer.Character
+        local fip = char and char:FindFirstChild("FightInProgress")
+        if fip and fip.Value then
+            local getOtherTeam = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Data") and ReplicatedStorage.Remotes.Data:FindFirstChild("GetOtherTeam")
+            if getOtherTeam then
+                local otherTeam = getOtherTeam:InvokeServer(fip.Value)
+                if type(otherTeam) == "table" and #otherTeam > 0 then
+                    for _, enemy in ipairs(otherTeam) do
+                        if enemy and enemy:IsA("Model") and (enemy.Name:lower():find("yar") or enemy.Name:lower():find("thul") or enemy.Name:lower():find("dragon")) then
+                            local hum = enemy:FindFirstChildOfClass("Humanoid")
+                            if hum then
+                                return hum.Health, hum.MaxHealth, enemy
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    return 0, 0, nil
+end
+
+-- 3. HỆ THỐNG QUÉT & ĐỐI SOÁT KHO ĐỒ ĐỂ TỰ ĐỘNG PHÁT HIỆN DROP MỚI
+function AutoYarthul.getInventorySnapshot()
+    local snap = {}
+    pcall(function()
+        local pgui = PlayerGui
+        local invGui = pgui and pgui:FindFirstChild("Inventory")
+        local invFrame = invGui and invGui:FindFirstChild("Inventory")
+        if invFrame then
+            for _, desc in ipairs(invFrame:GetDescendants()) do
+                if desc:IsA("TextButton") and desc.Text and #desc.Text > 0 and desc.Name ~= "Delete" and desc.Name ~= "Button" then
+                    local rawName = desc.Text
+                    local amtLabel = desc:FindFirstChild("AmountLabel")
+                    local count = 1
+                    if amtLabel and amtLabel.Text then
+                        count = tonumber(amtLabel.Text:match("^(%d+)")) or 1
+                    end
+                    snap[rawName] = (snap[rawName] or 0) + count
+                end
+            end
+        end
+    end)
+    return snap
+end
+
+function AutoYarthul.detectInventoryDrops()
+    local currentSnap = AutoYarthul.getInventorySnapshot()
+    local drops = {}
+
+    for name, curCount in pairs(currentSnap) do
+        local prevCount = AutoYarthul.inventoryBaseline[name] or 0
+        if curCount > prevCount then
+            local diff = curCount - prevCount
+            table.insert(drops, { name = name, count = diff })
+        end
+    end
+
+    -- Cập nhật lại baseline bằng snapshot hiện tại
+    AutoYarthul.inventoryBaseline = currentSnap
+    return drops
+end
+
+-- 4. KIỂM TRA CHÍNH XÁC 100% TRẠNG THÁI COOLDOWN CỦA SKILL QUA COMBAT GUI
+function AutoYarthul.isSkillReady(skillName)
+    local pgui = PlayerGui
+    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    if not combatGui then return true end
+
+    for _, desc in ipairs(combatGui:GetDescendants()) do
+        if desc:IsA("GuiButton") or desc:IsA("Frame") then
+            local isTargetSkill = false
+            if desc.Name:lower() == skillName:lower() then
+                isTargetSkill = true
+            else
+                local sname = desc:FindFirstChild("SkillName")
+                if sname and sname:IsA("TextLabel") and sname.Text:lower() == skillName:lower() then
+                    isTargetSkill = true
+                end
+            end
+
+            if isTargetSkill then
+                -- Kiểm tra CD ImageLabel
+                local cdImg = desc:FindFirstChild("CD", true)
+                if cdImg and cdImg:IsA("GuiObject") and cdImg.Visible then
+                    return false
+                end
+                -- Kiểm tra Cooldown Frame
+                local cdFrame = desc:FindFirstChild("Cooldown", true) or desc:FindFirstChild("CoolDown", true)
+                if cdFrame and cdFrame:IsA("GuiObject") and cdFrame.Visible then
+                    return false
+                end
+                -- Skill sẵn sàng dùng!
+                return true
+            end
+        end
+    end
+
+    -- Fallback đối với Sense Expansion
+    if skillName == "Sense Expansion" then
+        return (AutoYarthul.lastUsedSkill ~= "Sense Expansion")
+    end
+
+    return true
+end
+
+-- 5. DISCORD WEBHOOK NOTIFIER CHO YAR'THUL BOSS FARM (TỰ ĐỘNG BÁO TẤT CẢ DROPS VÀO KHO ĐỒ)
+function AutoYarthul.sendWebhook(eventType, extraData)
+    local webhookUrl = (Options.YarthulWebhook and Options.YarthulWebhook.Value) or (Options.DiscordWebhook and Options.DiscordWebhook.Value) or ""
+    if #webhookUrl < 10 or not HttpRequest then
+        if eventType == "Test" then
+            Library:Notify("❌ Vui lòng nhập Discord Webhook URL hợp lệ trước!", 4)
+        end
+        return
+    end
+
+    local useWebhook = (Toggles.YarthulSendWebhook == nil or Toggles.YarthulSendWebhook.Value)
+    if not useWebhook and eventType ~= "Test" then return end
+
+    task.spawn(function()
+        local embed = {}
+        local char = LocalPlayer.Character
+        local health = char and char:FindFirstChildOfClass("Humanoid") and char:FindFirstChildOfClass("Humanoid").Health or 0
+        local maxHealth = char and char:FindFirstChildOfClass("Humanoid") and char:FindFirstChildOfClass("Humanoid").MaxHealth or 100
+
+        if eventType == "Kill" then
+            local dropStr = extraData and extraData.dropStr or "• Không có vật phẩm mới nhận vào kho"
+            embed = {
+                title = "🐉 YAR'THUL, THE BLAZING DRAGON ĐÃ BỊ HẠ GỤC! 🏆",
+                description = string.format("Nhân vật vừa hạ gục thành công Boss **Yar'thul (Mount Thul)** và hoàn tất kiểm tra kho đồ!", AutoYarthul.bossKillCount),
+                color = 0xFF5500, -- Fiery Dragon Orange
+                fields = {
+                    { name = "🎒 Vật Phẩm / Drop Nhận Được (Kho Đồ)", value = dropStr, inline = false },
+                    { name = "🏆 Tổng số lần hạ gục (Kills)", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
+                    { name = "🔄 Số lần Retry/Wipe", value = string.format("`%d` Retries", AutoYarthul.deathCount), inline = true },
+                    { name = "❤️ Máu người chơi", value = string.format("`%.0f / %.0f`", health, maxHealth), inline = true },
+                    { name = "👤 Nhân vật", value = string.format("`%s` (%s)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true },
+                    { name = "🆔 Server JobId", value = string.format("`%s`", game.JobId), inline = false }
+                },
+                footer = { text = "Arcane Lineage • Auto Boss Farm Yar'thul" },
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            }
+        elseif eventType == "Loot" then
+            local itemName = extraData and extraData.itemName or "Rare Artifact"
+            local droppedBy = extraData and extraData.droppedBy or "Yar'thul, the Blazing Dragon"
+            embed = {
+                title = "🎁 ARTIFACT ROLL POOL ACCEPTED! 🎲",
+                description = string.format("Nhân vật đã tự động chấp nhận (Accept) vào Roll Pool khi nhận được **%s**!", itemName),
+                color = 0xFFD700, -- Shiny Gold
+                fields = {
+                    { name = "💎 Vật phẩm rơi (Item Drop)", value = string.format("**%s**", itemName), inline = true },
+                    { name = "🐉 Rơi từ (Source)", value = string.format("`%s`", droppedBy), inline = true },
+                    { name = "🏆 Tổng Boss Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
+                    { name = "👤 Nhân vật", value = string.format("`%s` (%s)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true }
+                },
+                footer = { text = "Arcane Lineage • Auto Loot Roll Pool" },
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            }
+        elseif eventType == "Test" then
+            local snap = AutoYarthul.getInventorySnapshot()
+            local snapCount = 0
+            for _ in pairs(snap) do snapCount = snapCount + 1 end
+            embed = {
+                title = "🧪 [TEST] YAR'THUL DISCORD WEBHOOK HOẠT ĐỘNG TỐT! ✅",
+                description = "Kết nối Discord Webhook của Auto Farm Boss Yar'thul đã được kiểm tra và hoạt động hoàn hảo!",
+                color = 0x00FF88, -- Bright Emerald Green
+                fields = {
+                    { name = "🐉 Boss Target", value = "`Yar'thul, the Blazing Dragon (Mount Thul)`", inline = true },
+                    { name = "🏆 Số Kill hiện tại", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
+                    { name = "🎒 Tổng loại Item trong kho", value = string.format("`%d` Loại vật phẩm", snapCount), inline = true },
+                    { name = "👤 Nhân vật", value = string.format("`%s` (%s)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true },
+                    { name = "🆔 Place / JobId", value = string.format("Place: `%d`\nJobId: `%s`", game.PlaceId, game.JobId), inline = false }
+                },
+                footer = { text = "Arcane Lineage • Webhook Test System" },
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            }
+        end
+
+        local payload = {
+            username = "Yar'thul Dragon Slayer",
+            avatar_url = "https://cdn-icons-png.flaticon.com/512/1415/1415438.png",
+            embeds = { embed }
+        }
+
+        local ok, res = pcall(function()
+            return HttpRequest({
+                Url = webhookUrl,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode(payload)
+            })
+        end)
+
+        if eventType == "Test" then
+            if ok then
+                print("[AutoYarthul Webhook] ✅ Gửi Test Webhook thành công tới Discord!")
+                Library:Notify("✅ Gửi Test Webhook thành công tới Discord!", 5)
+            else
+                print("[AutoYarthul Webhook] ❌ Lỗi gửi Test Webhook:", tostring(res))
+                Library:Notify("❌ Gửi Test Webhook thất bại! Kiểm tra URL.", 5)
+            end
+        end
+    end)
+end
+
+-- 6. DIRECT HOOK ENGINE: TỰ ĐỘNG CHẤP NHẬN LOOT POOL / ITEM DROP BẰNG METAMETHOD VÀ CALLBACK TRỰC TIẾP
+function AutoYarthul.hookLootRemote()
+    -- Hook StarterGui:SetCore("SendNotification") qua hookmetamethod (__namecall)
+    pcall(function()
+        if not shared.ArcaneSetCoreHookInstalled and hookmetamethod then
+            shared.ArcaneSetCoreHookInstalled = true
+            local oldNamecall
+            oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+                local method = getnamecallmethod()
+                local args = {...}
+                if (method == "SetCore" or method == "setCore") and args[1] == "SendNotification" and type(args[2]) == "table" then
+                    local coreData = args[2]
+                    local title = tostring(coreData.Title or "")
+                    local text = tostring(coreData.Text or "")
+                    if title:lower():find("item") or title:lower():find("drop") or text:lower():find("dropped") or text:lower():find("roll") or text:lower():find("dice") then
+                        print(string.format("[AutoLoot Hook] ⚡ Bắt được SetCore Notification '%s' -> Tự động kích hoạt Callback 'Accept' trực tiếp (0ms)!", title))
+                        if AutoYarthul and AutoYarthul.running then
+                            AutoYarthul.updateHUD("🎁 Đã Accept vào Loot Roll Pool (0ms)!")
+                            Library:Notify("🎁 Auto Accepted Loot Roll Pool!", 4)
+                            AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
+                        end
+                        if coreData.Callback then
+                            task.spawn(function()
+                                pcall(function()
+                                    if typeof(coreData.Callback) == "Instance" and coreData.Callback:IsA("BindableFunction") then
+                                        coreData.Callback:Fire("Accept")
+                                    elseif typeof(coreData.Callback) == "function" then
+                                        coreData.Callback("Accept")
+                                    end
+                                end)
+                            end)
+                        end
+                    end
+                end
+                return oldNamecall(self, ...)
+            end)
+            print("[AutoLoot] ⚡ Đã cài đặt Hook SetCore SendNotification thành công!")
+        end
+    end)
+
+    -- Hook ReplicatedStorage.Remotes.Fight.RefightBoss
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+        local fight = remotes and remotes:FindFirstChild("Fight")
+        local refightRemote = fight and fight:FindFirstChild("RefightBoss")
+        if refightRemote and refightRemote:IsA("RemoteEvent") and not AutoYarthul.refightConn then
+            AutoYarthul.refightConn = refightRemote.OnClientEvent:Connect(function(action, data)
+                if AutoYarthul.running and AutoYarthul.isInsideInstance() then
+                    if action == "OpenGui" and type(data) == "table" and data.BattleID then
+                        print(string.format("[AutoRefight Remote] 🐉 [RefightBoss Remote] Nhận OpenGui (BattleID: %s) -> Gửi Remote Accept tức thì!", tostring(data.BattleID)))
+                        task.wait(0.2)
+                        pcall(function()
+                            refightRemote:FireServer(data.BattleID, "Accept")
+                        end)
+                        AutoYarthul.updateHUD("🐉 Đã gửi Remote Accept Refight Boss!")
+                    end
+                end
+            end)
+            print("[AutoRefight] ⚡ Đã gắn Direct Remote Hook vào ReplicatedStorage.Remotes.Fight.RefightBoss!")
+        end
+    end)
+end
+
+-- 7. Kiểm tra xem bảng Refight đã xuất hiện VÀ THỰC SỰ ĐANG HIỆN TRÊN MÀN HÌNH (Main.Visible == true)
+function AutoYarthul.isRefightActive()
+    local pgui = PlayerGui
+    if not pgui then return false, nil end
+
+    -- TUYỆT ĐỐI KHÔNG CHẠY REFIGHT NẾU ĐANG Ở MAINGAME / OVERWORLD (X > 0)
+    if not AutoYarthul.isInsideInstance() and not AutoYarthul.hasFoughtBoss then
+        return false, nil
+    end
+
+    local refightGui = pgui:FindFirstChild("Refight")
+    if refightGui and refightGui.Enabled then
+        local mainFrame = refightGui:FindFirstChild("Main")
+        if mainFrame and mainFrame:IsA("GuiObject") and mainFrame.Visible then
+            local yesBtn = mainFrame:FindFirstChild("Yes", true)
+            if yesBtn and (yesBtn:IsA("TextButton") or yesBtn:IsA("ImageButton")) and yesBtn.Visible then
+                return true, yesBtn
+            end
+        end
+    end
+
+    local bossReplay = pgui:FindFirstChild("BossReplay")
+    if bossReplay and bossReplay.Enabled then
+        local mainFrame = bossReplay:FindFirstChild("Main") or bossReplay:FindFirstChild("Frame") or bossReplay:FindFirstChild("Choices")
+        if mainFrame and mainFrame:IsA("GuiObject") and mainFrame.Visible then
+            local yesBtn = bossReplay:FindFirstChild("Yes", true)
+            if yesBtn and (yesBtn:IsA("TextButton") or yesBtn:IsA("ImageButton")) and yesBtn.Visible then
+                return true, yesBtn
+            end
+        end
+    end
+
+    return false, nil
+end
+
+function AutoYarthul.isBossDeadOrDown()
+    -- TUYỆT ĐỐI KHÔNG CHECK BOSS DEAD NẾU ĐANG Ở MAINGAME / OVERWORLD (X > 0)
+    if not AutoYarthul.isInsideInstance() and not AutoYarthul.hasFoughtBoss then
+        return false, "Overworld", nil
+    end
+
+    -- 1. Ưu tiên số 1: Nếu đã có bảng Refight ĐANG HIỆN TRÊN MÀN HÌNH (Main.Visible == true)
+    local isRefight, yesBtn = AutoYarthul.isRefightActive()
+    if isRefight and yesBtn then
+        return true, "RefightPrompt", yesBtn
+    end
+
+    -- 2. Kiểm tra máu Boss = 0
+    local hp, maxHp, bossModel = AutoYarthul.getBossHealth()
+    if bossModel and hp <= 0 then
+        return true, "ZeroHP", nil
+    end
+
+    -- 3. Kiểm tra Boss ngã xuống (model nằm rạp trên sàn: UpVector.Y < 0.6)
+    if bossModel then
+        local hrp = bossModel:FindFirstChild("HumanoidRootPart") or bossModel:FindFirstChild("Torso") or bossModel.PrimaryPart
+        if hrp then
+            local upY = hrp.CFrame.UpVector.Y
+            if upY < 0.6 then
+                return true, "BossDown", nil
+            end
+        end
+    end
+
+    return false, "Alive", nil
+end
+
+-- 8. On-Screen Floating HUD Engine (Hiển thị trạng thái & Nút [STOP AUTO FARM] ngay trên màn hình)
+function AutoYarthul.createHUD()
+    if AutoYarthul.floatingGui then
+        pcall(function() AutoYarthul.floatingGui:Destroy() end)
+        AutoYarthul.floatingGui = nil
+    end
+
+    pcall(function()
+        local parentGui = (gethui and gethui()) or (game:GetService("CoreGui"):FindFirstChild("RobloxGui")) or PlayerGui
+        local screenGui = Instance.new("ScreenGui")
+        screenGui.Name = "Arcane_Yarthul_HUD"
+        screenGui.ResetOnSpawn = false
+        screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+        local mainCard = Instance.new("Frame")
+        mainCard.Name = "MainCard"
+        mainCard.Size = UDim2.new(0, 320, 0, 180)
+        mainCard.Position = UDim2.new(0.02, 0, 0.48, 0)
+        mainCard.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+        mainCard.BorderSizePixel = 0
+        mainCard.Active = true
+        mainCard.Draggable = true
+        mainCard.Parent = screenGui
+
+        local cardCorner = Instance.new("UICorner")
+        cardCorner.CornerRadius = UDim.new(0, 10)
+        cardCorner.Parent = mainCard
+
+        local cardStroke = Instance.new("UIStroke")
+        cardStroke.Color = Color3.fromRGB(255, 110, 30) -- Glowing Dragon Orange
+        cardStroke.Thickness = 1.5
+        cardStroke.Parent = mainCard
+
+        -- Title Header
+        local title = Instance.new("TextLabel")
+        title.Name = "Title"
+        title.Size = UDim2.new(1, -20, 0, 26)
+        title.Position = UDim2.new(0, 10, 0, 8)
+        title.BackgroundTransparency = 1
+        title.Font = Enum.Font.GothamBold
+        title.Text = "🐉 AUTO YAR'THUL (AUTO RETRY)"
+        title.TextColor3 = Color3.fromRGB(255, 150, 50)
+        title.TextSize = 14
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Parent = mainCard
+
+        -- Status Indicator
+        local statusLabel = Instance.new("TextLabel")
+        statusLabel.Name = "StatusLabel"
+        statusLabel.Size = UDim2.new(1, -20, 0, 20)
+        statusLabel.Position = UDim2.new(0, 10, 0, 34)
+        statusLabel.BackgroundTransparency = 1
+        statusLabel.Font = Enum.Font.GothamMedium
+        statusLabel.Text = "Status: 🚀 Khởi động chu trình..."
+        statusLabel.TextColor3 = Color3.fromRGB(220, 220, 230)
+        statusLabel.TextSize = 12
+        statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+        statusLabel.Parent = mainCard
+
+        -- Strategy Indicator
+        local stratLabel = Instance.new("TextLabel")
+        stratLabel.Name = "StratLabel"
+        stratLabel.Size = UDim2.new(1, -20, 0, 18)
+        stratLabel.Position = UDim2.new(0, 10, 0, 54)
+        stratLabel.BackgroundTransparency = 1
+        stratLabel.Font = Enum.Font.Gotham
+        stratLabel.Text = "Strat: Sense (Alternating) > Carnage > Strike + Med"
+        stratLabel.TextColor3 = Color3.fromRGB(160, 200, 255)
+        stratLabel.TextSize = 11
+        stratLabel.TextXAlignment = Enum.TextXAlignment.Left
+        stratLabel.Parent = mainCard
+
+        -- Kill & Retry Counter
+        local killLabel = Instance.new("TextLabel")
+        killLabel.Name = "KillLabel"
+        killLabel.Size = UDim2.new(1, -20, 0, 18)
+        killLabel.Position = UDim2.new(0, 10, 0, 72)
+        killLabel.BackgroundTransparency = 1
+        killLabel.Font = Enum.Font.GothamBold
+        killLabel.Text = string.format("🏆 Kills: %d | 🔄 Retries: %d", AutoYarthul.bossKillCount, AutoYarthul.deathCount)
+        killLabel.TextColor3 = Color3.fromRGB(100, 255, 140)
+        killLabel.TextSize = 12
+        killLabel.TextXAlignment = Enum.TextXAlignment.Left
+        killLabel.Parent = mainCard
+
+        -- Last Drop Info
+        local dropLabel = Instance.new("TextLabel")
+        dropLabel.Name = "DropLabel"
+        dropLabel.Size = UDim2.new(1, -20, 0, 18)
+        dropLabel.Position = UDim2.new(0, 10, 0, 92)
+        dropLabel.BackgroundTransparency = 1
+        dropLabel.Font = Enum.Font.GothamMedium
+        dropLabel.Text = "🎁 Drops: " .. tostring(AutoYarthul.lastDroppedSummary)
+        dropLabel.TextColor3 = Color3.fromRGB(255, 220, 100)
+        dropLabel.TextSize = 11
+        dropLabel.TextXAlignment = Enum.TextXAlignment.Left
+        dropLabel.Parent = mainCard
+
+        -- STOP AUTO FARM BUTTON
+        local stopBtn = Instance.new("TextButton")
+        stopBtn.Name = "StopButton"
+        stopBtn.Size = UDim2.new(1, -20, 0, 32)
+        stopBtn.Position = UDim2.new(0, 10, 0, 126)
+        stopBtn.BackgroundColor3 = Color3.fromRGB(190, 35, 45)
+        stopBtn.BorderSizePixel = 0
+        stopBtn.Font = Enum.Font.GothamBold
+        stopBtn.Text = "🛑 STOP AUTO FARM YAR'THUL"
+        stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        stopBtn.TextSize = 13
+        stopBtn.AutoButtonColor = true
+        stopBtn.Parent = mainCard
+
+        local btnCorner = Instance.new("UICorner")
+        btnCorner.CornerRadius = UDim.new(0, 6)
+        btnCorner.Parent = stopBtn
+
+        stopBtn.MouseButton1Click:Connect(function()
+            print("[AutoYarthul] 🛑 Người dùng ấn [STOP AUTO FARM] trên màn hình -> Dừng vĩnh viễn và xoá Session!")
+            AutoYarthul.stop(true)
+            if Toggles.AutoFarmYarthul then
+                Toggles.AutoFarmYarthul:SetValue(false)
+            end
+        end)
+
+        screenGui.Parent = parentGui
+        AutoYarthul.floatingGui = screenGui
+    end)
+end
+
+function AutoYarthul.destroyHUD()
+    if AutoYarthul.floatingGui then
+        pcall(function() AutoYarthul.floatingGui:Destroy() end)
+        AutoYarthul.floatingGui = nil
+    end
+end
+
+function AutoYarthul.updateHUD(statusText)
+    if not AutoYarthul.floatingGui then return end
+    pcall(function()
+        local card = AutoYarthul.floatingGui:FindFirstChild("MainCard")
+        if not card then return end
+        if statusText then
+            local sl = card:FindFirstChild("StatusLabel")
+            if sl then sl.Text = "Status: " .. tostring(statusText) end
+        end
+        local kl = card:FindFirstChild("KillLabel")
+        if kl then
+            kl.Text = string.format("🏆 Kills: %d | 🔄 Retries: %d", AutoYarthul.bossKillCount, AutoYarthul.deathCount)
+        end
+        local dl = card:FindFirstChild("DropLabel")
+        if dl then
+            dl.Text = "🎁 Drops: " .. tostring(AutoYarthul.lastDroppedSummary)
+        end
+    end)
+end
+
+-- 9. Persistence / Auto-Rejoin Session Handler (Sử dụng duy nhất 1 queue teleport script của Hub)
+function AutoYarthul.saveSession()
+    pcall(function()
+        if writefile then
+            local payload = {
+                active = true,
+                placeId = game.PlaceId,
+                gameId = game.GameId,
+                jobId = game.JobId,
+                kills = AutoYarthul.bossKillCount,
+                retries = AutoYarthul.deathCount,
+                timestamp = os.time(),
+            }
+            writefile(AutoYarthul.sessionFile, HttpService:JSONEncode(payload))
+        end
+    end)
+
+    pcall(function()
+        if queueTeleportScript then
+            queueTeleportScript(false)
+        end
+    end)
+end
+
+function AutoYarthul.clearSession()
+    pcall(function()
+        if isfile and isfile(AutoYarthul.sessionFile) and delfile then
+            delfile(AutoYarthul.sessionFile)
+        end
+    end)
+end
+
+function AutoYarthul.checkSessionOnBoot()
+    pcall(function()
+        if isfile and isfile(AutoYarthul.sessionFile) and readfile then
+            local content = readfile(AutoYarthul.sessionFile)
+            local data = HttpService:JSONDecode(content)
+            if data and data.active == true then
+                local delta = os.time() - (data.timestamp or 0)
+                if delta < 3600 then
+                    AutoYarthul.bossKillCount = data.kills or 0
+                    AutoYarthul.deathCount = data.retries or 0
+                    AutoYarthul.isRestoring = true
+                    
+                    local inInstance = AutoYarthul.isInsideInstance()
+                    print(string.format("[AutoYarthul] 🔄 Khôi phục phiên Auto Farm Yar'thul (Kills: %d, Retries: %d, InInstance: %s)!", AutoYarthul.bossKillCount, AutoYarthul.deathCount, tostring(inInstance)))
+                    
+                    task.spawn(function()
+                        local waited = 0
+                        while not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") do
+                            task.wait(0.5)
+                            waited = waited + 0.5
+                            if waited > 15 then break end
+                        end
+                        task.wait(1.2)
+
+                        -- Tắt triệt để các Tab Auto Farm khác để tránh xung đột
+                        if Toggles.AutoFarmLevel and Toggles.AutoFarmLevel.Value then Toggles.AutoFarmLevel:SetValue(false) end
+                        if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then Toggles.AutoFarmCrylight:SetValue(false) end
+                        if Toggles.AutoMineOre and Toggles.AutoMineOre.Value then Toggles.AutoMineOre:SetValue(false) end
+                        if LevelFarmer then LevelFarmer.stop() end
+                        if Farmer then Farmer.stop() end
+                        if Miner then Miner.stop() end
+
+                        if Toggles.AutoFarmYarthul then
+                            Toggles.AutoFarmYarthul:SetValue(true)
+                        else
+                            AutoYarthul.start()
+                        end
+                        AutoYarthul.isRestoring = false
+                        Library:Notify(string.format("🔄 Auto Farm Yar'thul Resumed (Kills: %d)!", AutoYarthul.bossKillCount), 5)
+                    end)
+                else
+                    AutoYarthul.clearSession()
+                end
+            end
+        end
+    end)
+end
+
+-- 10. HỆ THỐNG AUTO LOOT VẬT PHẨM & SKIP INTRO
+function AutoYarthul.handleAutoLoot()
+    -- A. TỰ ĐỘNG BẤM PLAY / START / LOAD SLOT / SKIP CUTSCENE KHI VÀO GAME
+    pcall(function()
+        local pgui = PlayerGui
+        if pgui then
+            -- 1. Skip Intro Cutscene button
+            for _, desc in ipairs(pgui:GetDescendants()) do
+                if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible then
+                    local name = desc.Name:lower()
+                    local text = desc:IsA("TextButton") and desc.Text:lower() or ""
+                    if (name:find("skip") or text:find("skip")) and not name:find("stop") and not text:find("stop") and not name:find("restart") then
+                        safeClickButton(desc)
+                    end
+                end
+            end
+
+            -- 2. MainMenu Play / Load Slot / Start Game
+            local mainMenu = pgui:FindFirstChild("MainMenu")
+            if mainMenu and mainMenu.Enabled then
+                for _, btn in ipairs(mainMenu:GetDescendants()) do
+                    if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible then
+                        local bname = btn.Name:lower()
+                        local btext = btn:IsA("TextButton") and btn.Text:lower() or ""
+                        if bname:find("play") or btext:find("play") or bname:find("start") or btext:find("start") or bname:find("load") or btext:find("load") or bname:find("slot") or bname:find("spawn") then
+                            print(string.format("[AutoSkip] 🎮 Tự động bấm '%s' trên MainMenu để vào game!", btn.Name))
+                            safeClickButton(btn)
+                        end
+                    end
+                end
+            end
+
+            -- 3. Title / Intro ScreenGuis
+            local titleGui = pgui:FindFirstChild("Title") or pgui:FindFirstChild("Intro") or pgui:FindFirstChild("Loading")
+            if titleGui and titleGui.Enabled then
+                for _, btn in ipairs(titleGui:GetDescendants()) do
+                    if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible then
+                        safeClickButton(btn)
+                    end
+                end
+            end
+        end
+    end)
+
+    -- B. Quét & Thu hoạch các vật phẩm rơi dưới sàn (Ground Loot in SpawnedItems / Drops)
+    pcall(function()
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        if not root then return end
+
+        local lootContainers = {
+            workspace:FindFirstChild("SpawnedItems"),
+            workspace:FindFirstChild("Drops"),
+            workspace:FindFirstChild("Ores"),
+            workspace:FindFirstChild("Living")
+        }
+
+        for _, container in ipairs(lootContainers) do
+            if container then
+                for _, item in ipairs(container:GetChildren()) do
+                    local itemPos = item:IsA("BasePart") and item.Position or (item:IsA("Model") and item:GetPivot().Position)
+                    if itemPos then
+                        local dist = (itemPos - root.Position).Magnitude
+                        if dist <= 60 then
+                            for _, prompt in ipairs(item:GetDescendants()) do
+                                if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+                                    if fireproximityprompt then
+                                        fireproximityprompt(prompt, 0)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- 11. KIỂM TRA CHÍNH XÁC 100% FLAME / MAGMA PILLAR (GEYSER) TRÊN SÂN ĐẤU
+function AutoYarthul.hasFlamePillar()
+    local foundPillar = false
+
+    -- A. Kiểm tra trực tiếp trong Boss.Effects (MPillar BoolValue hoặc LastUsedAttack)
+    pcall(function()
+        local living = workspace:FindFirstChild("Living")
+        if living then
+            for _, m in ipairs(living:GetChildren()) do
+                if m:IsA("Model") and (m.Name:lower():find("yar") or m.Name:lower():find("thul") or m.Name:lower():find("dragon")) then
+                    local effects = m:FindFirstChild("Effects") or m:FindFirstChild("Status")
+                    if effects then
+                        local mpillar = effects:FindFirstChild("MPillar") or effects:FindFirstChild("Pillar") or effects:FindFirstChild("FlamePillar") or effects:FindFirstChild("MagmaPillar")
+                        if mpillar then
+                            print(string.format("[AutoYarthul] 🔥 [Boss.Effects] Phát hiện Pillar '%s' trên Yar'thul -> Khóa Carnage!", mpillar.Name))
+                            foundPillar = true
+                            return
+                        end
+                        local lastAtk = effects:FindFirstChild("LastUsedAttack")
+                        if lastAtk and typeof(lastAtk.Value) == "string" and lastAtk.Value:lower():find("pillar") then
+                            print(string.format("[AutoYarthul] 🔥 [Boss LastUsedAttack] '%s' -> Khóa Carnage!", lastAtk.Value))
+                            foundPillar = true
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    if foundPillar then return true end
+
+    -- B. Kiểm tra trong Workspace.Effects (Geyser Part / Model với Sound Idle & Particle)
+    pcall(function()
+        local effects = workspace:FindFirstChild("Effects")
+        if effects then
+            for _, ef in ipairs(effects:GetChildren()) do
+                local ename = ef.Name:lower()
+                if ename:find("geyser") or ename:find("pillar") or ename:find("flame") or ename:find("magma") or ename:find("lava") or ename:find("fire") then
+                    print(string.format("[AutoYarthul] 🔥 [Workspace.Effects] Phát hiện Flame/Magma Pillar '%s' -> Khóa Carnage!", ef.Name))
+                    foundPillar = true
+                    return
+                end
+            end
+        end
+    end)
+    if foundPillar then return true end
+
+    -- C. Kiểm tra GetOtherTeam remote (nếu Pillar được tính là 1 entity đối thủ riêng)
+    pcall(function()
+        local char = LocalPlayer.Character
+        local fip = char and char:FindFirstChild("FightInProgress")
+        if fip and fip.Value then
+            local getOtherTeam = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Data") and ReplicatedStorage.Remotes.Data:FindFirstChild("GetOtherTeam")
+            if getOtherTeam then
+                local otherTeam = getOtherTeam:InvokeServer(fip.Value)
+                if type(otherTeam) == "table" and #otherTeam > 0 then
+                    for _, enemy in ipairs(otherTeam) do
+                        if enemy and enemy.Name then
+                            local ename = enemy.Name:lower()
+                            if ename:find("pillar") or ename:find("geyser") or ename:find("flame") or ename:find("fire") or ename:find("lava") or ename:find("magma") then
+                                print(string.format("[AutoYarthul] 🔥 [GetOtherTeam] Phát hiện Flame Pillar: '%s' -> Khóa Carnage!", enemy.Name))
+                                foundPillar = true
+                                return
+                            elseif not ename:find("yar") and not ename:find("thul") and not ename:find("dragon") then
+                                print(string.format("[AutoYarthul] 🔥 [GetOtherTeam] Phát hiện mục tiêu phụ: '%s' -> Khóa Carnage!", enemy.Name))
+                                foundPillar = true
+                                return
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    if foundPillar then return true end
+
+    -- D. Quét toàn bộ các Part/Model gần đấu trường
+    pcall(function()
+        local char = LocalPlayer.Character
+        local root = char and char:FindFirstChild("HumanoidRootPart")
+        local myPos = root and root.Position or AutoYarthul.spawnPosition
+        local checkFolders = { workspace:FindFirstChild("Effects"), workspace:FindFirstChild("Debris"), workspace:FindFirstChild("Living"), workspace }
+        for _, folder in ipairs(checkFolders) do
+            if folder then
+                for _, obj in ipairs(folder:GetChildren()) do
+                    if obj ~= char then
+                        local oname = obj.Name:lower()
+                        if oname:find("geyser") or oname:find("flame pillar") or oname:find("flamepillar") or oname:find("magmapillar") or oname:find("magma pillar") then
+                            local objPos = obj:IsA("BasePart") and obj.Position or (obj:IsA("Model") and obj:GetPivot().Position)
+                            if objPos and (objPos - myPos).Magnitude <= 150 then
+                                print(string.format("[AutoYarthul] 🔥 [Arena Scan] Phát hiện Pillar/Geyser '%s' cách %.1f studs -> Khóa Carnage!", obj.Name, (objPos - myPos).Magnitude))
+                                foundPillar = true
+                                return
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    return foundPillar
+end
+
+-- 12. Trích xuất năng lượng chiến đấu (Player Combat Energy)
+function AutoYarthul.getPlayerEnergy()
+    local char = LocalPlayer.Character
+    local status = char and (char:FindFirstChild("Status") or char:FindFirstChild("Effects") or char:FindFirstChild("Values"))
+    local energyVal = status and status:FindFirstChild("Energy")
+    if energyVal and typeof(energyVal.Value) == "number" then
+        return energyVal.Value
+    end
+
+    local pgui = PlayerGui
+    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    if combatGui then
+        local curEnergyFrame = combatGui:FindFirstChild("CurrentEnergy", true)
+        local amountLabel = curEnergyFrame and curEnergyFrame:FindFirstChild("Amount")
+        if amountLabel and amountLabel.Text then
+            local num = tonumber(amountLabel.Text:match("^(%d+)"))
+            if num then return num end
+        end
+
+        local energyContainer = combatGui:FindFirstChild("Energy", true)
+        if energyContainer then
+            local activeCount = 0
+            for _, bar in ipairs(energyContainer:GetChildren()) do
+                if bar:IsA("GuiObject") and bar.BackgroundTransparency < 0.5 then
+                    activeCount = activeCount + 1
+                end
+            end
+            if activeCount > 0 then return activeCount end
+        end
+    end
+
+    return 0
+end
+
+-- 13. TỰ ĐỘNG XỬ LÝ REFIGHT (BẤM NÚT YES TRÊN BẢNG REFIGHT & TUA THOẠI SAU KHI DIỆT BOSS)
+function AutoYarthul.interactRefight()
+    local pgui = PlayerGui
+    if not pgui then return end
+
+    -- TUYỆT ĐỐI KHÔNG CHẠY NẾU ĐANG Ở MAINGAME / OVERWORLD (X > 0)
+    if not AutoYarthul.isInsideInstance() and not AutoYarthul.hasFoughtBoss then
+        return
+    end
+
+    -- A. Bấm trực tiếp nút YES trên ScreenGui 'Refight' hoặc 'BossReplay'
+    pcall(function()
+        local isRefight, yesBtn = AutoYarthul.isRefightActive()
+        if isRefight and yesBtn then
+            print(string.format("[AutoYarthul] 🔘 Bấm nút YES trên bảng Refight: '%s'!", yesBtn.Name))
+            safeClickButton(yesBtn)
+            task.wait(0.2)
+            return
+        end
+
+        for _, gui in ipairs(pgui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Enabled and gui.Name ~= "LinoriaGui" and gui.Name ~= "Arcane_Yarthul_HUD" then
+                local gname = gui.Name:lower()
+                if gname:find("refight") or gname:find("replay") or gname:find("boss") or gname:find("dialogue") then
+                    local mainF = gui:FindFirstChild("Main") or gui:FindFirstChild("Frame") or gui:FindFirstChild("Choices")
+                    if mainF and mainF:IsA("GuiObject") and mainF.Visible then
+                        for _, btn in ipairs(mainF:GetDescendants()) do
+                            if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible then
+                                local txt = (btn:IsA("TextButton") and btn.Text or btn.Name):lower()
+                                if txt == "yes" or txt:find("refight") or txt:find("again") or txt:find("solo") or txt:find("replay") then
+                                    if not txt:find("no") and not txt:find("cancel") and not txt:find("decline") and not txt:find("leave") and not txt:find("lobby") then
+                                        print(string.format("[AutoYarthul] 🔘 Bấm nút Refight / Đánh tiếp: '%s' trên '%s'", btn.Name, gui.Name))
+                                        safeClickButton(btn)
+                                        task.wait(0.2)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- B. Tua text thoại của Boss sau trận đánh
+    pcall(function()
+        for _, gui in ipairs(pgui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Enabled and gui.Name ~= "LinoriaGui" and gui.Name ~= "Arcane_Yarthul_HUD" then
+                local gname = gui.Name:lower()
+                if gname:find("dialogue") or gname:find("boss") or gname:find("prompt") or gname:find("talk") then
+                    for _, obj in ipairs(gui:GetDescendants()) do
+                        if (obj:IsA("TextButton") or obj:IsA("ImageButton") or obj:IsA("Frame")) and obj.Visible then
+                            local oname = obj.Name:lower()
+                            if oname:find("desc") or oname:find("main") or oname:find("textholder") or oname:find("dialoguebox") or oname:find("text") or oname:find("continue") then
+                                safeClickButton(obj)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- 14. TƯƠNG TÁC CỔNG NGOÀI TRẬN (CHỈ CHẠY KHI ĐANG ĐỨNG GẦN CỔNG ĐẤU TRƯỜNG & CHƯA VÀO TRẬN)
+function AutoYarthul.interactGate()
+    if tick() - AutoYarthul.lastGateInteractTime < 2.5 then return end
+    AutoYarthul.lastGateInteractTime = tick()
+
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    -- A. Bấm ProximityPrompt tại Cổng nếu có
+    for _, desc in ipairs(workspace:GetDescendants()) do
+        if desc:IsA("ProximityPrompt") and desc.Enabled then
+            local part = desc.Parent:IsA("BasePart") and desc.Parent or (desc.Parent:FindFirstChildWhichIsA("BasePart", true))
+            if part then
+                local dist = (part.Position - root.Position).Magnitude
+                if dist <= 30 then
+                    print(string.format("[AutoYarthul] 🚪 Tìm thấy Cổng ProximityPrompt '%s' tại khoảng cách %.1f studs -> Kích hoạt vào trận!", desc.ActionText or desc.Name, dist))
+                    AutoYarthul.updateHUD("🚪 Đang kích hoạt Cổng Boss...")
+                    if fireproximityprompt then
+                        fireproximityprompt(desc, 0)
+                    end
+                    task.wait(0.5)
+                    break
+                end
+            end
+        end
+    end
+
+    -- B. Nếu có bảng chọn "Enter" / "Fight" / "Solo" khi vừa bấm cổng -> Bấm 1 lần
+    pcall(function()
+        local pgui = PlayerGui
+        for _, gui in ipairs(pgui:GetChildren()) do
+            if gui:IsA("ScreenGui") and gui.Enabled and gui.Name ~= "LinoriaGui" and gui.Name ~= "Arcane_Yarthul_HUD" then
+                local gname = gui.Name:lower()
+                if gname:find("dialogue") or gname:find("boss") or gname:find("prompt") or gname:find("enter") or gname:find("gate") then
+                    for _, btn in ipairs(gui:GetDescendants()) do
+                        if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible then
+                            local txt = (btn:IsA("TextButton") and btn.Text or btn.Name):lower()
+                            if txt:find("enter") or txt:find("fight") or txt:find("solo") or txt:find("begin") or txt:find("yes") or txt:find("start") then
+                                if not txt:find("no") and not txt:find("cancel") and not txt:find("decline") and not txt:find("leave") then
+                                    print(string.format("[AutoYarthul] 🚪 Bấm nút vào cổng: '%s' trên '%s'", btn.Name, gui.Name))
+                                    safeClickButton(btn)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- 15. Vòng lặp chính điều phối Auto Farm, Auto Retry & Auto Loot Yar'thul (Endless Loop)
+function AutoYarthul.start()
+    if AutoYarthul.running then return end
+    AutoYarthul.running = true
+    AutoYarthul.wasInCombat = false
+    AutoYarthul.hasFoughtBoss = false
+    AutoYarthul.lastUsedSkill = ""
+    AutoYarthul.turnExecutionLock = false
+    AutoYarthul.inventoryBaseline = AutoYarthul.getInventorySnapshot()
+
+    -- Đảm bảo tắt tất cả các Auto Farm khác để tránh chạy song song gây xung đột
+    if Toggles.AutoFarmLevel and Toggles.AutoFarmLevel.Value then Toggles.AutoFarmLevel:SetValue(false) end
+    if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then Toggles.AutoFarmCrylight:SetValue(false) end
+    if Toggles.AutoMineOre and Toggles.AutoMineOre.Value then Toggles.AutoMineOre:SetValue(false) end
+    if LevelFarmer then LevelFarmer.stop() end
+    if Farmer then Farmer.stop() end
+    if Miner then Miner.stop() end
+
+    -- Đảm bảo bật AutoFight để kích hoạt Reactive Turn Hook lắng nghe Server Remotes
+    if AutoFight and not AutoFight.running then
+        AutoFight.start()
+    end
+
+    -- GẮN DIRECT REMOTE HOOKS NGAY KHI BẬT AUTO FARM
+    AutoYarthul.hookLootRemote()
+
+    AutoYarthul.saveSession()
+    AutoYarthul.createHUD()
+
+    if Toggles.AutoCombatQTE and not Toggles.AutoCombatQTE.Value then
+        Toggles.AutoCombatQTE:SetValue(true)
+    end
+
+    -- A. THIẾT LẬP LUỒNG AUTO LOOT ĐỒ DƯỚI ĐẤT & SKIP INTRO
+    if AutoYarthul.lootThread then
+        pcall(function() task.cancel(AutoYarthul.lootThread) end)
+        AutoYarthul.lootThread = nil
+    end
+
+    AutoYarthul.lootThread = task.spawn(function()
+        while AutoYarthul.running do
+            pcall(function()
+                AutoYarthul.handleAutoLoot()
+            end)
+            task.wait(0.5)
+        end
+    end)
+
+    -- B. Tự động theo dõi khi nhân vật hồi sinh (Auto Retry on Respawn / Wipe)
+    if not AutoYarthul.charAddedConn then
+        AutoYarthul.charAddedConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
+            if AutoYarthul.running then
+                print("[AutoYarthul] 🔄 Nhân vật hồi sinh / chuyển cảnh -> Chuẩn bị tự động Retry bay lại cổng Yar'thul!")
+                AutoYarthul.deathCount = AutoYarthul.deathCount + 1
+                AutoYarthul.wasInCombat = false
+                AutoYarthul.hasFoughtBoss = false
+                AutoYarthul.lastUsedSkill = ""
+                AutoYarthul.turnExecutionLock = false
+                AutoYarthul.inventoryBaseline = AutoYarthul.getInventorySnapshot()
+                AutoYarthul.saveSession()
+                AutoYarthul.updateHUD("🔄 Nhân vật hồi sinh -> Chuẩn bị Retry...")
+                task.spawn(function()
+                    task.wait(1.5)
+                    local root = newChar:WaitForChild("HumanoidRootPart", 10)
+                    if root and AutoYarthul.running then
+                        print("[AutoYarthul] 🚀 Nhân vật đã sẵn sàng -> Kích hoạt chu trình bay!")
+                    end
+                end)
+            end
+        end)
+    end
+
+    if AutoYarthul.thread then
+        pcall(function() task.cancel(AutoYarthul.thread) end)
+        AutoYarthul.thread = nil
+    end
+
+    AutoYarthul.thread = task.spawn(function()
+        print("[AutoYarthul] 🐉 Bắt đầu chu trình Auto Farm & Auto Retry Yar'thul!")
+        Library:Notify("🐉 Auto Farm & Auto Retry Yar'thul Activated!", 4)
+
+        while AutoYarthul.running do
+            pcall(function()
+                -- KIỂM TRA TRẠNG THÁI REFIGHT / BOSS ĐÃ CHẾT HOẶC NGÃ TRÊN SÀN TRƯỚC TIÊN
+                local isDeadOrDown, deadReason, refightYesBtn = AutoYarthul.isBossDeadOrDown()
+
+                -- 1. TRƯỜNG HỢP 1: BOSS ĐÃ BỊ HẠ GỤC HOẶC BẢNG REFIGHT ĐANG HIỆN (CHỈ CHẠY KHI ĐANG TRONG INSTANCE)
+                if isDeadOrDown and AutoYarthul.isInsideInstance() then
+                    AutoYarthul.wasInCombat = false
+                    AutoYarthul.hasFoughtBoss = false
+                    AutoYarthul.bossKillCount = AutoYarthul.bossKillCount + 1
+                    AutoYarthul.lastUsedSkill = ""
+                    AutoYarthul.turnExecutionLock = false
+                    AutoYarthul.saveSession()
+
+                    AutoYarthul.updateHUD(string.format("🏆 Đã hạ gục Yar'thul! (Kills: %d) -> Chờ kiểm tra Drop...", AutoYarthul.bossKillCount))
+                    print(string.format("[AutoYarthul] 🏆 Yar'thul đã bị hạ gục (Lý do: %s)! Tổng số lần hạ gục: %d. Đang kiểm tra Drop trong kho...", deadReason, AutoYarthul.bossKillCount))
+
+                    -- Bấm ngay lập tức nút YES trên bảng Refight nếu có
+                    if refightYesBtn then
+                        safeClickButton(refightYesBtn)
+                    end
+
+                    -- Chờ 1.5s để server cộng toàn bộ Drop / Artifact vào kho đồ
+                    task.wait(1.5)
+                    local detectedDrops = AutoYarthul.detectInventoryDrops()
+                    local dropSummaryStr = ""
+                    if #detectedDrops > 0 then
+                        for _, item in ipairs(detectedDrops) do
+                            dropSummaryStr = dropSummaryStr .. string.format("• **%s**: +%d\n", item.name, item.count)
+                            print(string.format("[AutoYarthul Loot Detect] 🎁 Nhận được Drop: %s (x%d)!", item.name, item.count))
+                        end
+                        AutoYarthul.lastDroppedSummary = string.format("%s (+%d)", detectedDrops[1].name, detectedDrops[1].count)
+                        if #detectedDrops > 1 then
+                            AutoYarthul.lastDroppedSummary = AutoYarthul.lastDroppedSummary .. string.format(" +%d món khác", #detectedDrops - 1)
+                        end
+                        Library:Notify(string.format("🎁 Nhận Drop mới: %s", detectedDrops[1].name), 6)
+                    else
+                        dropSummaryStr = "• Không có vật phẩm mới (hoặc đã max stack)"
+                        AutoYarthul.lastDroppedSummary = "Không có drop mới"
+                    end
+
+                    -- GỬI DISCORD WEBHOOK CHI TIẾT TẤT CẢ DROPS ĐƯỢC THÊM VÀO KHO ĐỒ
+                    AutoYarthul.sendWebhook("Kill", { dropStr = dropSummaryStr, drops = detectedDrops })
+                    AutoYarthul.updateHUD(string.format("🏆 Hạ gục #%d | Drop: %s", AutoYarthul.bossKillCount, AutoYarthul.lastDroppedSummary))
+
+                    -- Bấm Refight liên tục trong 3.5s
+                    local postTimer = 0
+                    while postTimer < 3.5 and AutoYarthul.running and AutoYarthul.isInsideInstance() do
+                        AutoYarthul.interactRefight()
+                        task.wait(0.2)
+                        postTimer = postTimer + 0.2
+                    end
+
+                -- 2. TRƯỜNG HỢP 2: ĐANG TRONG TRẬN CHIẾN (BOSS CÒN SỐNG & ĐỨNG TRÊN SÀN)
+                elseif isInCombat() then
+                    if not AutoYarthul.wasInCombat then
+                        -- Bắt đầu trận chiến mới -> Chụp lại snapshot kho đồ trước trận
+                        AutoYarthul.inventoryBaseline = AutoYarthul.getInventorySnapshot()
+                    end
+                    AutoYarthul.wasInCombat = true
+                    AutoYarthul.hasFoughtBoss = true
+
+                    local bossHp, bossMaxHp, bossModel = AutoYarthul.getBossHealth()
+                    if bossModel and bossMaxHp > 0 then
+                        local hpPercent = math.clamp((bossHp / bossMaxHp) * 100, 0, 100)
+                        AutoYarthul.updateHUD(string.format("⚔️ Đang đánh Yar'thul [HP: %.0f/%.0f (%.0f%%)]", bossHp, bossMaxHp, hpPercent))
+                    else
+                        AutoYarthul.updateHUD("⚔️ Đang trong trận đánh với Yar'thul...")
+                    end
+
+                    if isPlayerTurn() and not combatTurnLock and not AutoYarthul.turnExecutionLock then
+                        local combatDelay = (Options.CombatDelay and Options.CombatDelay.Value) or 0.05
+                        if combatDelay > 0 then task.wait(combatDelay) end
+                        if isPlayerTurn() and not combatTurnLock and not AutoYarthul.turnExecutionLock then
+                            executeCombatTurn()
+                        end
+                    elseif not isPlayerTurn() then
+                        AutoYarthul.turnExecutionLock = false
+                        task.wait(0.1)
+                    else
+                        task.wait(0.1)
+                    end
+
+                -- 3. TRƯỜNG HỢP 3: NGOÀI TRẬN (DI CHUYỂN, ĐỨNG CỔNG & VÀO TRẬN - TUYỆT ĐỐI KHÔNG BẤM REFIGHT)
+                else
+                    local char = LocalPlayer.Character
+                    local root = char and char:FindFirstChild("HumanoidRootPart")
+                    local hum = char and char:FindFirstChildOfClass("Humanoid")
+
+                    if root and hum and hum.Health > 0 then
+                        local distToGate = (root.Position - AutoYarthul.gatePosition).Magnitude
+                        local distToSpawn = (root.Position - AutoYarthul.spawnPosition).Magnitude
+
+                        -- A. NẾU ĐANG Ở SÁT CỔNG (<= 25 studs): Kích hoạt Cổng vào trận
+                        if distToGate <= 25 then
+                            AutoYarthul.updateHUD("🚪 Đang ở Cổng Boss -> Kích hoạt vào trận...")
+                            AutoYarthul.interactGate()
+                            task.wait(1.0)
+
+                        -- B. NẾU ĐANG Ở ĐIỂM SPAWN TRONG INSTANCE (<= 45 studs): Tween tới Cổng gần đó (~59 studs)
+                        elseif distToSpawn <= 45 and root.Position.X < -200 then
+                            AutoYarthul.updateHUD(string.format("🏃 Tween từ Spawn tới Cổng Boss (%.0f studs)...", distToGate))
+                            smoothTweenTo(CFrame.new(AutoYarthul.gatePosition), 160, function() return AutoYarthul.running and not isInCombat() end, false)
+                            disableFlightState()
+                            task.wait(0.3)
+
+                        -- C. NẾU ĐANG Ở XA NGOÀI OVERWORLD (vừa Respawn ở làng hoặc chạy từ xa): Sky-Tween bay tới Cổng Mount Thul
+                        else
+                            AutoYarthul.updateHUD(string.format("🚀 Bay tới cổng Mount Thul (%.0f studs)...", distToGate))
+                            local speed = (Options.YarthulTweenSpeed and Options.YarthulTweenSpeed.Value) or 220
+                            local height = 1500
+                            local currentPos = root.Position
+                            local skyY = math.max(height, currentPos.Y + 200, AutoYarthul.gatePosition.Y + 200)
+
+                            local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), speed, function() return AutoYarthul.running and not isInCombat() end, true)
+                            if s1 and AutoYarthul.running and not isInCombat() then
+                                local s2 = smoothTweenTo(CFrame.new(AutoYarthul.gatePosition.X, skyY, AutoYarthul.gatePosition.Z), speed, function() return AutoYarthul.running and not isInCombat() end, true)
+                                if s2 and AutoYarthul.running and not isInCombat() then
+                                    smoothTweenTo(CFrame.new(AutoYarthul.gatePosition), 180, function() return AutoYarthul.running and not isInCombat() end, true)
+                                end
+                            end
+                            disableFlightState()
+                            task.wait(0.5)
+                        end
+                    else
+                        task.wait(0.5)
+                    end
+                end
+            end)
+
+            task.wait(0.2)
+        end
+
+        print("[AutoYarthul] ⏹️ Đã dừng chu trình Auto Farm Yar'thul.")
+        AutoYarthul.destroyHUD()
+    end)
+end
+
+function AutoYarthul.stop(explicit)
+    AutoYarthul.running = false
+    if explicit or not AutoYarthul.isRestoring then
+        AutoYarthul.clearSession()
+    end
+    AutoYarthul.destroyHUD()
+    if AutoYarthul.thread then
+        pcall(function() task.cancel(AutoYarthul.thread) end)
+        AutoYarthul.thread = nil
+    end
+    if AutoYarthul.lootThread then
+        pcall(function() task.cancel(AutoYarthul.lootThread) end)
+        AutoYarthul.lootThread = nil
+    end
+    if AutoYarthul.refightConn then
+        pcall(function() AutoYarthul.refightConn:Disconnect() end)
+        AutoYarthul.refightConn = nil
+    end
+    if AutoYarthul.charAddedConn then
+        pcall(function() AutoYarthul.charAddedConn:Disconnect() end)
+        AutoYarthul.charAddedConn = nil
+    end
+    -- Khi tắt Auto Yar'thul, tự động tắt luôn Auto Combat nếu người dùng không tự bật toggle Auto Fight riêng
+    if AutoFight and not (Toggles.AutoFight and Toggles.AutoFight.Value) then
+        AutoFight.stop()
+    end
+    disableFlightState()
+    print("[AutoYarthul] 🛑 Đã tắt Auto Farm Yar'thul!")
+    Library:Notify("🛑 Auto Farm Yar'thul Stopped!", 3)
+end
+
 local AutoFight = {
     running = false,
     thread = nil,
@@ -1788,6 +3021,107 @@ local function executeDirectRemoteTurn()
     end
 
     local skillToUse = "Strike"
+
+    -- =========================================================================
+    -- CHIẾN THUẬT AUTO BOSS YAR'THUL (TÍCH HỢP TRỰC TIẾP VÀO ENGINE COMBAT)
+    -- =========================================================================
+    if AutoYarthul and AutoYarthul.running then
+        AutoYarthul.turnExecutionLock = true
+
+        local curEnergy = AutoYarthul.getPlayerEnergy()
+        local hasPillar = AutoYarthul.hasFlamePillar()
+        local isSenseReady = AutoYarthul.isSkillReady("Sense Expansion") and (AutoYarthul.lastUsedSkill ~= "Sense Expansion")
+        local isCarnageReady = AutoYarthul.isSkillReady("Carnage")
+
+        -- 1. Ưu tiên số 1 TUYỆT ĐỐI: Sense Expansion (Chỉ cần đòn đánh trước KHÔNG PHẢI Sense Expansion & Sense đã hồi CD là dùng)
+        if isSenseReady then
+            skillToUse = "Sense Expansion"
+            AutoYarthul.lastUsedSkill = "Sense Expansion"
+            print("[AutoYarthul] 🔮 [Priority 1] Kích hoạt SENSE EXPANSION (Đòn trước chưa dùng Sense & Sẵn sàng)!")
+            AutoYarthul.updateHUD("Turn Action: 🔮 Sense Expansion")
+
+        -- 2. Ưu tiên số 2: Carnage (Chỉ dùng khi ĐỦ Energy >= 3 VÀ Carnage ĐÃ HỒI CD VÀ HOÀN TOÀN KHÔNG CÓ Flame Pillar trên sân, TUYỆT ĐỐI KHÔNG MEDITATE)
+        elseif curEnergy >= 3 and isCarnageReady and (not hasPillar) then
+            skillToUse = "Carnage"
+            AutoYarthul.lastUsedSkill = "Carnage"
+            print(string.format("[AutoYarthul] 💥 [Priority 2 - Energy: %d >= 3 | Carnage Ready | No Pillar] Kích hoạt CARNAGE (Dứt khoát không Meditate)!", curEnergy))
+            AutoYarthul.updateHUD(string.format("Turn Action: 💥 Carnage (Energy: %d)", curEnergy))
+
+        -- 3. Ưu tiên số 3 / Mặc định: Strike (Dùng STRIKE nạp Energy + Kèm Sub-Action Meditate cùng lượt khi Carnage đang CD hoặc có Pillar)
+        else
+            skillToUse = "Strike"
+            AutoYarthul.lastUsedSkill = "Strike"
+            if not isCarnageReady then
+                print(string.format("[AutoYarthul] ⏳ [Priority 3 - CARNAGE ON COOLDOWN | Energy: %d] Carnage đang hồi CD -> Dùng STRIKE + Meditate để nạp & giảm CD!", curEnergy))
+                AutoYarthul.updateHUD(string.format("Turn Action: 🧘 Meditate + ⚔️ Strike (Carnage CD | E: %d)", curEnergy))
+            elseif hasPillar then
+                print(string.format("[AutoYarthul] 🔥 [Priority 3 - FLAME PILLAR ACTIVE | Energy: %d] Đang có Flame Pillar -> Dùng STRIKE + Meditate (Khóa Carnage)!", curEnergy))
+                AutoYarthul.updateHUD("Turn Action: 🧘 Meditate + ⚔️ Strike (Pillar Active)")
+            else
+                print(string.format("[AutoYarthul] ⚔️ [Priority 3 - Building Energy: %d/3] Dùng STRIKE + Meditate!", curEnergy))
+                AutoYarthul.updateHUD(string.format("Turn Action: 🧘 Meditate + ⚔️ Strike (Energy: %d/3)", curEnergy))
+            end
+        end
+
+        -- Tìm mục tiêu Yar'thul Boss
+        if otherTeam and #otherTeam > 0 then
+            for _, e in ipairs(otherTeam) do
+                if e and e.Parent then
+                    local ename = e.Name:lower()
+                    if ename:find("yar") or ename:find("thul") or ename:find("dragon") then
+                        targetEnemy = e
+                        break
+                    end
+                end
+            end
+            if not targetEnemy then targetEnemy = otherTeam[1] end
+        end
+
+        if not targetEnemy then
+            local living = workspace:FindFirstChild("Living")
+            if living then
+                for _, m in ipairs(living:GetChildren()) do
+                    if m:IsA("Model") and (m.Name:lower():find("yar") or m.Name:lower():find("thul") or m.Name:lower():find("dragon")) then
+                        targetEnemy = m
+                        break
+                    end
+                end
+            end
+        end
+
+        -- BƯỚC 1: GỬI ĐÒN ĐÁNH CHÍNH (ATTACK) TRƯỚC TIÊN ĐỂ SERVER XÁC NHẬN LƯỢT ĐÁNH
+        print(string.format("[AutoYarthul] ⚡ [Direct Remote] Gửi đòn: '%s' -> Mục tiêu: %s", skillToUse, targetEnemy and targetEnemy.Name or "Boss"))
+        task.spawn(function()
+            pcall(function()
+                if targetEnemy then
+                    pti:InvokeServer("Attack", skillToUse, { Attacking = targetEnemy })
+                else
+                    pti:InvokeServer("Attack", skillToUse, {})
+                end
+            end)
+        end)
+
+        -- BƯỚC 2: CHỈ GỬI SUB-ACTION MEDITATE KHI DÙNG STRIKE (Carnage và Sense Expansion TUYỆT ĐỐI không gửi Meditate)
+        local useMed = (Toggles.YarthulMeditateSubAction == nil or Toggles.YarthulMeditateSubAction.Value)
+        if useMed and skillToUse == "Strike" then
+            print("[AutoYarthul] 🧘 [Sub-Action] Gửi Meditate đi kèm ngay sau đòn Strike để tối ưu nạp Energy!")
+            task.spawn(function()
+                pcall(function()
+                    pti:InvokeServer("Meditate", false)
+                end)
+            end)
+        end
+
+        -- Chờ cho đến khi Server kết thúc lượt đấu (ActionBG.Visible = false)
+        local waitTurnElapsed = 0
+        while isPlayerTurn() and waitTurnElapsed < 2.0 do
+            task.wait(0.05)
+            waitTurnElapsed = waitTurnElapsed + 0.05
+        end
+
+        return true
+    end
+
     local actionChoice = Options.SelectedCombatAction and Options.SelectedCombatAction.Value or "Auto Smart (Best Skill -> Strike)"
     local shouldMeditateIfNoSkill = Toggles.AutoMeditateInCombat and Toggles.AutoMeditateInCombat.Value
 
@@ -2368,6 +3702,8 @@ local function handleDeeprootNightSafe(targetSpot, targetDesc)
 end
 
 function LevelFarmer.runCycle()
+    if AutoYarthul and AutoYarthul.running then AutoYarthul.stop(true) end
+    if Toggles.AutoFarmYarthul then Toggles.AutoFarmYarthul:SetValue(false) end
     LevelFarmer.running = true
 
     task.spawn(function()
@@ -3324,6 +4660,26 @@ local function handleFistQTE(fistQTE)
 end
 
 -- 7. SPEAR QTE (INSTANT NATIVE CLOSURE RESOLVER FOR TAPS, LINES & CURVES)
+
+local function handleYarthulQTE(yarthulQTE)
+    if not yarthulQTE or not yarthulQTE.Visible then return end
+    pcall(function()
+        local gameFrame = yarthulQTE:FindFirstChild("Game")
+        local arena = gameFrame and gameFrame:FindFirstChild("Arena")
+        if arena then
+            local playerFrame = arena:FindFirstChild("Player")
+            if playerFrame then
+                playerFrame.Position = UDim2.new(-50, 0, -50, 0)
+            end
+            for _, obj in ipairs(arena:GetChildren()) do
+                if obj ~= playerFrame and obj:IsA("GuiObject") and obj.Name ~= "UIListLayout" and obj.Name ~= "UIGridLayout" then
+                    obj.Position = UDim2.new(50, 0, 50, 0)
+                end
+            end
+        end
+    end)
+end
+
 local function handleSpearQTE(spearQTE)
     if not isQTEActive("Spear") or not spearQTE or not spearQTE.Visible then
         AutoQTE.spearSolvedTable = {}
@@ -3454,6 +4810,7 @@ registerConnection(RunService.RenderStepped:Connect(function()
     local fistQTE = combatGui:FindFirstChild("FistQTE")
     local spearQTE = combatGui:FindFirstChild("SpearQTE")
     local lockpickQTE = combatGui:FindFirstChild("LockpickQTE")
+    local yarthulQTE = combatGui:FindFirstChild("YarthulQTE")
 
     if dodgeQTE and dodgeQTE.Visible then handleDodgeQTE(dodgeQTE) end
     if swordQTE and swordQTE.Visible then
@@ -3491,6 +4848,7 @@ registerConnection(RunService.RenderStepped:Connect(function()
         end
     end
     if lockpickQTE and lockpickQTE.Visible then handleLockpickQTE(lockpickQTE) end
+    if yarthulQTE and yarthulQTE.Visible then handleYarthulQTE(yarthulQTE) end
 end))
 
 
@@ -3898,6 +5256,96 @@ local FarmGroup  = Tabs.AutoFarm:AddLeftGroupbox("🌿 Ingredient Auto Hunter")
 local MineGroup  = Tabs.AutoFarm:AddLeftGroupbox("⛏️ Auto Mine Ores")
 local LevelGroup = Tabs.AutoFarm:AddRightGroupbox("⚔️ Auto Farm Level & Mobs")
 local StatsGroup = Tabs.AutoFarm:AddRightGroupbox("📊 Auto Stats Build & Cache")
+
+-- -----------------------------------------------------------------------------
+-- SUB-GROUP: AUTO BOSS YAR'THUL (THE BLAZING DRAGON)
+-- -----------------------------------------------------------------------------
+local YarthulGroup = Tabs.AutoFarm:AddRightGroupbox("🐉 Auto Boss: Yar'thul (Blazing Dragon)")
+
+YarthulGroup:AddToggle("AutoFarmYarthul", {
+    Text = "Enable Auto Farm & Retry Yar'thul",
+    Default = false,
+    Tooltip = "Tự động kiểm tra vị trí Spawn trong Instance -> Tween tới Cổng Boss để Begin Fight -> Tự động đánh theo chiến thuật chuẩn (Ưu tiên 1: Sense Expansion xen kẽ dứt khoát không Meditate -> Ưu tiên 2: Carnage khi E>=3 & Carnage đã hồi CD & không có Flame Pillar dứt khoát không Meditate -> Ưu tiên 3: Strike kèm Meditate Sub-Action để nạp Energy) -> Tự động nhặt đồ, Hook SetCore Callback tự động Accept vào Roll Pool (0ms) & Tự động quét toàn bộ Drop mới vào kho đồ -> Tự động Retry lặp lại vô tận",
+    Callback = function(Value)
+        if Value then
+            AutoYarthul.start()
+        else
+            if not AutoYarthul.isRestoring then
+                AutoYarthul.stop(true)
+            end
+        end
+    end
+})
+
+YarthulGroup:AddLabel("📜 Strat: Sense (Alternating) > Carnage > Strike + Med")
+
+YarthulGroup:AddToggle("YarthulMeditateSubAction", {
+    Text = "Use Meditate Sub-Action on Strike",
+    Default = true,
+    Tooltip = "Tự động kích hoạt Sub-Action Meditate kèm sau đòn Strike để nạp nhanh Energy (Carnage và Sense Expansion được tung đòn dứt khoát KHÔNG kèm Meditate để tránh kết thúc lượt sớm hoặc trúng Flame Pillar)",
+})
+
+YarthulGroup:AddToggle("YarthulAutoLoot", {
+    Text = "Auto Loot & Roll Pool (Direct Hook)",
+    Default = true,
+    Tooltip = "Tự động Hook SetCore Notification Callback để Accept tức thì vào Roll Pool khi rơi Artifact, hoàn toàn không chiếm chuột của người chơi",
+})
+
+YarthulGroup:AddSlider("YarthulTweenSpeed", {
+    Text = "Flight Speed to Gate",
+    Default = 220,
+    Min = 120,
+    Max = 350,
+    Rounding = 0,
+    Tooltip = "Tốc độ bay Sky-Tween tới cổng Mount Thul (mặc định 220 studs/s)",
+})
+
+YarthulGroup:AddToggle("YarthulSendWebhook", {
+    Text = "Enable Discord Webhook",
+    Default = true,
+    Tooltip = "Tự động gửi thông báo Discord Embed chi tiết danh sách tất cả vật phẩm rơi (Loot Drops) nhận được vào kho đồ sau khi diệt Boss Yar'thul",
+})
+
+YarthulGroup:AddInput("YarthulWebhook", {
+    Default = "",
+    Numeric = false,
+    Finished = false,
+    Text = "Discord Webhook URL",
+    Tooltip = "Dán link Discord Webhook URL của bạn vào đây để nhận thông báo realtime",
+    Placeholder = "https://discord.com/api/webhooks/...",
+})
+
+YarthulGroup:AddButton({
+    Text = "🧪 Test Yar'thul Webhook Now",
+    Func = function()
+        AutoYarthul.sendWebhook("Test")
+    end
+})
+
+YarthulGroup:AddButton({
+    Text = "🐉 Tween to Mount Thul Door Now",
+    Func = function()
+        teleportToLocation(AutoYarthul.gatePosition)
+    end
+})
+
+YarthulGroup:AddButton({
+    Text = "🔍 Check Current Place & Instance ID",
+    Func = function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/Check_Place_Info.lua?t=" .. tick()))()
+    end
+})
+
+YarthulGroup:AddButton({
+    Text = "🛑 Stop Auto Farm Yar'thul",
+    Func = function()
+        AutoYarthul.stop(true)
+        if Toggles.AutoFarmYarthul then
+            Toggles.AutoFarmYarthul:SetValue(false)
+        end
+    end
+})
+
 local HopGroup   = Tabs.AutoFarm:AddLeftGroupbox("🌐 Server Hop & Webhook")
 
 FarmGroup:AddToggle("AutoFarmCrylight", {
@@ -5025,7 +6473,7 @@ ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 
 SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
+SaveManager:SetIgnoreIndexes({ "AutoFarmYarthul" })
 
 ThemeManager:SetFolder("ArcaneHub")
 SaveManager:SetFolder("ArcaneHub/Configs")
@@ -5045,6 +6493,7 @@ local function unloadHub()
     -- 2. Dừng các module tự động
     if Farmer then Farmer.running = false end
     if AutoFight then AutoFight.stop() end
+    if AutoYarthul then AutoYarthul.stop(true) end
     if LevelFarmer then 
         LevelFarmer.running = false 
         if LevelFarmer.noclipConn then 
@@ -5429,4 +6878,7 @@ if Toggles.AutoMineOre and Toggles.AutoMineOre.Value then
 end
 if Toggles.AutoFarmLevel and Toggles.AutoFarmLevel.Value then
     LevelFarmer.runCycle()
+end
+if AutoYarthul then
+    AutoYarthul.checkSessionOnBoot()
 end

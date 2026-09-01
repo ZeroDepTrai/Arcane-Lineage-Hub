@@ -433,6 +433,26 @@ local function handleFistQTE(fistQTE)
 end
 
 -- 7. SPEAR QTE (INSTANT NATIVE CLOSURE RESOLVER FOR TAPS, LINES & CURVES)
+
+local function handleYarthulQTE(yarthulQTE)
+    if not yarthulQTE or not yarthulQTE.Visible then return end
+    pcall(function()
+        local gameFrame = yarthulQTE:FindFirstChild("Game")
+        local arena = gameFrame and gameFrame:FindFirstChild("Arena")
+        if arena then
+            local playerFrame = arena:FindFirstChild("Player")
+            if playerFrame then
+                playerFrame.Position = UDim2.new(-50, 0, -50, 0)
+            end
+            for _, obj in ipairs(arena:GetChildren()) do
+                if obj ~= playerFrame and obj:IsA("GuiObject") and obj.Name ~= "UIListLayout" and obj.Name ~= "UIGridLayout" then
+                    obj.Position = UDim2.new(50, 0, 50, 0)
+                end
+            end
+        end
+    end)
+end
+
 local function handleSpearQTE(spearQTE)
     if not Config.AutoSpear or not spearQTE or not spearQTE.Visible then
         AutoQTE.spearSolvedTable = {}
@@ -559,6 +579,7 @@ function AutoQTE.init()
     local fistQTE = combatGui:WaitForChild("FistQTE", 5)
     local spearQTE = combatGui:WaitForChild("SpearQTE", 5)
     local lockpickQTE = combatGui:WaitForChild("LockpickQTE", 5)
+    local yarthulQTE = combatGui:WaitForChild("YarthulQTE", 5)
 
     local renderConn = RunService.RenderStepped:Connect(function()
         if not Config.Enabled then return end
@@ -571,6 +592,7 @@ function AutoQTE.init()
         if fistQTE and fistQTE.Visible then handleFistQTE(fistQTE) end
         if spearQTE and spearQTE.Visible then handleSpearQTE(spearQTE) end
         if lockpickQTE and lockpickQTE.Visible then handleLockpickQTE(lockpickQTE) end
+        if yarthulQTE and yarthulQTE.Visible then handleYarthulQTE(yarthulQTE) end
     end)
 
     table.insert(AutoQTE.connections, renderConn)
