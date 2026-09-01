@@ -822,36 +822,43 @@ function Farmer.stop()
     print("[AutoFarm] Đã dừng Auto Farm.")
 end
 
--- =============================================================================
--- COMBAT STATE DETECTOR
--- =============================================================================
 local function isInCombat()
     local char = LocalPlayer.Character
     if not char then return false end
 
-    -- 1. Kiểm tra ReplicatedStorage.Fights (Nguồn chân lý chính xác 100% của server)
+    -- 1. Server attribute / child trong character (Nguồn chân lý chính xác 100%)
+    if char:FindFirstChild("FightInProgress") then
+        return true
+    end
+
+    -- 2. Kiểm tra ReplicatedStorage.Fights
     local RS = game:GetService("ReplicatedStorage")
     local rsFights = RS:FindFirstChild("Fights")
     if rsFights then
+        local myName = LocalPlayer.Name
+        local charName = char.Name
         for _, fight in ipairs(rsFights:GetChildren()) do
             local t1 = fight:FindFirstChild("Team1")
             local t2 = fight:FindFirstChild("Team2")
-            if (t1 and (t1:FindFirstChild(LocalPlayer.Name) or t1:FindFirstChild(char.Name))) or
-               (t2 and (t2:FindFirstChild(LocalPlayer.Name) or t2:FindFirstChild(char.Name))) then
+            if (t1 and (t1:FindFirstChild(myName) or t1:FindFirstChild(charName))) or
+               (t2 and (t2:FindFirstChild(myName) or t2:FindFirstChild(charName))) then
                 return true
             end
         end
     end
 
-    -- 2. Kiểm tra các thành phần giao diện Combat trong PlayerGui
+    -- 3. Kiểm tra các thành phần giao diện Combat trong PlayerGui thực sự active
     local pgui = PlayerGui
     local combatGui = pgui and pgui:FindFirstChild("Combat")
     if combatGui and combatGui.Enabled then
         local actionBG = combatGui:FindFirstChild("ActionBG")
         local deciding = combatGui:FindFirstChild("Deciding")
-        local initiative = combatGui:FindFirstChild("InitiativeBG")
         local dodge = combatGui:FindFirstChild("DodgeQTE")
-        if (actionBG and actionBG.Visible) or (deciding and deciding.Visible) or (initiative and initiative.Visible) or (dodge and dodge.Visible) then
+        local atkInd = combatGui:FindFirstChild("AttackIndicator")
+        if (actionBG and actionBG.Visible and actionBG.Position.X.Scale < 0.92) or 
+           (deciding and deciding.Visible) or 
+           (dodge and dodge.Visible) or 
+           (atkInd and atkInd.Visible and atkInd.ImageTransparency < 0.9) then
             return true
         end
     end
@@ -1574,28 +1581,56 @@ end
 
 
 
--- [isInCombat already defined above LevelFarmer]
-
 local function isPlayerTurn()
+    local char = LocalPlayer and LocalPlayer.Character
+    if not char then return false end
+
+    -- 1. Bắt buộc phải đang trong trận chiến
+    if not isInCombat() then return false end
+
     local pgui = PlayerGui
     local combatGui = pgui and pgui:FindFirstChild("Combat")
     if not combatGui or not combatGui.Enabled then return false end
 
+    -- 2. Nếu đang có đối thủ khác đang suy nghĩ (Deciding), chắc chắn không phải lượt của mình
+    local deciding = combatGui:FindFirstChild("Deciding")
+    if deciding and deciding.Visible then
+        local label = deciding:FindFirstChild("TextLabel")
+        local text = label and label.Text or ""
+        if text ~= "" and not text:find(LocalPlayer.Name) then
+            return false
+        end
+    end
+
+    -- 3. Nếu đang trong giai đoạn QTE (Dodge/Block, Minigames), không phải lượt ra lệnh
+    local dodge = combatGui:FindFirstChild("DodgeQTE")
+    if dodge and dodge.Visible then return false end
+
     local actionBG = combatGui:FindFirstChild("ActionBG")
     if not actionBG then return false end
 
-    if actionBG.Position.X.Scale < 0.95 then
+    -- 4. Khi chưa đến lượt, ActionBG bị ẩn (Visible = false) hoặc bị kéo ra mép màn hình (X Scale >= 0.92)
+    if not actionBG.Visible or actionBG.Position.X.Scale >= 0.92 then
+        local goBtn = combatGui:FindFirstChild("Go")
+        if goBtn and goBtn.Visible then
+            return true
+        end
+        return false
+    end
+
+    -- 5. Khi đến lượt: Game clone "TurnTimer" vào ActionBG
+    if actionBG:FindFirstChild("TurnTimer") then
         return true
     end
 
+    -- 6. Hoặc các trang thao tác (ContextPage, AttacksPage, Go) đang thực sự hiển thị bên trong ActionBG đã mở
     local ctx = actionBG:FindFirstChild("ContextPage")
-    if ctx and ctx.Visible then return true end
-
     local atk = actionBG:FindFirstChild("AttacksPage")
-    if atk and atk.Visible then return true end
-
     local goBtn = combatGui:FindFirstChild("Go")
-    if goBtn and goBtn.Visible then return true end
+
+    if (ctx and ctx.Visible) or (atk and atk.Visible) or (goBtn and goBtn.Visible) then
+        return true
+    end
 
     return false
 end
@@ -1690,6 +1725,8 @@ local function executeCombatTurn()
     combatTurnLock = true
 
     local ok, err = pcall(function()
+        if not isPlayerTurn() then return end
+
         local pgui = PlayerGui
         local combatGui = pgui and pgui:FindFirstChild("Combat")
         if not combatGui or not combatGui.Enabled then return end
@@ -1705,7 +1742,16 @@ local function executeCombatTurn()
         local atkPage = actionBG:FindFirstChild("AttacksPage")
         local header = actionBG:FindFirstChild("Header")
 
-        -- Hàm kích hoạt Meditate trong trận (hồi phục Energy / Mana / Stamina)
+        -- 1. Nếu đang có nút Go xác nhận hiển thị sẵn (VD: đã chọn skill/mục tiêu trước đó)
+        local goBtn = combatGui:FindFirstChild("Go")
+        if goBtn and goBtn.Visible then
+            print("[Combat] 🔘 Phát hiện nút Go sẵn sàng -> Bấm Go xác nhận đòn đánh...")
+            safeClickButton(goBtn)
+            task.wait(1.0)
+            return
+        end
+
+        -- 2. Hàm kích hoạt Meditate trong trận (hồi phục Energy / Mana / Stamina)
         local function doCombatMeditate()
             print("[Combat] 🧘 Không có skill khả dụng -> Đang kích hoạt Meditate trong trận để hồi phục Energy / Stamina...")
 
@@ -1713,13 +1759,13 @@ local function executeCombatTurn()
             local returnBtn = header and header:FindFirstChild("Return")
             if returnBtn and returnBtn.Visible then
                 safeClickButton(returnBtn)
-                task.wait(0.35) -- Đợi vượt qua 0.3s internal debounce của game
+                task.wait(0.6)
             end
 
             local medBtn = ctxPage and ctxPage:FindFirstChild("MeditateButton")
-            if medBtn then
+            if medBtn and medBtn.Visible then
                 safeClickButton(medBtn)
-                task.wait(0.1)
+                task.wait(0.4)
                 if firesignal then
                     pcall(function() firesignal(medBtn.MouseButton1Click) end)
                 end
@@ -1732,49 +1778,126 @@ local function executeCombatTurn()
                     pti:InvokeServer("Meditate", false)
                 end
             end)
+            task.wait(1.2)
         end
 
-        -- 1. Chuyển sang AttacksPage nếu đang ở ContextPage để đọc danh sách skill
-        if ctxPage and ctxPage.Visible then
+        -- 3. Chuyển sang AttacksPage nếu đang ở ContextPage để đọc danh sách skill
+        if ctxPage and ctxPage.Visible and not (atkPage and atkPage.Visible) then
             local atkBtn = ctxPage:FindFirstChild("AttackButton")
-            if atkBtn then
+            if atkBtn and atkBtn.Visible then
                 safeClickButton(atkBtn)
-                task.wait(0.2)
+                local waitAtk = os.clock()
+                while (not (atkPage and atkPage.Visible)) and os.clock() - waitAtk < 1.2 do
+                    task.wait(0.1)
+                end
+                task.wait(0.4)
             end
         end
 
-        -- 2. Lựa chọn chiêu thức trong AttacksPage
+        -- 4. Lựa chọn chiêu thức trong AttacksPage
         local attackFrame = atkPage and atkPage:FindFirstChild("Attack")
         local scrollFrame = attackFrame and attackFrame:FindFirstChild("ScrollingFrame")
 
         if scrollFrame and scrollFrame.Visible then
             local selectedSkillBtn = nil
 
+            -- Kiểm tra xem 1 button skill có đang sẵn sàng sử dụng (không bị CD, không bị Sealed, đủ Energy)
             local function isSkillReady(btn)
                 if not btn or not btn.Parent then return false end
-                local cd = btn:FindFirstChild("CD", true)
-                if cd and cd.Visible == true then return false end
-                local sealed = btn:FindFirstChild("Sealed", true)
-                if sealed and sealed.Visible == true then return false end
+                if not btn:IsA("GuiButton") and not btn:IsA("TextButton") and not btn:IsA("ImageButton") then return false end
+                if btn.Name == "Template" or btn.Name == "Return" or btn.Name == "Frame" then return false end
+
+                -- A. Cooldown check
+                local cd = btn:FindFirstChild("CD", true) or btn:FindFirstChild("Cooldown", true)
+                if cd and cd.Visible == true then
+                    if cd:IsA("TextLabel") and (cd.Text == "" or cd.Text == "0" or cd.Text == "0s") then
+                        -- Không bị CD
+                    else
+                        return false
+                    end
+                end
+
+                -- B. Sealed check
+                local sealed = btn:FindFirstChild("Sealed", true) or btn:FindFirstChild("Disabled", true)
+                if sealed and sealed.Visible == true then
+                    return false
+                end
+
+                -- C. Energy / Cost check
+                local char = LocalPlayer and LocalPlayer.Character
+                local status = char and char:FindFirstChild("Status")
+                local curEnergy = status and status:FindFirstChild("Energy") and tonumber(status.Energy.Value)
+                if curEnergy ~= nil then
+                    local costObj = btn:FindFirstChild("Cost", true)
+                    local costLabel = costObj and (costObj:IsA("TextLabel") and costObj or costObj:FindFirstChildWhichIsA("TextLabel", true))
+                    local costText = costLabel and costLabel.Text or (costObj and costObj.Name) or ""
+                    local costNum = tonumber(costText:match("%d+"))
+                    if costNum and costNum > curEnergy then
+                        return false -- Không đủ Energy để xuất chiêu
+                    end
+                end
+
                 return true
             end
 
-            local function findSkillByName(targetName)
-                if not targetName or targetName == "" or targetName == "None" then return nil end
-                local lowerTarget = targetName:lower()
+            -- Hàm tìm nút Basic Attack (Strike / Magic Missile / Slash...)
+            local function findBasicAttackBtn()
+                local basicNames = {"Strike", "Magic Missile", "Basic Attack", "Slash", "Punch", "Shoot"}
+                for _, name in ipairs(basicNames) do
+                    local btn = scrollFrame:FindFirstChild(name)
+                    if btn and isSkillReady(btn) then return btn end
+                end
                 for _, btn in ipairs(scrollFrame:GetChildren()) do
-                    if isSkillReady(btn) then
-                        local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
-                        local textToMatch = nameLabel and nameLabel.Text or btn.Name
-                        if textToMatch:lower():find(lowerTarget) then
-                            return btn
+                    if isSkillReady(btn) and btn:IsA("GuiButton") and btn.Name ~= "Frame" and btn.Name ~= "Template" and btn.Name ~= "Return" then
+                        local label = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
+                        local txt = (label and label.Text ~= "" and label.Text) or btn.Name
+                        for _, bName in ipairs(basicNames) do
+                            if txt:lower() == bName:lower() then
+                                return btn
+                            end
                         end
                     end
                 end
                 return nil
             end
 
-            -- A. Cơ chế 1: Custom Skill Priority (Ưu tiên theo thứ tự Slot 1 -> 2 -> 3 -> 4)
+            -- Hàm tìm nút skill theo tên với cơ chế STRICT EXACT MATCH
+            local function findSkillByName(targetName)
+                if not targetName or targetName == "" or targetName == "None" then return nil end
+                local cleanTarget = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
+                if cleanTarget == "" or cleanTarget == "none" then return nil end
+
+                -- 1. Exact Match Pass (Ưu tiên tuyệt đối tên khớp 100%)
+                for _, btn in ipairs(scrollFrame:GetChildren()) do
+                    if isSkillReady(btn) then
+                        local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
+                        local labelText = nameLabel and nameLabel.Text and nameLabel.Text:gsub("^%s*(.-)%s*$", "%1"):lower() or ""
+                        local btnName = btn.Name:gsub("^%s*(.-)%s*$", "%1"):lower()
+                        if labelText == cleanTarget or btnName == cleanTarget then
+                            return btn
+                        end
+                    end
+                end
+
+                -- 2. Whole Word / Prefix Pass (Nếu không có exact match)
+                for _, btn in ipairs(scrollFrame:GetChildren()) do
+                    if isSkillReady(btn) then
+                        local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
+                        local labelText = nameLabel and nameLabel.Text and nameLabel.Text:gsub("^%s*(.-)%s*$", "%1"):lower() or ""
+                        local btnName = btn.Name:gsub("^%s*(.-)%s*$", "%1"):lower()
+                        if (labelText ~= "" and (labelText:find("^" .. cleanTarget .. "%f[%s]") or labelText:find("%f[%s]" .. cleanTarget .. "$"))) or
+                           (btnName:find("^" .. cleanTarget .. "%f[%s]") or btnName:find("%f[%s]" .. cleanTarget .. "$")) then
+                            return btn
+                        end
+                    end
+                end
+
+                return nil
+            end
+
+            -- =========================================================================
+            -- A. CHẾ ĐỘ 1: CUSTOM SKILL (STRICT PRIORITY SLOT 1 -> 2 -> 3 -> 4)
+            -- =========================================================================
             if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
                 local slots = {
                     Options.CustomSkillSlot1 and Options.CustomSkillSlot1.Value,
@@ -1783,28 +1906,34 @@ local function executeCombatTurn()
                     Options.CustomSkillSlot4 and Options.CustomSkillSlot4.Value,
                 }
 
-                for _, slotName in ipairs(slots) do
-                    local foundBtn = findSkillByName(slotName)
-                    if foundBtn then
-                        selectedSkillBtn = foundBtn
-                        break
+                for slotIdx, slotName in ipairs(slots) do
+                    if slotName and slotName ~= "" and slotName ~= "None" then
+                        local foundBtn = findSkillByName(slotName)
+                        if foundBtn then
+                            selectedSkillBtn = foundBtn
+                            print(string.format("[Combat] 🎯 Custom Skill Match: Slot %d ('%s')", slotIdx, slotName))
+                            break
+                        end
                     end
                 end
 
-                -- Nếu toàn bộ skill ưu tiên không khả dụng (đang CD, thiếu Energy, sealed...)
+                -- STRICT RULE: Nếu toàn bộ 4 slot đã chọn không sẵn sàng (đang CD, thiếu Energy, Sealed...)
                 if not selectedSkillBtn then
                     if shouldMeditateIfNoSkill then
+                        print("[Combat] 🧘 Toàn bộ Custom Skill đang CD/thiếu Energy -> Tự động Meditate theo cấu hình.")
                         doCombatMeditate()
                         return
                     else
-                        -- Fallback về Strike đánh thường
-                        selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChild("Magic Missile")
+                        -- STRICT FALLBACK: Chỉ đánh thường (Strike / Basic Attack), TUYỆT ĐỐI KHÔNG dùng skill khác!
+                        print("[Combat] ⚠️ Toàn bộ Custom Skill không khả dụng -> Strict Fallback về đánh thường (Basic Attack).")
+                        selectedSkillBtn = findBasicAttackBtn()
                     end
                 end
-            end
 
-            -- B. Cơ chế 2: Auto Smart (Chọn skill mạnh nhất / tốn Energy cao nhất đang SẴN SÀNG)
-            if not selectedSkillBtn and actionChoice:find("Auto Smart") then
+            -- =========================================================================
+            -- B. CHẾ ĐỘ 2: AUTO SMART (CHỌN SKILL MẠNH NHẤT ĐANG SẴN SÀNG)
+            -- =========================================================================
+            elseif actionChoice:find("Auto Smart") then
                 local bestSkill = nil
                 local maxCost = -1
                 for _, btn in ipairs(scrollFrame:GetChildren()) do
@@ -1821,24 +1950,39 @@ local function executeCombatTurn()
                 if bestSkill then
                     selectedSkillBtn = bestSkill
                 else
-                    -- Không có skill đặc biệt nào sẵn sàng
                     if shouldMeditateIfNoSkill then
                         doCombatMeditate()
                         return
                     else
-                        selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChild("Magic Missile")
+                        selectedSkillBtn = findBasicAttackBtn()
                     end
                 end
+
+            -- =========================================================================
+            -- C. CHẾ ĐỘ 3: STRIKE (BASIC ATTACK)
+            -- =========================================================================
+            else
+                selectedSkillBtn = findBasicAttackBtn()
             end
 
-            -- C. Cơ chế 3 / Fallback mặc định: Strike (Basic Attack)
-            if not selectedSkillBtn or not isSkillReady(selectedSkillBtn) then
-                selectedSkillBtn = scrollFrame:FindFirstChild("Strike") or scrollFrame:FindFirstChild("Magic Missile")
-                if not selectedSkillBtn or not isSkillReady(selectedSkillBtn) then
-                    for _, btn in ipairs(scrollFrame:GetChildren()) do
-                        if isSkillReady(btn) and btn.Name ~= "Frame" and btn:IsA("GuiButton") then
-                            selectedSkillBtn = btn
-                            break
+            -- Fallback an toàn cuối cùng:
+            if not selectedSkillBtn then
+                if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
+                    -- Trong chế độ Custom Skill: Tuyệt đối KHÔNG chọn skill lạ trong scrollFrame!
+                    if shouldMeditateIfNoSkill then
+                        doCombatMeditate()
+                        return
+                    else
+                        selectedSkillBtn = findBasicAttackBtn()
+                    end
+                else
+                    selectedSkillBtn = findBasicAttackBtn()
+                    if not selectedSkillBtn then
+                        for _, btn in ipairs(scrollFrame:GetChildren()) do
+                            if isSkillReady(btn) and btn:IsA("GuiButton") and btn.Name ~= "Frame" and btn.Name ~= "Template" and btn.Name ~= "Return" then
+                                selectedSkillBtn = btn
+                                break
+                            end
                         end
                     end
                 end
@@ -1848,14 +1992,14 @@ local function executeCombatTurn()
                 local skillName = selectedSkillBtn.Name
                 print(string.format("[Combat] ⚔️ Đang kích hoạt đòn đánh: '%s'", skillName))
                 safeClickButton(selectedSkillBtn)
-                task.wait(0.25)
+                task.wait(1.0) -- Đợi 1.0s để game mở bảng Enemies hoặc xử lý đòn đánh an toàn
             elseif shouldMeditateIfNoSkill then
                 doCombatMeditate()
                 return
             end
         end
 
-        -- 3. Chọn mục tiêu quái (nếu là skill đánh quái mở bảng Enemies)
+        -- 5. Chọn mục tiêu quái (nếu là skill đánh quái mở bảng Enemies)
         local enemiesFrame = atkPage and atkPage:FindFirstChild("Enemies")
         local enemiesScroll = enemiesFrame and (enemiesFrame:FindFirstChild("ScrollingFrame") or enemiesFrame)
 
@@ -1876,18 +2020,31 @@ local function executeCombatTurn()
                 end
 
                 if chosenEnemy then
+                    print(string.format("[Combat] 🎯 Đã chọn mục tiêu quái: '%s'", chosenEnemy.Name))
                     safeClickButton(chosenEnemy)
-                    task.wait(0.15)
+                    task.wait(1.0) -- Tăng delay lên 1.0s sau khi click quái
                 end
             end
         end
 
-        -- 4. Click Go confirmation button nếu xuất hiện
-        local goBtn = combatGui:FindFirstChild("Go")
+        -- 6. Click Go confirmation button nếu xuất hiện
+        goBtn = combatGui:FindFirstChild("Go")
         if goBtn and goBtn.Visible then
+            print("[Combat] 🔘 Bấm nút Go xác nhận hoàn tất lượt...")
             safeClickButton(goBtn)
+            task.wait(1.0)
+        end
+
+        -- 7. Chờ chuyển lượt hoàn tất (ActionBG đóng hoặc TurnTimer biến mất)
+        local endWait = os.clock()
+        while isPlayerTurn() and os.clock() - endWait < 3.0 do
+            task.wait(0.2)
         end
     end)
+
+    if not ok then
+        warn("[Combat] ⚠️ Lỗi trong executeCombatTurn:", tostring(err))
+    end
 
     combatTurnLock = false
 end
@@ -1906,13 +2063,13 @@ function AutoFight.start()
             if isInCombat() then
                 if isPlayerTurn() then
                     executeCombatTurn()
-                    local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.4
+                    local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 1.0
                     task.wait(combatDelay)
                 else
-                    task.wait(0.2)
+                    task.wait(0.3)
                 end
             else
-                task.wait(0.3)
+                task.wait(0.5)
             end
         end
         print("[AutoFight] ⏹️ Đã dừng Auto Fight.")
@@ -1997,10 +2154,10 @@ function LevelFarmer.runCycle()
 
                 if isPlayerTurn() then
                     executeCombatTurn()
-                    local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.4
+                    local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 1.0
                     task.wait(combatDelay)
                 else
-                    task.wait(0.25)
+                    task.wait(0.3)
                 end
             else
                 if LevelFarmer.wasInCombat then
