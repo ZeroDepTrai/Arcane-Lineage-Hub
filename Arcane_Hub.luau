@@ -855,7 +855,7 @@ local function isInCombat()
         local deciding = combatGui:FindFirstChild("Deciding")
         local dodge = combatGui:FindFirstChild("DodgeQTE")
         local atkInd = combatGui:FindFirstChild("AttackIndicator")
-        if (actionBG and actionBG.Visible and actionBG.Position.X.Scale < 0.92) or 
+        if (actionBG and actionBG.Visible) or 
            (deciding and deciding.Visible) or 
            (dodge and dodge.Visible) or 
            (atkInd and atkInd.Visible and atkInd.ImageTransparency < 0.9) then
@@ -1592,7 +1592,7 @@ local function isPlayerTurn()
     local combatGui = pgui and pgui:FindFirstChild("Combat")
     if not combatGui or not combatGui.Enabled then return false end
 
-    -- 2. Nếu đang có đối thủ khác đang suy nghĩ (Deciding), chắc chắn không phải lượt của mình
+    -- 2. Nếu đang có đối thủ khác đang suy nghĩ (Deciding), không phải lượt của mình
     local deciding = combatGui:FindFirstChild("Deciding")
     if deciding and deciding.Visible then
         local label = deciding:FindFirstChild("TextLabel")
@@ -1606,29 +1606,18 @@ local function isPlayerTurn()
     local dodge = combatGui:FindFirstChild("DodgeQTE")
     if dodge and dodge.Visible then return false end
 
+    -- 4. Nút Go xác nhận đang hiển thị
+    local goBtn = combatGui:FindFirstChild("Go")
+    if goBtn and goBtn.Visible then return true end
+
+    -- 5. ActionBG phải đang Visible (Server set Visible = true khi tới lượt, false khi hết lượt)
     local actionBG = combatGui:FindFirstChild("ActionBG")
-    if not actionBG then return false end
+    if not actionBG or not actionBG.Visible then return false end
 
-    -- 4. Khi chưa đến lượt, ActionBG bị ẩn (Visible = false) hoặc bị kéo ra mép màn hình (X Scale >= 0.92)
-    if not actionBG.Visible or actionBG.Position.X.Scale >= 0.92 then
-        local goBtn = combatGui:FindFirstChild("Go")
-        if goBtn and goBtn.Visible then
-            return true
-        end
-        return false
-    end
-
-    -- 5. Khi đến lượt: Game clone "TurnTimer" vào ActionBG
-    if actionBG:FindFirstChild("TurnTimer") then
-        return true
-    end
-
-    -- 6. Hoặc các trang thao tác (ContextPage, AttacksPage, Go) đang thực sự hiển thị bên trong ActionBG đã mở
+    -- 6. ContextPage hoặc AttacksPage đang hiển thị bên trong ActionBG
     local ctx = actionBG:FindFirstChild("ContextPage")
     local atk = actionBG:FindFirstChild("AttacksPage")
-    local goBtn = combatGui:FindFirstChild("Go")
-
-    if (ctx and ctx.Visible) or (atk and atk.Visible) or (goBtn and goBtn.Visible) then
+    if (ctx and ctx.Visible) or (atk and atk.Visible) then
         return true
     end
 
