@@ -5795,9 +5795,21 @@ function AutoYarthul.start()
     if Farmer then Farmer.stop() end
     if Miner then Miner.stop() end
 
-    -- Dam bao bat AutoFight de activate Reactive Turn Hook lang nghe Server Remotes
-    if AutoFight and not AutoFight.running then
+    -- Auto override settings for Auto Combat when Auto Farm Yar'thul is active
+    if Toggles.AutoFight and not Toggles.AutoFight.Value then
+        Toggles.AutoFight:SetValue(true)
+    elseif AutoFight and not AutoFight.running then
         AutoFight.start()
+    end
+
+    if Options.SelectedCombatAction then
+        Options.SelectedCombatAction:SetValue("Auto Smart (Best Skill -> Strike)")
+    end
+    if Options.CombatExecutionMode then
+        Options.CombatExecutionMode:SetValue("Direct Remote (Fastest + Sub-actions)")
+    end
+    if Options.TargetPriority then
+        Options.TargetPriority:SetValue("First Enemy")
     end
 
     -- GAN DIRECT REMOTE HOOKS now KHI BAT AUTO FARM
@@ -6087,10 +6099,12 @@ local function executeDirectRemoteTurn()
 
     local pgui = PlayerGui
     local combatGui = pgui and pgui:FindFirstChild("Combat")
-    local actionChoice = (Options.CombatAction and Options.CombatAction.Value) or "Auto Smart"
+    local actionChoice = (Options.SelectedCombatAction and Options.SelectedCombatAction.Value) or (Options.CombatAction and Options.CombatAction.Value) or "Auto Smart"
     local shouldMeditateIfNoSkill = (Toggles.CombatMeditate and Toggles.CombatMeditate.Value) or false
     local targetPrio = (Options.TargetPriority and Options.TargetPriority.Value) or "First Enemy"
     local subAction = (Options.CombatSubAction and Options.CombatSubAction.Value) or "None"
+
+    local isYarthulActive = (AutoYarthul and AutoYarthul.running) or (AutoYarthul and AutoYarthul.isInsideInstance and AutoYarthul.isInsideInstance())
 
     -- 1. Authoritative Summon Turn Detection
     local isSummon = HubState.isSummonTurnActive
@@ -6106,6 +6120,14 @@ local function executeDirectRemoteTurn()
 
     -- 2. Find target enemy
     local targetEnemy = nil
+    if isYarthulActive and AutoYarthul.getBossHealth then
+        local _, _, bossModel = AutoYarthul.getBossHealth()
+        if bossModel and bossModel.Parent then
+            targetEnemy = bossModel
+        end
+    end
+
+    if not targetEnemy then
     pcall(function()
         local getOtherTeam = game.ReplicatedStorage:FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("Data") and game.ReplicatedStorage.Remotes.Data:FindFirstChild("GetOtherTeam")
         if getOtherTeam then
@@ -6143,6 +6165,7 @@ local function executeDirectRemoteTurn()
                 end
             end
         end
+    end
     end
 
     -- 3. Read skill availability from in-game AttacksPage ScrollingFrame if open, or from player skills
@@ -6189,8 +6212,45 @@ local function executeDirectRemoteTurn()
 
     local skillToUse = nil
 
+    -- Override Strategy: Auto Boss Yar'thul Smart Play
+    if isYarthulActive and not isSummon then
+        local hasPillar = AutoYarthul.hasFlamePillar()
+        local curEnergy = AutoYarthul.getPlayerEnergy()
+        local isSenseReady = isSkillAvailable("Sense Expansion")
+        local isCarnageReady = isSkillAvailable("Carnage")
+
+        -- 1. Priority 1: Sense Expansion (Alternating turns - if ready & not used last turn)
+        if isSenseReady and AutoYarthul.lastUsedSkill ~= "Sense Expansion" then
+            skillToUse = "Sense Expansion"
+            AutoYarthul.lastUsedSkill = "Sense Expansion"
+            hubLog("[AutoYarthul Strat] 🩸 [Priority 1] Cast SENSE EXPANSION!")
+            if AutoYarthul.updateHUD then AutoYarthul.updateHUD("Turn Action: 🩸 Sense Expansion") end
+
+        -- 2. Priority 2: Carnage (Energy >= 3, Ready, and NO Flame Pillar)
+        elseif isCarnageReady and curEnergy >= 3 and not hasPillar then
+            skillToUse = "Carnage"
+            AutoYarthul.lastUsedSkill = "Carnage"
+            hubLog(string.format("[AutoYarthul Strat] ⚔️ [Priority 2 - Energy: %d >= 3] Cast CARNAGE!", curEnergy))
+            if AutoYarthul.updateHUD then AutoYarthul.updateHUD(string.format("Turn Action: ⚔️ Carnage (Energy: %d)", curEnergy)) end
+
+        -- 3. Priority 3: Strike + Meditate (if Carnage CD, building energy, or Flame Pillar active)
+        else
+            skillToUse = "Strike"
+            AutoYarthul.lastUsedSkill = "Strike"
+            if not isCarnageReady then
+                hubLog(string.format("[AutoYarthul Strat] 🧘 [Priority 3 - Carnage CD | Energy: %d] Strike + Meditate!", curEnergy))
+                if AutoYarthul.updateHUD then AutoYarthul.updateHUD("Turn Action: 🧘 Meditate + 🗡️ Strike (Carnage CD)") end
+            elseif hasPillar then
+                hubLog(string.format("[AutoYarthul Strat] 🔥 [Priority 3 - Flame Pillar Active | Energy: %d] Strike + Meditate!", curEnergy))
+                if AutoYarthul.updateHUD then AutoYarthul.updateHUD("Turn Action: 🧘 Meditate + 🗡️ Strike (Pillar Active)") end
+            else
+                hubLog(string.format("[AutoYarthul Strat] ⚡ [Priority 3 - Building Energy: %d/3] Strike + Meditate!", curEnergy))
+                if AutoYarthul.updateHUD then AutoYarthul.updateHUD(string.format("Turn Action: 🧘 Meditate + 🗡️ Strike (Energy: %d)", curEnergy)) end
+            end
+        end
+
     -- Mode 1: Custom Priority Skills
-    if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
+    elseif actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
         local slots = {
             Options.CustomSkillSlot1 and Options.CustomSkillSlot1.Value,
             Options.CustomSkillSlot2 and Options.CustomSkillSlot2.Value,
@@ -6274,7 +6334,12 @@ local function executeDirectRemoteTurn()
 
     -- 5. Sub-Actions for player in same turn (Meditate / Guard)
     if not isSummon then
-        if subAction == "Auto Meditate (Recover Energy)" or subAction:find("Meditate") then
+        local shouldMed = (subAction == "Auto Meditate (Recover Energy)" or subAction:find("Meditate"))
+        if isYarthulActive and skillToUse == "Strike" then
+            shouldMed = (Toggles.YarthulMeditateSubAction == nil or Toggles.YarthulMeditateSubAction.Value ~= false)
+        end
+
+        if shouldMed then
             hubLog("[DirectRemote] 🧘 Sending same-turn Sub-Action: Meditate!")
             task.spawn(function()
                 pcall(function() pti:InvokeServer("Meditate", false) end)
@@ -8708,6 +8773,12 @@ YarthulGroup:AddToggle("AutoFarmYarthul", {
     Tooltip = "auto test vi tri Spawn trong Instance -> Tween toi gate Boss de Begin Fight -> auto danh theo chien thuat chuan (Uu tien 1: Sense Expansion xen ke dut khoat not Meditate -> Uu tien 2: Carnage khi E>=3 & Carnage has hoi CD & not co Flame Pillar dut khoat not Meditate -> Uu tien 3: Strike kem Meditate Sub-Action de load Energy) -> auto collect do, Hook SetCore Callback auto Accept vao Roll Pool (0ms) & auto quet toan bo Drop moi vao inventory -> auto Retry lap again vo tan",
     Callback = function(Value)
         if Value then
+            if Toggles.AutoFight and not Toggles.AutoFight.Value then
+                Toggles.AutoFight:SetValue(true)
+            end
+            if Options.SelectedCombatAction then
+                Options.SelectedCombatAction:SetValue("Auto Smart (Best Skill -> Strike)")
+            end
             AutoYarthul.start()
         else
             if not AutoYarthul.isRestoring then
