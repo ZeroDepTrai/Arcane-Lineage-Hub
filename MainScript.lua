@@ -6112,114 +6112,99 @@ function AutoYarthul.createHUD()
 
         local mainCard = Instance.new("Frame")
         mainCard.Name = "MainCard"
-        mainCard.Size = UDim2.new(0, 300, 0, 160)
+        mainCard.Size = UDim2.new(0, 320, 0, 180)
         mainCard.Position = UDim2.new(0.02, 0, 0.48, 0)
-        mainCard.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
-        mainCard.BackgroundTransparency = 0.08
+        mainCard.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
         mainCard.BorderSizePixel = 0
         mainCard.Active = true
         mainCard.Draggable = true
         mainCard.Parent = screenGui
 
         local cardCorner = Instance.new("UICorner")
-        cardCorner.CornerRadius = UDim.new(0, 8)
+        cardCorner.CornerRadius = UDim.new(0, 10)
         cardCorner.Parent = mainCard
 
         local cardStroke = Instance.new("UIStroke")
-        cardStroke.Color = Color3.fromRGB(6, 182, 212) -- Cyber Cyan Glow
+        cardStroke.Color = Color3.fromRGB(255, 110, 30) -- Glowing Dragon Orange
         cardStroke.Thickness = 1.5
         cardStroke.Parent = mainCard
 
-        -- Topbar Header Badge
-        local headerFrame = Instance.new("Frame")
-        headerFrame.Name = "Header"
-        headerFrame.Size = UDim2.new(1, -16, 0, 24)
-        headerFrame.Position = UDim2.new(0, 8, 0, 6)
-        headerFrame.BackgroundTransparency = 1
-        headerFrame.Parent = mainCard
-
+        -- Title Header
         local title = Instance.new("TextLabel")
         title.Name = "Title"
-        title.Size = UDim2.new(1, 0, 1, 0)
+        title.Size = UDim2.new(1, -20, 0, 26)
+        title.Position = UDim2.new(0, 10, 0, 8)
         title.BackgroundTransparency = 1
         title.Font = Enum.Font.GothamBold
-        title.Text = "ARCANE HUB • FARM CONTROLLER"
-        title.TextColor3 = Color3.fromRGB(240, 245, 255)
-        title.TextSize = 11.5
+        title.Text = "🐉 AUTO YAR'THUL (AUTO RETRY)"
+        title.TextColor3 = Color3.fromRGB(255, 150, 50)
+        title.TextSize = 14
         title.TextXAlignment = Enum.TextXAlignment.Left
-        title.Parent = headerFrame
-
-        local divider = Instance.new("Frame")
-        divider.Name = "Div"
-        divider.Size = UDim2.new(1, -16, 0, 1)
-        divider.Position = UDim2.new(0, 8, 0, 32)
-        divider.BackgroundColor3 = Color3.fromRGB(35, 40, 55)
-        divider.BorderSizePixel = 0
-        divider.Parent = mainCard
+        title.Parent = mainCard
 
         -- Status Indicator
         local statusLabel = Instance.new("TextLabel")
         statusLabel.Name = "StatusLabel"
-        statusLabel.Size = UDim2.new(1, -20, 0, 18)
-        statusLabel.Position = UDim2.new(0, 10, 0, 38)
+        statusLabel.Size = UDim2.new(1, -20, 0, 20)
+        statusLabel.Position = UDim2.new(0, 10, 0, 34)
         statusLabel.BackgroundTransparency = 1
         statusLabel.Font = Enum.Font.GothamMedium
-        statusLabel.Text = "Status: ⚡ Initializing..."
-        statusLabel.TextColor3 = Color3.fromRGB(6, 182, 212)
-        statusLabel.TextSize = 11
+        statusLabel.Text = "Status: 🚀 Khởi động chu trình..."
+        statusLabel.TextColor3 = Color3.fromRGB(220, 220, 230)
+        statusLabel.TextSize = 12
         statusLabel.TextXAlignment = Enum.TextXAlignment.Left
         statusLabel.Parent = mainCard
 
-        -- Target Indicator
-        local targetLabel = Instance.new("TextLabel")
-        targetLabel.Name = "TargetLabel"
-        targetLabel.Size = UDim2.new(1, -20, 0, 16)
-        targetLabel.Position = UDim2.new(0, 10, 0, 58)
-        targetLabel.BackgroundTransparency = 1
-        targetLabel.Font = Enum.Font.Gotham
-        targetLabel.Text = "Target: 🐉 Yar'thul, the Blazing Dragon"
-        targetLabel.TextColor3 = Color3.fromRGB(180, 190, 210)
-        targetLabel.TextSize = 10.5
-        targetLabel.TextXAlignment = Enum.TextXAlignment.Left
-        targetLabel.Parent = mainCard
+        -- Strategy Indicator
+        local stratLabel = Instance.new("TextLabel")
+        stratLabel.Name = "StratLabel"
+        stratLabel.Size = UDim2.new(1, -20, 0, 18)
+        stratLabel.Position = UDim2.new(0, 10, 0, 54)
+        stratLabel.BackgroundTransparency = 1
+        stratLabel.Font = Enum.Font.Gotham
+        stratLabel.Text = "Strat: Sense (Alternating) > Carnage > Strike + Med"
+        stratLabel.TextColor3 = Color3.fromRGB(160, 200, 255)
+        stratLabel.TextSize = 11
+        stratLabel.TextXAlignment = Enum.TextXAlignment.Left
+        stratLabel.Parent = mainCard
 
-        -- Kill Counter (Clean, No Retries/Wipes)
+        -- Kill & Retry Counter
         local killLabel = Instance.new("TextLabel")
         killLabel.Name = "KillLabel"
         killLabel.Size = UDim2.new(1, -20, 0, 18)
-        killLabel.Position = UDim2.new(0, 10, 0, 76)
+        killLabel.Position = UDim2.new(0, 10, 0, 72)
         killLabel.BackgroundTransparency = 1
         killLabel.Font = Enum.Font.GothamBold
-        killLabel.Text = string.format("🏆 Boss Kills: %d", AutoYarthul.bossKillCount)
-        killLabel.TextColor3 = Color3.fromRGB(16, 185, 129) -- Emerald Green
-        killLabel.TextSize = 11.5
+        killLabel.Text = string.format("🏆 Kills: %d | 🔄 Retries: %d", AutoYarthul.bossKillCount, AutoYarthul.deathCount)
+        killLabel.TextColor3 = Color3.fromRGB(100, 255, 140)
+        killLabel.TextSize = 12
         killLabel.TextXAlignment = Enum.TextXAlignment.Left
         killLabel.Parent = mainCard
 
         -- Last Drop Info
         local dropLabel = Instance.new("TextLabel")
         dropLabel.Name = "DropLabel"
-        dropLabel.Size = UDim2.new(1, -20, 0, 16)
-        dropLabel.Position = UDim2.new(0, 10, 0, 96)
+        dropLabel.Size = UDim2.new(1, -20, 0, 18)
+        dropLabel.Position = UDim2.new(0, 10, 0, 92)
         dropLabel.BackgroundTransparency = 1
         dropLabel.Font = Enum.Font.GothamMedium
-        dropLabel.Text = "Drops: " .. tostring(AutoYarthul.lastDroppedSummary)
-        dropLabel.TextColor3 = Color3.fromRGB(245, 158, 11) -- Amber
-        dropLabel.TextSize = 10.5
+        dropLabel.Text = "🎁 Drops: " .. tostring(AutoYarthul.lastDroppedSummary)
+        dropLabel.TextColor3 = Color3.fromRGB(255, 220, 100)
+        dropLabel.TextSize = 11
         dropLabel.TextXAlignment = Enum.TextXAlignment.Left
         dropLabel.Parent = mainCard
 
-        -- STOP AUTO FARM BUTTON (Sleek Crimson Pill)
+        -- STOP AUTO FARM BUTTON
         local stopBtn = Instance.new("TextButton")
         stopBtn.Name = "StopButton"
-        stopBtn.Size = UDim2.new(1, -20, 0, 28)
-        stopBtn.Position = UDim2.new(0, 10, 0, 122)
-        stopBtn.BackgroundColor3 = Color3.fromRGB(225, 29, 72) -- Rose / Crimson
+        stopBtn.Size = UDim2.new(1, -20, 0, 32)
+        stopBtn.Position = UDim2.new(0, 10, 0, 126)
+        stopBtn.BackgroundColor3 = Color3.fromRGB(190, 35, 45)
         stopBtn.BorderSizePixel = 0
         stopBtn.Font = Enum.Font.GothamBold
-        stopBtn.Text = "■ STOP AUTO FARM"
+        stopBtn.Text = "🛑 STOP AUTO FARM YAR'THUL"
         stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        stopBtn.TextSize = 11.5
+        stopBtn.TextSize = 13
         stopBtn.AutoButtonColor = true
         stopBtn.Parent = mainCard
 
@@ -6228,7 +6213,7 @@ function AutoYarthul.createHUD()
         btnCorner.Parent = stopBtn
 
         stopBtn.MouseButton1Click:Connect(function()
-            hubLog("[AutoYarthul] 🛑 [STOP AUTO FARM] clicked -> Stopping farm cycle!")
+            print("[AutoYarthul] 🛑 Người dùng ấn [STOP AUTO FARM] trên màn hình -> Dừng vĩnh viễn và xoá Session!")
             AutoYarthul.stop(true)
             if Toggles.AutoFarmYarthul then
                 Toggles.AutoFarmYarthul:SetValue(false)
@@ -6258,14 +6243,16 @@ function AutoYarthul.updateHUD(statusText)
         end
         local kl = card:FindFirstChild("KillLabel")
         if kl then
-            kl.Text = string.format("🏆 Boss Kills: %d", AutoYarthul.bossKillCount)
+            kl.Text = string.format("🏆 Kills: %d | 🔄 Retries: %d", AutoYarthul.bossKillCount, AutoYarthul.deathCount)
         end
         local dl = card:FindFirstChild("DropLabel")
         if dl then
-            dl.Text = "Drops: " .. tostring(AutoYarthul.lastDroppedSummary)
+            dl.Text = "🎁 Drops: " .. tostring(AutoYarthul.lastDroppedSummary)
         end
     end)
 end
+
+-- 9. Persistence / Auto-Rejoin Session Handler (Sử dụng duy nhất 1 queue teleport script của Hub)
 
 function AutoYarthul.saveSession()
     pcall(function()
@@ -9637,20 +9624,14 @@ local StatsGroup = Tabs.AutoFarm:AddRightGroupbox("Auto Stats Build & Cache")
 -- -----------------------------------------------------------------------------
 -- SUB-GROUP: AUTO BOSS YAR'THUL (THE BLAZING DRAGON)
 -- -----------------------------------------------------------------------------
-local YarthulGroup = Tabs.AutoFarm:AddRightGroupbox("🐲 Auto Boss: Yar'thul (Blazing Dragon)")
+local YarthulGroup = Tabs.AutoFarm:AddRightGroupbox("🐉 Auto Boss: Yar'thul (Blazing Dragon)")
 
 YarthulGroup:AddToggle("AutoFarmYarthul", {
     Text = "Enable Auto Farm & Retry Yar'thul",
     Default = false,
-    Tooltip = "Tự động kiểm tra vị trí Spawn trong Instance -> Tween tới cửa Boss để Begin Fight -> Tự động đánh theo chiến thuật chuẩn (Ưu tiên 1: Sense Expansion xen kẽ dứt khoát không Meditate -> Ưu tiên 2: Carnage khi E>=3 & Carnage đã hồi CD & KHÔNG có Flame Pillar dứt khoát không Meditate -> Ưu tiên 3: Strike kèm Meditate Sub-Action để nạp Energy) -> Tự động nhặt đồ, Hook SetCore Callback tự động Accept vào Roll Pool (0ms) & tự động quét toàn bộ Drop mới vào túi đồ -> Tự động Retry lặp lại vô tận",
+    Tooltip = "Tự động kiểm tra vị trí Spawn trong Instance -> Tween tới Cổng Boss để Begin Fight -> Tự động đánh theo chiến thuật chuẩn (Ưu tiên 1: Sense Expansion xen kẽ dứt khoát không Meditate -> Ưu tiên 2: Carnage khi E>=3 & Carnage đã hồi CD & không có Flame Pillar dứt khoát không Meditate -> Ưu tiên 3: Strike kèm Meditate Sub-Action để nạp Energy) -> Tự động nhặt đồ, Hook SetCore Callback tự động Accept vào Roll Pool (0ms) & Tự động quét toàn bộ Drop mới vào kho đồ -> Tự động Retry lặp lại vô tận",
     Callback = function(Value)
         if Value then
-            if Toggles.AutoFight and not Toggles.AutoFight.Value then
-                Toggles.AutoFight:SetValue(true)
-            end
-            if Options.SelectedCombatAction then
-                Options.SelectedCombatAction:SetValue("Auto Smart (Best Skill -> Strike)")
-            end
             AutoYarthul.start()
         else
             if not AutoYarthul.isRestoring then
@@ -9665,7 +9646,7 @@ YarthulGroup:AddLabel("📜 Strat: Sense (Alternating) > Carnage > Strike + Med"
 YarthulGroup:AddToggle("YarthulMeditateSubAction", {
     Text = "Use Meditate Sub-Action on Strike",
     Default = true,
-    Tooltip = "Tự động kích hoạt Sub-Action Meditate kèm ngay sau đòn Strike để nạp nhanh Energy (Carnage và Sense Expansion được tung đòn dứt khoát không kèm Meditate để tránh kết thúc turn sớm hoặc trúng Flame Pillar)",
+    Tooltip = "Tự động kích hoạt Sub-Action Meditate kèm sau đòn Strike để nạp nhanh Energy (Carnage và Sense Expansion được tung đòn dứt khoát KHÔNG kèm Meditate để tránh kết thúc lượt sớm hoặc trúng Flame Pillar)",
 })
 
 YarthulGroup:AddToggle("YarthulAutoLoot", {
@@ -9680,40 +9661,47 @@ YarthulGroup:AddSlider("YarthulTweenSpeed", {
     Min = 120,
     Max = 350,
     Rounding = 0,
-    Tooltip = "Tốc độ bay Sky-Tween tới cửa Mount Thul (mặc định 220 studs/s)",
+    Tooltip = "Tốc độ bay Sky-Tween tới cổng Mount Thul (mặc định 220 studs/s)",
 })
 
 YarthulGroup:AddToggle("YarthulSendWebhook", {
     Text = "Enable Discord Webhook",
     Default = true,
-    Tooltip = "Gửi thông báo thống kê chi tiết vật phẩm rơi (Drops & Artifacts) sau khi diệt Boss Yar'thul",
+    Tooltip = "Tự động gửi thông báo Discord Embed chi tiết danh sách tất cả vật phẩm rơi (Loot Drops) nhận được vào kho đồ sau khi diệt Boss Yar'thul",
 })
 
 YarthulGroup:AddInput("YarthulWebhook", {
     Default = "",
     Numeric = false,
     Finished = false,
-    Text = "Custom Yar'thul Webhook URL",
-    Tooltip = "Nhập Discord Webhook URL riêng cho Boss Yar'thul (để trống nếu dùng chung Webhook tổng)",
+    Text = "Discord Webhook URL",
+    Tooltip = "Dán link Discord Webhook URL của bạn vào đây để nhận thông báo realtime",
     Placeholder = "https://discord.com/api/webhooks/...",
 })
 
 YarthulGroup:AddButton({
-    Text = "🔔 Test Yar'thul Webhook Now",
+    Text = "🧪 Test Yar'thul Webhook Now",
     Func = function()
         AutoYarthul.sendWebhook("Test")
     end
 })
 
 YarthulGroup:AddButton({
-    Text = "🚀 Tween to Mount Thul Door Now",
+    Text = "🐉 Tween to Mount Thul Door Now",
     Func = function()
         teleportToLocation(AutoYarthul.gatePosition)
     end
 })
 
 YarthulGroup:AddButton({
-    Text = "⏹️ Stop Auto Farm Yar'thul",
+    Text = "🔍 Check Current Place & Instance ID",
+    Func = function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/Check_Place_Info.lua?t=" .. tick()))()
+    end
+})
+
+YarthulGroup:AddButton({
+    Text = "🛑 Stop Auto Farm Yar'thul",
     Func = function()
         AutoYarthul.stop(true)
         if Toggles.AutoFarmYarthul then
