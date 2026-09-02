@@ -805,19 +805,30 @@ function ZeroLib:CreateWindow(config)
     popoverLayer.Parent = screenGui
     ZeroLib.PopoverLayer = popoverLayer
 
-    -- Popover Click-Outside Listener
+    -- Popover Click-Outside Listener with Anchor Safety
     local clickConn = UserInputService.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             if ZeroLib.ActivePopover and ZeroLib.ActivePopover.Close then
                 local pos = input.Position
                 local popInst = ZeroLib.ActivePopover.Instance
+                local anchor = ZeroLib.ActivePopover.Anchor
+
+                local inPop = false
                 if popInst and popInst.Parent then
                     local absPos = popInst.AbsolutePosition
                     local absSize = popInst.AbsoluteSize
-                    local inBounds = (pos.X >= absPos.X and pos.X <= absPos.X + absSize.X and pos.Y >= absPos.Y and pos.Y <= absPos.Y + absSize.Y)
-                    if not inBounds and not ZeroLib.ActivePopover.IgnoreClick then
-                        ZeroLib.ActivePopover.Close()
-                    end
+                    inPop = (pos.X >= absPos.X and pos.X <= absPos.X + absSize.X and pos.Y >= absPos.Y and pos.Y <= absPos.Y + absSize.Y)
+                end
+
+                local inAnchor = false
+                if anchor and anchor.Parent then
+                    local aPos = anchor.AbsolutePosition
+                    local aSize = anchor.AbsoluteSize
+                    inAnchor = (pos.X >= aPos.X and pos.X <= aPos.X + aSize.X and pos.Y >= aPos.Y and pos.Y <= aPos.Y + aSize.Y)
+                end
+
+                if not inPop and not inAnchor and not ZeroLib.ActivePopover.IgnoreClick then
+                    ZeroLib.ActivePopover.Close()
                 end
             end
         end
@@ -1510,6 +1521,7 @@ function ZeroLib:CreateWindow(config)
 
                         ZeroLib.ActivePopover = {
                             Instance = pickerFrame,
+                            Anchor = anchorButton,
                             Close = function() ColorObj:TogglePicker(false) end
                         }
                     else
@@ -2211,6 +2223,7 @@ function ZeroLib:CreateWindow(config)
 
                         ZeroLib.ActivePopover = {
                             Instance = dropMenu,
+                            Anchor = dropBtn,
                             Close = function() DropObj:ToggleMenu(false) end
                         }
                     else
