@@ -4585,7 +4585,7 @@ local function scanPlayerSkills()
         ["Info"] = true, ["Template"] = true, ["Return"] = true, ["Shadow Form"] = true, ["SKILL NAME"] = true,
     }
 
-    -- 1. Scan from SkillDisplay (Player's unlocked Active Skills)
+    -- 1. Scan from SkillDisplay (Player or Summon Active Skills)
     pcall(function()
         local skillDisplay = pgui and pgui:FindFirstChild("SkillDisplay")
         if skillDisplay then
@@ -4603,7 +4603,39 @@ local function scanPlayerSkills()
         end
     end)
 
-    -- 2. Scan from Inventory GUI (Category Skills)
+    -- 2. Detect Class from StatMenu & automatically inject permanent class skills
+    pcall(function()
+        local classSkillsDb = {
+            ["necromancer"] = {"Call Skeleton", "Raise Dead", "Darklight Drain", "Soul Ignition", "Dark Glare"},
+            ["wizard"] = {"Magic Missile", "Blaze", "Fireball", "Lightning Crash", "Thunder Trap"},
+            ["elementalist"] = {"Circuit Charge", "Wind Reflect", "Gale Uplift", "Blaze", "Lightning Crash"},
+            ["saint"] = {"Call Sylph", "Sylph's Prayer", "Light Bolt", "Holy Grace", "Cleansing Prayer"},
+            ["paladin"] = {"Skyward Bolt", "Holy Crash", "Pure Resonation", "Sacred Call"},
+            ["slayer"] = {"Carnage", "Sense Expansion", "Blood Thirst", "Bloody Burst"},
+            ["berserker"] = {"Rending Barrage", "Blood Eruption", "Triple Stab", "Tense Up"},
+            ["assassin"] = {"Backstab", "Toxic Dagger", "Assassinate"},
+            ["rogue"] = {"Steal", "Stab", "Poison Smoke"},
+            ["monk"] = {"Dragon Fist", "Iron Palm", "Chakra Burst"},
+        }
+
+        local sm = pgui and pgui:FindFirstChild("StatMenu")
+        if sm then
+            for _, d in ipairs(sm:GetDescendants()) do
+                if d:IsA("TextLabel") and d.Text ~= "" then
+                    local txt = d.Text:lower()
+                    for cName, moves in pairs(classSkillsDb) do
+                        if txt:find(cName) then
+                            for _, m in ipairs(moves) do
+                                skillSet[m] = true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 3. Scan from Inventory GUI (Category Skills)
     pcall(function()
         local inv = pgui and pgui:FindFirstChild("Inventory")
         if inv then
@@ -4622,7 +4654,7 @@ local function scanPlayerSkills()
         end
     end)
 
-    -- 3. Scan from in-combat AttacksPage
+    -- 4. Scan from in-combat AttacksPage
     pcall(function()
         local combatGui = pgui and pgui:FindFirstChild("Combat")
         local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
@@ -4642,9 +4674,9 @@ local function scanPlayerSkills()
         end
     end)
 
-    -- 4. Summon Skills Integration (Detect summon moves based on spells / active summons)
+    -- 5. Summon Skills Integration (Detect summon moves based on spells / active summons)
     local summonSpells = {
-        ["Call Skeleton"] = {"Smack", "Bone Spray"},
+        ["Call Skeleton"] = {"Smack", "Bone Spray", "Self Destruct"},
         ["Raise Dead"] = {"Rotten Swipe", "Shriek", "Double Slam", "Smack"},
         ["Call Sylph"] = {"Sylph's Prayer", "Light Bolt", "Gale Uplift"},
     }
@@ -4657,8 +4689,9 @@ local function scanPlayerSkills()
         end
     end
 
-    -- Always include basic attack Strike
+    -- Always include basic attacks
     skillSet["Strike"] = true
+    skillSet["Magic Missile"] = true
 
     local list = {}
     for name in pairs(skillSet) do
