@@ -10791,11 +10791,8 @@ function EnemyStatusEngine.start()
                                         local skClean = sData.skills[i]:gsub("•%s*", "")
                                         table.insert(shortSkills, skClean)
                                     end
-                                    infoLbl.Text = string.format("<b>%s</b> (<font color='%s'>%d HP</font>) | ⚡ %d/%d E
-🎯 <b>Next:</b> <font color='#00FFFF'>%s (%d E)</font>
-%s", 
-                                        sData.name, hpColor, sData.curHp, sData.curEnergy, sData.maxEnergy, sData.predictedMove, sData.predictedCost, table.concat(shortSkills, "
-"))
+                                    infoLbl.Text = string.format("<b>%s</b> (<font color='%s'>%d HP</font>) | ⚡ %d/%d E\n🎯 <b>Next:</b> <font color='#00FFFF'>%s (%d E)</font>\n%s", 
+                                        sData.name, hpColor, sData.curHp, sData.curEnergy, sData.maxEnergy, sData.predictedMove, sData.predictedCost, table.concat(shortSkills, "\n"))
                                 end
                             end
                         end
@@ -10808,8 +10805,7 @@ function EnemyStatusEngine.start()
 
                 local cLbl = hud and hud:FindFirstChild("Content")
                 if cLbl then
-                    cLbl.Text = table.concat(hudLines, "
-")
+                    cLbl.Text = table.concat(hudLines, "\n")
                 end
             else
                 if hud then hud.Visible = false end
