@@ -6012,7 +6012,7 @@ function AutoYarthul.stop(explicit)
     Library:Notify(" Auto Farm Yar'thul Stopped!", 3)
 end
 
-HubState.HubState.isSummonTurnActive = false
+HubState.isSummonTurnActive = false
 HubState.currentTurnSkills = {}
 
 pcall(function()
