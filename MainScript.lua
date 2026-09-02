@@ -10689,7 +10689,7 @@ local OptimizationState = {
 }
 
 -- 1. XU LY hidden CAY COI & THAM THUC VAT (REMOVE TREES / FOLIAGE / GRASS)
-function FPSBooster.FPSBooster.applyPartTreeRemoval(obj, hideTrees)
+function FPSBooster.applyPartTreeRemoval(obj, hideTrees)
     if not obj then return end
     local name = obj.Name:lower()
     local isTreeFoliage = name:find("tree") or name:find("bush") or name:find("leaf") or name:find("leaves")
@@ -10711,7 +10711,7 @@ function FPSBooster.FPSBooster.applyPartTreeRemoval(obj, hideTrees)
     end
 end
 
-function FPSBooster.FPSBooster.applyTreeRemoval()
+function FPSBooster.applyTreeRemoval()
     task.spawn(function()
         pcall(function()
             local hideTrees = Toggles.RemoveTrees and Toggles.RemoveTrees.Value or false
@@ -10757,7 +10757,7 @@ function FPSBooster.FPSBooster.applyTreeRemoval()
 end
 
 -- 2. XU LY DO HOA MUOT & TAT PARTICLE (LOW GRAPHICS)
-function FPSBooster.FPSBooster.applyPartLowGraphics(p, isLow)
+function FPSBooster.applyPartLowGraphics(p, isLow)
     if not p then return end
     if LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character) then return end
 
@@ -10793,7 +10793,7 @@ function FPSBooster.FPSBooster.applyPartLowGraphics(p, isLow)
     end
 end
 
-function FPSBooster.FPSBooster.applyLowGraphics()
+function FPSBooster.applyLowGraphics()
     task.spawn(function()
         pcall(function()
             local isLow = Toggles.LowGraphics and Toggles.LowGraphics.Value or false
@@ -10833,7 +10833,7 @@ function FPSBooster.FPSBooster.applyLowGraphics()
 end
 
 -- 3. XU LY MASTER FPS BOOST (clear SUONG MU / HIEU UNG ANH SANG)
-function FPSBooster.FPSBooster.applyRemoveFog()
+function FPSBooster.applyRemoveFog()
     task.spawn(function()
         pcall(function()
             local isRemove = Toggles.RemoveFog and Toggles.RemoveFog.Value or false
@@ -10876,7 +10876,7 @@ function FPSBooster.FPSBooster.applyRemoveFog()
     end)
 end
 
-function FPSBooster.FPSBooster.applyFPSBoost()
+function FPSBooster.applyFPSBoost()
     task.spawn(function()
         pcall(function()
             local isBoost = Toggles.EnableFPSBoost and Toggles.EnableFPSBoost.Value
@@ -10921,7 +10921,7 @@ function FPSBooster.FPSBooster.applyFPSBoost()
 end
 
 -- 4. XU LY EXTREME FPS BOOSTER (POTATO MODE TOAN DIEN - not TAT 3D RENDER)
-function FPSBooster.FPSBooster.applyExtremePart(p)
+function FPSBooster.applyExtremePart(p)
     if not p then return end
     if p:IsA("BasePart") then
         p.Material = Enum.Material.SmoothPlastic
@@ -10947,7 +10947,7 @@ function FPSBooster.FPSBooster.applyExtremePart(p)
     end
 end
 
-function FPSBooster.FPSBooster.applyExtremeFPSBoost()
+function FPSBooster.applyExtremeFPSBoost()
     task.spawn(function()
         pcall(function()
             local isExtreme = (Toggles.FPSBoost and Toggles.FPSBoost.Value) or (Toggles.ExtremeFPSBoost and Toggles.ExtremeFPSBoost.Value) or false
@@ -11512,7 +11512,7 @@ local EnemyStatusEngine = {
     currentTurn = 0,
 }
 
-function EnemyStatusEngine.EnemyStatusEngine.initEnemyStatusData()
+function EnemyStatusEngine.initEnemyStatusData()
     local rep = game:GetService("ReplicatedStorage")
     pcall(function()
         local skillsMod = rep:FindFirstChild("Constants") and rep.Constants:FindFirstChild("Skills")
@@ -11567,7 +11567,7 @@ pcall(function()
     end
 end)
 
-function EnemyStatusEngine.EnemyStatusEngine.getSkillStats(skillName)
+function EnemyStatusEngine.getSkillStats(skillName)
     if not skillName or skillName == "" or skillName == "None" or skillName == "Strike" then
         return 0, 0
     end
@@ -11585,7 +11585,7 @@ function EnemyStatusEngine.EnemyStatusEngine.getSkillStats(skillName)
     return cost, cd
 end
 
-function EnemyStatusEngine.EnemyStatusEngine.analyzeEnemyStatus(enemyModel)
+function EnemyStatusEngine.analyzeEnemyStatus(enemyModel)
     if not enemyModel or not enemyModel.Parent then return nil end
 
     local enemyName = enemyModel.Name
