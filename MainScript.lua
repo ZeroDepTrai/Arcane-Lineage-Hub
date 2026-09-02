@@ -10607,6 +10607,24 @@ pcall(function()
     end
 end)
 
+local function getSkillStats(skillName)
+    if not skillName or skillName == "" or skillName == "None" or skillName == "Strike" then
+        return 0, 0
+    end
+    local cost = 0
+    local cd = 0
+    pcall(function()
+        local rep = game:GetService("ReplicatedStorage")
+        local SkillsModule = require(rep.Constants.Skills)
+        if SkillsModule and SkillsModule[skillName] then
+            local data = SkillsModule[skillName]
+            cost = tonumber(data.Cost) or 0
+            cd = tonumber(data.Cooldown) or tonumber(data.CD) or 0
+        end
+    end)
+    return cost, cd
+end
+
 local function analyzeEnemyStatus(enemyModel)
     if not enemyModel or not enemyModel.Parent then return nil end
 
