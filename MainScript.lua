@@ -10341,6 +10341,7 @@ end-- ==========================================================================
 -- ENEMY STATUS & SKILL COOLDOWN MONITOR (QOL VISUAL SUITE)
 -- =============================================================================
 local EnemyStatusEngine = {
+    analyzeEnemyStatus = nil,
     running = false,
     thread = nil,
     gui = nil,
@@ -10517,6 +10518,7 @@ local function getSkillStats(skillName)
 end
 
 local function analyzeEnemyStatus(enemyModel)
+EnemyStatusEngine.analyzeEnemyStatus = analyzeEnemyStatus
     if not enemyModel or not enemyModel.Parent then return nil end
 
     local enemyName = enemyModel.Name
@@ -10662,6 +10664,8 @@ local function analyzeEnemyStatus(enemyModel)
 end
 
 function EnemyStatusEngine.start()
+_G.EnemyStatusEngine = EnemyStatusEngine
+shared.EnemyStatusEngine = EnemyStatusEngine
     if EnemyStatusEngine.running then return end
     EnemyStatusEngine.running = true
     createEnemyStatusScreenHUD()
@@ -10837,3 +10841,5 @@ function EnemyStatusEngine.stop()
 end
 
 EnemyStatusEngine.start()
+_G.EnemyStatusEngine = EnemyStatusEngine
+shared.EnemyStatusEngine = EnemyStatusEngine
