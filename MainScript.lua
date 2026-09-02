@@ -9515,14 +9515,7 @@ QOLGroup:AddToggle("RevealUnidentified", {
     Tooltip = "Reveal true item names, enchants, tiers, and rolled stats for unidentified items in your inventory",
 })
 
-QOLGroup:AddToggle("AntiAFK", {
-    Text = "Built-in Anti-AFK Engine",
-    Default = false,
-    Tooltip = "Prevent Roblox 20-minute idle disconnection / kick",
-})
-
 local FPSGroup = Tabs.Visuals:AddRightGroupbox("FPS Booster")
-local OptGroup = Tabs.Visuals:AddRightGroupbox("Optimization & RAM")
 
 local FPSBooster = {
     originalFogEnd = (Lighting and Lighting.FogEnd) or 100000,
@@ -9688,6 +9681,49 @@ local function applyLowGraphics()
 end
 
 -- 3. XU LY MASTER FPS BOOST (clear SUONG MU / HIEU UNG ANH SANG)
+local function applyRemoveFog()
+    task.spawn(function()
+        pcall(function()
+            local isRemove = Toggles.RemoveFog and Toggles.RemoveFog.Value or false
+            if isRemove then
+                local function clearFogOnce()
+                    if Lighting.FogEnd < 9e8 or Lighting.FogStart < 9e8 then
+                        Lighting.FogEnd = 9e9
+                        Lighting.FogStart = 9e9
+                    end
+                    local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+                    if atmosphere and (atmosphere.Density > 0 or atmosphere.Haze > 0) then
+                        atmosphere.Density = 0
+                        atmosphere.Haze = 0
+                        atmosphere.Glare = 0
+                    end
+                    for _, effect in ipairs(Lighting:GetChildren()) do
+                        if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("Atmosphere") or effect:IsA("Clouds") then
+                            if effect.Enabled then effect.Enabled = false end
+                        end
+                    end
+                end
+
+                clearFogOnce()
+
+                task.spawn(function()
+                    while HubState.running and Toggles.RemoveFog and Toggles.RemoveFog.Value do
+                        clearFogOnce()
+                        task.wait(1)
+                    end
+                end)
+            else
+                Lighting.FogEnd = FPSBooster.originalFogEnd or 100000
+                Lighting.FogStart = FPSBooster.originalFogStart or 0
+                local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+                if atmosphere then
+                    atmosphere.Density = 0.3
+                end
+            end
+        end)
+    end)
+end
+
 local function applyFPSBoost()
     task.spawn(function()
         pcall(function()
@@ -9890,10 +9926,19 @@ FilterGroup:AddDropdown("ESPWhitelist", {
     Text = "Whitelist Selection",
 })
 
+FPSGroup:AddToggle("RemoveFog", {
+    Text = "Remove Fog & Atmosphere",
+    Default = false,
+    Tooltip = "Actively check and permanently clear all fog, haze, blur, and lighting atmosphere with continuous watchdog loop",
+    Callback = function(val)
+        if applyRemoveFog then applyRemoveFog() end
+    end,
+})
+
 FPSGroup:AddToggle("FPSBoost", {
     Text = "🔥 FPS Boost (Potato Mode)",
     Default = false,
-    Tooltip = " maximum hoa FPS kich khung: Ep Smooth Plastic, clear Decal/Texture/Light, hidden cay coi tham thuc vat, tat Particles/Shadows/Fog (not tat 3D Render).",
+    Tooltip = "Maximum FPS Boost: Smooth Plastic, disable Decals/Textures/Lights, hide foliage, disable Particles/Shadows/Fog",
     Callback = function(val)
         applyExtremeFPSBoost()
     end,
@@ -9901,7 +9946,7 @@ FPSGroup:AddToggle("FPSBoost", {
 
 FPSGroup:AddSlider("FPSCap", {
     Text = "Max FPS Cap",
-    Default = 360,
+    Default = 60,
     Min = 30,
     Max = 360,
     Rounding = 0,
@@ -9912,24 +9957,9 @@ FPSGroup:AddSlider("FPSCap", {
     end
 })
 
-OptGroup:AddToggle("AntiAFK", {
-    Text = "Built-in Anti-AFK (20m Kick Bypass)",
-    Default = false,
-    Tooltip = "auto gui tin hieu prevent disconnect connect khi anti-afk AFK 24/7",
-})
-
-OptGroup:AddButton(" Instant Clean RAM / Garbage", function()
-    collectgarbage("collect")
-    Library:Notify("RAM / Garbage Collection executed!", 3)
-end)
-
-OptGroup:AddButton(" Remove All Fog Permanently", function()
-    Lighting.FogEnd = 9e9
-    Lighting.FogStart = 9e9
-    local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
-    if atmo then atmo.Density = 0 end
-    Library:Notify("All Fog & Haze removed!", 3)
-end)
+if setfpscap then
+    pcall(setfpscap, 60)
+end
 
 -- -----------------------------------------------------------------------------
 -- TAB 6: SETTINGS / CONFIG
@@ -10112,9 +10142,9 @@ local function initAntiAFK()
         end
     end)
 
-    -- Lop 2: Lang nghe su kien LocalPlayer.Idled va gui tuong tac ao mo phong nguoi dung
+    -- Lop 2: Lang nghe su kien LocalPlayer.Idled va gui tuong tac ao mo phong nguoi dung (Always-on)
     local idledConn = registerConnection(LocalPlayer.Idled:Connect(function()
-        if HubState.running and Toggles.AntiAFK and Toggles.AntiAFK.Value then
+        if HubState.running then
             pcall(function()
                 VirtualUser:CaptureController()
                 VirtualUser:ClickButton2(Vector2.new(0, 0))
@@ -10123,24 +10153,14 @@ local function initAntiAFK()
     end))
     table.insert(AntiAFK.connections, idledConn)
 
-    -- Lop 3: Luong nhip tim (Heartbeat pulse) dinh ky moi 60 giay chu dong reset counter AFK
+    -- Lop 3: Luong nhip tim (Heartbeat pulse) dinh ky moi 60 giay chu dong reset counter AFK (Always-on)
     task.spawn(function()
         while HubState.running do
             task.wait(60)
-            if HubState.running and Toggles.AntiAFK and Toggles.AntiAFK.Value then
+            if HubState.running then
                 pcall(function()
                     VirtualUser:CaptureController()
                     VirtualUser:ClickButton2(Vector2.new(0, 0))
-                end)
-                pcall(function()
-                    local vim = game:GetService("VirtualInputManager")
-                    if vim then
-                        -- Safe virtual user click
-                VirtualUser:CaptureController()
-                VirtualUser:ClickButton2(Vector2.new(0, 0))
-                        task.wait(0.05)
-                        -- Heartbeat pulse complete
-                    end
                 end)
             end
         end
