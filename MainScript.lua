@@ -8043,6 +8043,27 @@ local SubclassTrainers = {
     ["Sub: Vanio (Miner - Ore Master)"]             = Vector3.new(7572.0, 593.2, -2674.0),
 }
 
+local IsClassTrainer = {}
+local function buildTrainerLookup()
+    for name, _ in pairs(BaseTrainers or {}) do
+        local clean = name:gsub("^.-:%s*", ""):gsub("%s*%b()", ""):gsub("^%s*(.-)%s*$", "%1")
+        IsClassTrainer[clean] = true
+        IsClassTrainer[name] = true
+    end
+    for name, _ in pairs(SuperTrainers or {}) do
+        local clean = name:gsub("^.-:%s*", ""):gsub("%s*%b()", ""):gsub("^%s*(.-)%s*$", "%1")
+        IsClassTrainer[clean] = true
+        IsClassTrainer[name] = true
+    end
+    for name, _ in pairs(SubclassTrainers or {}) do
+        local clean = name:gsub("^.-:%s*", ""):gsub("%s*%b()", ""):gsub("^%s*(.-)%s*$", "%1")
+        IsClassTrainer[clean] = true
+        IsClassTrainer[name] = true
+    end
+end
+pcall(buildTrainerLookup)
+
+
 local QuestNPCs = {
     ["[Orderly] Prelate Fyran (Order Path Sanctuary)"]= Vector3.new(8459.8, 822.4, -5885.1),
     ["[Orderly] Saint Fernain (Order Path Shrine)"]   = Vector3.new(2296.1, 663.3, -4392.7),
@@ -8425,7 +8446,7 @@ registerConnection(RunService.RenderStepped:Connect(function()
 
     for m, data in pairs(activeNpcESP) do
         if data.billboard and data.head and data.head.Parent then
-            local isTrainer = TrainerList[data.name] ~= nil or data.name:find("Trainer") ~= nil
+            local isTrainer = (IsClassTrainer and IsClassTrainer[data.name] ~= nil) or data.name:find("Trainer") ~= nil
             local shouldShow = false
             local curDistLimit = npcMaxDist
             local curColor = npcColor
