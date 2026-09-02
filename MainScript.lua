@@ -8023,78 +8023,27 @@ local function removeESP(instance)
     end
 end
 
--- 5. MASTER ESP UPDATE & RENDER LOOP
-local activeTrainerESP = {}
-
-local function createTrainerESP(name, pos, color)
-    if activeTrainerESP[name] then return end
-    local bb = Instance.new("BillboardGui")
-    bb.Name = "TrainerESP_" .. name
-    bb.Size = UDim2.new(0, 160, 0, 30)
-    bb.AlwaysOnTop = true
-    bb.Enabled = false
-
-    local lbl = Instance.new("TextLabel")
-    lbl.Name = "Text"
-    lbl.Size = UDim2.new(1, 0, 1, 0)
-    lbl.BackgroundTransparency = 1
-    lbl.TextColor3 = color
-    lbl.Font = Enum.Font.GothamBold
-    lbl.TextSize = 11
-    lbl.TextStrokeTransparency = 0.3
-    lbl.Parent = bb
-
-    local anchor = Instance.new("Part")
-    anchor.Size = Vector3.new(1, 1, 1)
-    anchor.Position = pos + Vector3.new(0, 4, 0)
-    anchor.Anchored = true
-    anchor.CanCollide = false
-    anchor.Transparency = 1
-    anchor.Parent = workspace
-    bb.Adornee = anchor
-
-    pcall(function() bb.Parent = game:GetService("CoreGui") end)
-    if not bb.Parent then bb.Parent = PlayerGui end
-    activeTrainerESP[name] = { billboard = bb, label = lbl, pos = pos, anchor = anchor }
-end
-
--- Pre-register trainers
-task.spawn(function()
-    task.wait(1)
-    for tName, tPos in pairs(BaseTrainers or {}) do
-        createTrainerESP("[Base Trainer] " .. tName, tPos, Color3.fromRGB(168, 85, 247))
-    end
-    for tName, tPos in pairs(SuperTrainers or {}) do
-        createTrainerESP("[Super Trainer] " .. tName, tPos, Color3.fromRGB(168, 85, 247))
-    end
-    for tName, tPos in pairs(SubclassTrainers or {}) do
-        createTrainerESP("[Subclass] " .. tName, tPos, Color3.fromRGB(168, 85, 247))
-    end
-end)
-
+-- 5. MASTER ESP UPDATE LOOP
 registerConnection(RunService.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
-    local localRoot = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
+    local localRoot = char and char:FindFirstChild("HumanoidRootPart")
     if not localRoot then return end
-    local localPos = localRoot.Position
 
     -- A. Player ESP Updates
     local pEspEnabled = Toggles.PlayerESP and Toggles.PlayerESP.Value
     local pMaxDist = Options.PlayerESPMaxDist and Options.PlayerESPMaxDist.Value or 3500
-    local pColor = (Options.PlayerESPColor and Options.PlayerESPColor.Value) or Color3.fromRGB(6, 182, 212)
     for p, data in pairs(activePlayerESP) do
         if data.Billboard then
             local pChar = p.Character
-            local pRoot = pChar and (pChar:FindFirstChild("HumanoidRootPart") or pChar:FindFirstChild("Torso"))
+            local pRoot = pChar and pChar:FindFirstChild("HumanoidRootPart")
             local pHum = pChar and pChar:FindFirstChildOfClass("Humanoid")
             if pEspEnabled and pRoot and pHum and pHum.Health > 0 then
-                local dist = (localPos - pRoot.Position).Magnitude
+                local dist = (localRoot.Position - pRoot.Position).Magnitude
                 if dist <= pMaxDist then
                     local hpPct = math.clamp(pHum.Health / math.max(1, pHum.MaxHealth), 0, 1)
                     local hpColor = hpPct > 0.5 and Color3.fromRGB(80, 255, 120) or (hpPct > 0.25 and Color3.fromRGB(255, 200, 50) or Color3.fromRGB(255, 70, 70))
                     data.InfoLabel.Text = string.format("%d%% HP [%d/%d] • %dm", math.floor(hpPct * 100), math.floor(pHum.Health), math.floor(pHum.MaxHealth), math.floor(dist))
                     data.InfoLabel.TextColor3 = hpColor
-                    if data.NameLabel then data.NameLabel.TextColor3 = pColor end
                     data.Billboard.Enabled = true
                 else
                     data.Billboard.Enabled = false
@@ -8105,37 +8054,14 @@ registerConnection(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- B. Class Trainer ESP Updates
-    local trainerEspEnabled = Toggles.Trainer_ESP and Toggles.Trainer_ESP.Value
-    local trainerMaxDist = Options.Trainer_ESPMaxDist and Options.Trainer_ESPMaxDist.Value or 4000
-    local trainerColor = (Options.TrainerESPColor and Options.TrainerESPColor.Value) or Color3.fromRGB(168, 85, 247)
-    for name, data in pairs(activeTrainerESP) do
-        if data.billboard then
-            if trainerEspEnabled then
-                local dist = (localPos - data.pos).Magnitude
-                if dist <= trainerMaxDist then
-                    data.label.TextColor3 = trainerColor
-                    data.label.Text = string.format("%s [%dm]", name, math.floor(dist))
-                    data.billboard.Enabled = true
-                else
-                    data.billboard.Enabled = false
-                end
-            else
-                data.billboard.Enabled = false
-            end
-        end
-    end
-
-    -- C. General NPC ESP Updates
+    -- B. NPC ESP Updates
     local npcEspEnabled = Toggles.NPC_ESP and Toggles.NPC_ESP.Value
     local npcMaxDist = Options.NPC_ESPMaxDist and Options.NPC_ESPMaxDist.Value or 2500
-    local npcColor = (Options.NPCESPColor and Options.NPCESPColor.Value) or Color3.fromRGB(251, 191, 36)
     for m, data in pairs(activeNpcESP) do
         if data.billboard and data.head and data.head.Parent then
             if npcEspEnabled then
-                local dist = (localPos - data.head.Position).Magnitude
+                local dist = (localRoot.Position - data.head.Position).Magnitude
                 if dist <= npcMaxDist then
-                    data.label.TextColor3 = npcColor
                     data.label.Text = string.format("[NPC] %s [%dm]", data.name, math.floor(dist))
                     data.billboard.Enabled = true
                 else
@@ -8147,16 +8073,14 @@ registerConnection(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- D. Location / Waypoint ESP Updates
+    -- C. Location ESP Updates
     local locEspEnabled = Toggles.Location_ESP and Toggles.Location_ESP.Value
     local locMaxDist = Options.Location_ESPMaxDist and Options.Location_ESPMaxDist.Value or 6000
-    local locColor = (Options.LocationESPColor and Options.LocationESPColor.Value) or Color3.fromRGB(34, 197, 94)
     for name, data in pairs(activeLocationESP) do
         if data.billboard then
             if locEspEnabled then
-                local dist = (localPos - data.pos).Magnitude
+                local dist = (localRoot.Position - data.pos).Magnitude
                 if dist <= locMaxDist then
-                    data.label.TextColor3 = locColor
                     data.label.Text = string.format("[POI] %s [%dm]", data.name, math.floor(dist))
                     data.billboard.Enabled = true
                 else
@@ -8168,12 +8092,11 @@ registerConnection(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- E. Ingredient & Ore ESP Updates
-    local crylightEnabled = Toggles.ESP_Crylight and Toggles.ESP_Crylight.Value
-    local oreEnabled = Toggles.ESP_Ore and Toggles.ESP_Ore.Value
-    local cryColor = (Options.CrylightESPColor and Options.CrylightESPColor.Value) or Color3.fromRGB(56, 189, 248)
-    local oreColor = (Options.OreESPColor and Options.OreESPColor.Value) or Color3.fromRGB(245, 158, 11)
-    local maxDist = Options.ESP_MaxDistance and Options.ESP_MaxDistance.Value or 3000
+    -- D. Ingredient & Ore ESP Updates
+    local espEnabled = Toggles.MasterESP and Toggles.MasterESP.Value
+    local filterMode = Options.ESPFilterMode and Options.ESPFilterMode.Value or "All"
+    local showDist = Toggles.ESPShowDistance and Toggles.ESPShowDistance.Value
+    local maxDist = Options.ESPMaxDistance and Options.ESPMaxDistance.Value or 10000
     local whitelist = (Options.ESPWhitelist and Options.ESPWhitelist.Value) or {}
 
     for inst, data in pairs(activeESP) do
@@ -8181,26 +8104,26 @@ registerConnection(RunService.RenderStepped:Connect(function()
             removeESP(inst)
         else
             local isVisible = false
-            local curCol = data.color
-            local isCrylight = (data.name == "Crylight" or data.name:find("Crylight"))
-            local isOre = (data.name:find("Ore") or data.name:find("Ferrus") or data.name:find("Iron") or data.name:find("Gold") or data.name:find("Carnelian"))
-
-            if isCrylight and crylightEnabled then
-                isVisible = true
-                curCol = cryColor
-            elseif isOre and oreEnabled then
-                isVisible = true
-                curCol = oreColor
-            elseif (crylightEnabled or oreEnabled) and whitelist[data.name] then
-                isVisible = true
+            if espEnabled then
+                if not (data.name == "Crylight" and isBlacklistedCrylight(inst)) then
+                    if filterMode == "All" then
+                        isVisible = true
+                    elseif filterMode == "CrylightOnly" and data.name == "Crylight" then
+                        isVisible = true
+                    elseif filterMode == "Whitelist" and whitelist[data.name] then
+                        isVisible = true
+                    end
+                end
             end
 
             if isVisible then
                 local pos = inst:GetPivot().Position
-                local dist = (localPos - pos).Magnitude
+                local dist = (localRoot.Position - pos).Magnitude
                 if dist <= maxDist then
-                    data.label.Text = string.format("%s [%dm]", data.name, math.floor(dist))
-                    data.label.TextColor3 = curCol
+                    local text = data.name
+                    if showDist then text = string.format("%s [%dm]", data.name, math.floor(dist)) end
+                    data.label.Text = text
+                    data.label.TextColor3 = data.color
                     data.billboard.Enabled = true
                 else
                     data.billboard.Enabled = false
@@ -8229,7 +8152,6 @@ for _, desc in ipairs(workspace:GetDescendants()) do
         createNpcESP(desc)
     end
 end
-
 local Window = ZeroLib:CreateWindow({
     Title = "ARCANE LINEAGE",
     Size = UDim2.new(0, 680, 0, 480),
@@ -9194,7 +9116,1023 @@ ESPGroup:AddSlider("ESP_MaxDistance", {
     Rounding = 0,
 })
 
+-- 6. Filters & Categories
+FilterGroup:AddDropdown("ESPFilterMode", {
+    Values = { "All", "CrylightOnly", "Whitelist" },
+    Default = 1,
+    Multi = false,
+    Text = "Filter Mode",
+})
+
+FilterGroup:AddDropdown("ESPWhitelist", {
+    Values = { "Crylight", "Aestic", "Everthorn", "Laneus", "Ferrus Ore", "Iron Ore", "Gold Ore", "Carnelian Ore" },
+    Default = {},
+    Multi = true,
+    Text = "Custom Whitelist Items",
+})
+
+local QOLGroup = Tabs.Visuals:AddRightGroupbox("Quality of Life (QOL)")
+
+QOLGroup:AddToggle("ShowEnemyStatusHUD", {
+    Text = "Show Enemies Status HUD",
+    Default = false,
+    Tooltip = "Hiển thị bảng trạng thái thời gian thực của quái trong trận: HP, Energy, Chiêu thức, Cooldown và Energy cần dùng",
+})
+
+QOLGroup:AddToggle("ShowEnemyStatusHead", {
+    Text = "Show Enemies Status Over Head",
+    Default = false,
+    Tooltip = "Hiển thị bảng thông tin chi tiết trên đầu quái vật đang tham chiến: Máu, Energy, Skill đã dùng và Cooldown",
+})
+
+QOLGroup:AddToggle("RevealRealHpMana", {
+    Text = "Reveal Real HP / Mana",
+    Default = false,
+    Tooltip = "Hiển thị chính xác chỉ số HP và Mana/Energy thật của bản thân thay vì dấu ???",
+})
+
+QOLGroup:AddToggle("RevealUnidentified", {
+    Text = "Reveal Unidentified Items",
+    Default = false,
+    Tooltip = "Giải mã hiển thị trước tên thật, Enchant, Tier và toàn bộ chỉ số (+Stats/Dmg/Def) của trang bị chưa giám định trong túi đồ",
+})
+
+QOLGroup:AddToggle("AntiAFK", {
+    Text = "Built-in Anti-AFK Engine",
+    Default = false,
+    Tooltip = "Chống tự động ngắt kết nối (Disconnection / Kick) sau 20 phút treo máy",
+})
+
+local FPSGroup = Tabs.Visuals:AddRightGroupbox("FPS Booster")
+local OptGroup = Tabs.Visuals:AddRightGroupbox("Optimization & RAM")
+
+QOLGroup:AddToggle("EnemyAttackPredictor", {
+    Text = "Enemy Skill Predictor & Combat HUD",
+    Default = false,
+    Tooltip = "Hiển thị bảng phân tích dự đoán chiêu thức tiếp theo của quái, thanh Energy thời gian thực và bắt chiêu ngay khi quái vung đòn",
+})
+
+Toggles.EnemyAttackPredictor:OnChanged(function()
+    if Toggles.EnemyAttackPredictor.Value then
+        EnemyPredictor.start()
+    else
+        EnemyPredictor.stop()
+    end
+end)
+
+QOLGroup:AddToggle("PredictorWorldESP", {
+    Text = "Show Predictor On Enemy Heads (ESP)",
+    Default = false,
+    Tooltip = "Hiển thị thanh Energy & Chiêu dự đoán trực tiếp dạng Billboard trên đầu quái vật",
+})
+
+QOLGroup:AddToggle("PredictorSoundAlert", {
+    Text = "Sound Alert On Danger Skills",
+    Default = false,
+    Tooltip = "Phát chuông cảnh báo âm thanh khi boss/quái bắt đầu tung chiêu nguy hiểm (Magma Pillar, Inferno, v.v.)",
+})
+
+QOLGroup:AddDivider()
+
+QOLGroup:AddToggle("BypassNoPainHP", {
+    Text = "Reveal 'I Feel No Pain' HP & Mana",
+    Default = false,
+    Tooltip = "Reveals exact numerical Health and Mana/Energy bars when obscured by Trial I Feel No Pain",
+})
+
+QOLGroup:AddToggle("RevealUnidentified", {
+    Text = "Reveal Unidentified Items",
+    Default = false,
+    Tooltip = "Reveals the true real names and stats of all unidentified equipment and items in your inventory",
+})
+
+local FPSBooster = {
+    originalFogEnd = (Lighting and Lighting.FogEnd) or 100000,
+    originalFogStart = (Lighting and Lighting.FogStart) or 0,
+    originalGlobalShadows = (Lighting and Lighting.GlobalShadows) or true,
+    originalBrightness = (Lighting and Lighting.Brightness) or 2,
+    originalAmbient = (Lighting and Lighting.Ambient) or Color3.fromRGB(0, 0, 0),
+    originalOutdoorAmbient = (Lighting and Lighting.OutdoorAmbient) or Color3.fromRGB(128, 128, 128),
+    originalShadowSoftness = (Lighting and Lighting.ShadowSoftness) or 0.2,
+}
+
+local OptimizationState = {
+    extremeActive = false,
+    extremeConnection = nil,
+    lowGraphicsActive = false,
+    lowGraphicsConnection = nil,
+    removeTreesActive = false,
+    removeTreesConnection = nil,
+}
+
+-- 1. XỬ LÝ ẨN CÂY CỐI & THẢM THỰC VẬT (REMOVE TREES / FOLIAGE / GRASS)
+local function applyPartTreeRemoval(obj, hideTrees)
+    if not obj then return end
+    local name = obj.Name:lower()
+    local isTreeFoliage = name:find("tree") or name:find("bush") or name:find("leaf") or name:find("leaves")
+        or name:find("foliage") or name:find("grass") or name:find("plant") or name:find("flora")
+        or name:find("canopy") or name:find("trunk") or name:find("vine") or name:find("wood")
+
+    if obj:IsA("Model") and isTreeFoliage and not obj:FindFirstChildOfClass("Humanoid") and not obj:FindFirstChild("ClickDetector") then
+        for _, p in ipairs(obj:GetDescendants()) do
+            if p:IsA("BasePart") then
+                p.Transparency = hideTrees and 1 or 0
+                p.CastShadow = not hideTrees
+                p.CanCollide = not hideTrees
+            end
+        end
+    elseif obj:IsA("BasePart") and isTreeFoliage and not (LocalPlayer.Character and obj:IsDescendantOf(LocalPlayer.Character)) then
+        obj.Transparency = hideTrees and 1 or 0
+        obj.CastShadow = not hideTrees
+        obj.CanCollide = not hideTrees
+    end
+end
+
+local function applyTreeRemoval()
+    task.spawn(function()
+        pcall(function()
+            local hideTrees = Toggles.RemoveTrees and Toggles.RemoveTrees.Value or false
+            OptimizationState.removeTreesActive = hideTrees
+
+            -- Quét thư mục rác MapGarbage & toàn bộ workspace
+            local mapGarbage = workspace:FindFirstChild("MapGarbage")
+            if mapGarbage then
+                local treeGarb = mapGarbage:FindFirstChild("TreeGarbage")
+                if treeGarb then
+                    for _, m in ipairs(treeGarb:GetDescendants()) do
+                        if m:IsA("BasePart") then
+                            m.Transparency = hideTrees and 1 or 0
+                            m.CastShadow = not hideTrees
+                        end
+                    end
+                end
+            end
+
+            for _, obj in ipairs(workspace:GetDescendants()) do
+                applyPartTreeRemoval(obj, hideTrees)
+            end
+
+            if hideTrees then
+                if not OptimizationState.removeTreesConnection then
+                    OptimizationState.removeTreesConnection = workspace.DescendantAdded:Connect(function(child)
+                        if OptimizationState.removeTreesActive then
+                            task.defer(function()
+                                applyPartTreeRemoval(child, true)
+                            end)
+                        end
+                    end)
+                    registerConnection(OptimizationState.removeTreesConnection)
+                end
+            else
+                if OptimizationState.removeTreesConnection then
+                    OptimizationState.removeTreesConnection:Disconnect()
+                    OptimizationState.removeTreesConnection = nil
+                end
+            end
+        end)
+    end)
+end
+
+-- 2. XỬ LÝ ĐỒ HỌA MƯỢT & TẮT PARTICLE (LOW GRAPHICS)
+local function applyPartLowGraphics(p, isLow)
+    if not p then return end
+    if LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character) then return end
+
+    if p:IsA("BasePart") then
+        if isLow then
+            p.Material = Enum.Material.SmoothPlastic
+            p.Reflectance = 0
+            p.CastShadow = false
+        end
+    elseif p:IsA("MeshPart") then
+        if isLow then
+            p.Material = Enum.Material.SmoothPlastic
+            p.Reflectance = 0
+            p.CastShadow = false
+            p.TextureID = ""
+        end
+    elseif p:IsA("SpecialMesh") then
+        if isLow then
+            p.TextureId = ""
+        end
+    elseif p:IsA("Decal") or p:IsA("Texture") then
+        if isLow then
+            p.Transparency = 1
+        end
+    elseif p:IsA("SurfaceAppearance") then
+        if isLow then
+            p:Destroy()
+        end
+    elseif p:IsA("ParticleEmitter") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") or p:IsA("Trail") or p:IsA("Beam") or p:IsA("Highlight") then
+        p.Enabled = not isLow
+    elseif p:IsA("PointLight") or p:IsA("SpotLight") or p:IsA("SurfaceLight") then
+        p.Enabled = not isLow
+    end
+end
+
+local function applyLowGraphics()
+    task.spawn(function()
+        pcall(function()
+            local isLow = Toggles.LowGraphics and Toggles.LowGraphics.Value or false
+            OptimizationState.lowGraphicsActive = isLow
+
+            if isLow then
+                pcall(function() settings().Rendering.QualityLevel = 1 end)
+                local terrain = workspace:FindFirstChildOfClass("Terrain")
+                if terrain then
+                    terrain.Decoration = false
+                end
+            end
+
+            for _, p in ipairs(workspace:GetDescendants()) do
+                applyPartLowGraphics(p, isLow)
+            end
+
+            if isLow then
+                if not OptimizationState.lowGraphicsConnection then
+                    OptimizationState.lowGraphicsConnection = workspace.DescendantAdded:Connect(function(child)
+                        if OptimizationState.lowGraphicsActive then
+                            task.defer(function()
+                                applyPartLowGraphics(child, true)
+                            end)
+                        end
+                    end)
+                    registerConnection(OptimizationState.lowGraphicsConnection)
+                end
+            else
+                if OptimizationState.lowGraphicsConnection then
+                    OptimizationState.lowGraphicsConnection:Disconnect()
+                    OptimizationState.lowGraphicsConnection = nil
+                end
+            end
+        end)
+    end)
+end
+
+-- 3. XỬ LÝ MASTER FPS BOOST (XÓA SƯƠNG MÙ / HIỆU ỨNG ÁNH SÁNG)
+local function applyFPSBoost()
+    task.spawn(function()
+        pcall(function()
+            local isBoost = Toggles.EnableFPSBoost and Toggles.EnableFPSBoost.Value
+            if isBoost then
+                Lighting.GlobalShadows = false
+                Lighting.FogEnd = 9e9
+                Lighting.FogStart = 9e9
+                Lighting.ShadowSoftness = 0
+
+                local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+                if atmosphere then
+                    atmosphere.Density = 0
+                    atmosphere.Haze = 0
+                    atmosphere.Glare = 0
+                end
+
+                for _, effect in ipairs(Lighting:GetChildren()) do
+                    if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") then
+                        effect.Enabled = false
+                    end
+                end
+
+                local terrain = workspace:FindFirstChildOfClass("Terrain")
+                if terrain then
+                    terrain.Decoration = false
+                    terrain.WaterWaveSize = 0
+                    terrain.WaterWaveSpeed = 0
+                    terrain.WaterReflectance = 0
+                end
+            else
+                Lighting.GlobalShadows = FPSBooster.originalGlobalShadows or true
+                Lighting.FogEnd = FPSBooster.originalFogEnd or 100000
+                Lighting.FogStart = FPSBooster.originalFogStart or 0
+                Lighting.ShadowSoftness = FPSBooster.originalShadowSoftness or 0.2
+                local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
+                if atmosphere then
+                    atmosphere.Density = 0.3
+                end
+            end
+        end)
+    end)
+end
+
+-- 4. XỬ LÝ EXTREME FPS BOOSTER (POTATO MODE TOÀN DIỆN - KHÔNG TẮT 3D RENDER)
+local function applyExtremePart(p)
+    if not p then return end
+    if p:IsA("BasePart") then
+        p.Material = Enum.Material.SmoothPlastic
+        p.Reflectance = 0
+        p.CastShadow = false
+    elseif p:IsA("MeshPart") then
+        p.Material = Enum.Material.SmoothPlastic
+        p.Reflectance = 0
+        p.CastShadow = false
+        p.TextureID = ""
+    elseif p:IsA("SpecialMesh") then
+        p.TextureId = ""
+    elseif p:IsA("Decal") or p:IsA("Texture") then
+        p.Transparency = 1
+    elseif p:IsA("SurfaceAppearance") then
+        p:Destroy()
+    elseif p:IsA("ParticleEmitter") or p:IsA("Trail") or p:IsA("Beam") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") or p:IsA("Highlight") or p:IsA("Explosion") then
+        p.Enabled = false
+    elseif p:IsA("PointLight") or p:IsA("SpotLight") or p:IsA("SurfaceLight") then
+        p.Enabled = false
+    elseif p:IsA("PostEffect") or p:IsA("BloomEffect") or p:IsA("BlurEffect") or p:IsA("SunRaysEffect") or p:IsA("DepthOfFieldEffect") or p:IsA("ColorCorrectionEffect") or p:IsA("Atmosphere") or p:IsA("Clouds") then
+        p.Enabled = false
+    end
+end
+
+local function applyExtremeFPSBoost()
+    task.spawn(function()
+        pcall(function()
+            local isExtreme = (Toggles.FPSBoost and Toggles.FPSBoost.Value) or (Toggles.ExtremeFPSBoost and Toggles.ExtremeFPSBoost.Value) or false
+            OptimizationState.extremeActive = isExtreme
+
+            if isExtreme then
+                -- A. Cấu hình Engine Renderer & GPU Settings thấp nhất tuyệt đối
+                pcall(function() settings().Rendering.QualityLevel = 1 end)
+                pcall(function() sethiddenproperty(Lighting, "Technology", Enum.Technology.Compatibility) end)
+
+                -- B. Triệt tiêu toàn bộ hiệu ứng ánh sáng / sương mù / bóng đổ
+                Lighting.GlobalShadows = false
+                Lighting.FogEnd = 9e9
+                Lighting.FogStart = 9e9
+                Lighting.Brightness = 1
+                Lighting.ShadowSoftness = 0
+                Lighting.ClockTime = 14
+                Lighting.Ambient = Color3.fromRGB(130, 130, 130)
+                Lighting.OutdoorAmbient = Color3.fromRGB(130, 130, 130)
+
+                for _, effect in ipairs(Lighting:GetChildren()) do
+                    if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("Atmosphere") or effect:IsA("Clouds") then
+                        effect.Enabled = false
+                    end
+                end
+
+                -- C. Triệt tiêu toàn bộ thảm thực vật & cây cối
+                local mapGarbage = workspace:FindFirstChild("MapGarbage")
+                if mapGarbage then
+                    local treeGarb = mapGarbage:FindFirstChild("TreeGarbage")
+                    if treeGarb then
+                        for _, m in ipairs(treeGarb:GetDescendants()) do
+                            if m:IsA("BasePart") then
+                                m.Transparency = 1
+                                m.CastShadow = false
+                                m.CanCollide = false
+                            end
+                        end
+                    end
+                end
+
+                -- D. Triệt tiêu Terrain Water & Decorations
+                local terrain = workspace:FindFirstChildOfClass("Terrain")
+                if terrain then
+                    terrain.Decoration = false
+                    terrain.WaterWaveSize = 0
+                    terrain.WaterWaveSpeed = 0
+                    terrain.WaterReflectance = 0
+                    terrain.WaterTransparency = 0
+                end
+
+                -- E. Quét toàn bộ vật thể trong Workspace
+                for _, obj in ipairs(workspace:GetDescendants()) do
+                    applyExtremePart(obj)
+                    applyPartTreeRemoval(obj, true)
+                end
+
+                -- F. Lắng nghe vật thể mới sinh ra và lập tức ép về dạng Potato
+                if not OptimizationState.extremeConnection then
+                    OptimizationState.extremeConnection = workspace.DescendantAdded:Connect(function(child)
+                        if OptimizationState.extremeActive then
+                            task.defer(function()
+                                applyExtremePart(child)
+                                applyPartTreeRemoval(child, true)
+                            end)
+                        end
+                    end)
+                    registerConnection(OptimizationState.extremeConnection)
+                end
+
+                -- G. Dọn dẹp bộ nhớ RAM
+                collectgarbage("collect")
+                Library:Notify("🔥 Extreme Potato FPS Mode (Max FPS) Activated!", 3)
+            else
+                if OptimizationState.extremeConnection then
+                    OptimizationState.extremeConnection:Disconnect()
+                    OptimizationState.extremeConnection = nil
+                end
+
+                Lighting.GlobalShadows = FPSBooster.originalGlobalShadows or true
+                Lighting.FogEnd = FPSBooster.originalFogEnd or 100000
+                Lighting.FogStart = FPSBooster.originalFogStart or 0
+                Lighting.Brightness = FPSBooster.originalBrightness or 2
+                Lighting.Ambient = FPSBooster.originalAmbient or Color3.fromRGB(0, 0, 0)
+                Lighting.OutdoorAmbient = FPSBooster.originalOutdoorAmbient or Color3.fromRGB(128, 128, 128)
+                Lighting.ShadowSoftness = FPSBooster.originalShadowSoftness or 0.2
+
+                applyFPSBoost()
+                Library:Notify("Extreme FPS Booster Deactivated.", 3)
+            end
+        end)
+    end)
+end
+
+ESPGroup:AddToggle("MasterESP", {
+    Text = "Enable Ingredient ESP",
+    Default = false,
+})
+
+ESPGroup:AddToggle("ESPShowDistance", {
+    Text = "Show Distance [..m]",
+    Default = false,
+})
+
+ESPGroup:AddSlider("ESPMaxDistance", {
+    Text = "Max Distance (Studs)",
+    Default = 10000,
+    Min = 500,
+    Max = 20000,
+    Rounding = 0,
+})
+
+FilterGroup:AddDropdown("ESPFilterMode", {
+    Values = { "All", "CrylightOnly", "Whitelist" },
+    Default = 1,
+    Multi = false,
+    Text = "Filter Mode",
+})
+
+FilterGroup:AddDropdown("ESPWhitelist", {
+    Values = {
+        "Crylight", "Cryastem", "Hightail", "Everthistle",
+        "7 Leafed Everthistle", "Carnastool", "Driproot", "Cursed Shroom", "Cursed Shroom 2",
+        "Mushrooms", "Bones", "Branch Pile", "Ferrus", "Aestic", "Laneus"
+    },
+    Default = {},
+    Multi = true,
+    Text = "Whitelist Selection",
+})
+
+FPSGroup:AddToggle("FPSBoost", {
+    Text = "🔥 FPS Boost (Potato Mode)",
+    Default = false,
+    Tooltip = " Tối đa hóa FPS kịch khung: Ép Smooth Plastic, xóa Decal/Texture/Light, ẩn cây cối thảm thực vật, tắt Particles/Shadows/Fog (KHÔNG tắt 3D Render).",
+    Callback = function(val)
+        applyExtremeFPSBoost()
+    end,
+})
+
+FPSGroup:AddSlider("FPSCap", {
+    Text = "Max FPS Cap",
+    Default = 360,
+    Min = 30,
+    Max = 360,
+    Rounding = 0,
+    Callback = function(val)
+        if setfpscap then
+            setfpscap(val)
+        end
+    end
+})
+
+OptGroup:AddToggle("AntiAFK", {
+    Text = "Built-in Anti-AFK (20m Kick Bypass)",
+    Default = false,
+    Tooltip = "Tự động gửi tín hiệu chống ngắt kết nối khi treo máy AFK 24/7",
+})
+
+OptGroup:AddButton(" Instant Clean RAM / Garbage", function()
+    collectgarbage("collect")
+    Library:Notify("RAM / Garbage Collection executed!", 3)
+end)
+
+OptGroup:AddButton(" Remove All Fog Permanently", function()
+    Lighting.FogEnd = 9e9
+    Lighting.FogStart = 9e9
+    local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
+    if atmo then atmo.Density = 0 end
+    Library:Notify("All Fog & Haze removed!", 3)
+end)
+
+-- -----------------------------------------------------------------------------
+-- TAB 6: SETTINGS / CONFIG
+-- -----------------------------------------------------------------------------
+
 -- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- TAB: DISCORD WEBHOOK INTEGRATION & NOTIFICATIONS
+-- -----------------------------------------------------------------------------
+local WebhookConfigGroup = Tabs.Webhook:AddLeftGroupbox("Webhook Configuration")
+local WebhookActionsGroup = Tabs.Webhook:AddRightGroupbox("Webhook Testing & Actions")
+
+WebhookConfigGroup:AddInput("DiscordWebhook", {
+    Default = "",
+    Numeric = false,
+    Finished = false,
+    Text = "Primary Discord Webhook URL",
+    Tooltip = "Nhập URL Webhook Discord để nhận thông báo tự động khi tìm thấy Server Corrupt, Boss Drops hoặc nhặt nguyên liệu",
+    Placeholder = "https://discord.com/api/webhooks/...",
+})
+
+WebhookConfigGroup:AddInput("YarthulWebhook", {
+    Default = "",
+    Numeric = false,
+    Finished = false,
+    Text = "Yar'thul Boss Webhook (Optional)",
+    Tooltip = "Link Webhook riêng cho Boss Yar'thul (để trống sẽ dùng Primary Webhook URL)",
+    Placeholder = "https://discord.com/api/webhooks/...",
+})
+
+WebhookConfigGroup:AddDivider()
+
+WebhookConfigGroup:AddToggle("YarthulSendWebhook", {
+    Text = "Enable Yar'thul Boss Drop Alerts",
+    Default = false,
+    Tooltip = "Tự động gửi thông báo Discord Embed chi tiết danh sách tất cả vật phẩm rơi (Loot Drops) nhận được vào kho đồ sau khi diệt Boss Yar'thul",
+})
+
+WebhookConfigGroup:AddToggle("NotifyOnHarvest", {
+    Text = "Send Alerts on Ingredient/Ore Harvest",
+    Default = false,
+    Tooltip = "Tự động gửi thông báo Discord mỗi khi nhặt được nguyên liệu / khoáng sản quý",
+})
+
+WebhookConfigGroup:AddToggle("CorruptPingRole", {
+    Text = "Webhook Ping @everyone on Corrupt Server",
+    Default = false,
+    Tooltip = "Gắn thẻ @everyone khi gửi thông báo tìm thấy Corrupt Server qua Discord",
+})
+
+WebhookActionsGroup:AddButton({
+    Text = "Send Test General Webhook",
+    Tooltip = "Bấm để gửi 1 tin nhắn kiểm tra tới Webhook Discord của bạn",
+    Func = function()
+        local wh = Options.DiscordWebhook and Options.DiscordWebhook.Value
+        if not wh or wh == "" then
+            wh = Options.YarthulWebhook and Options.YarthulWebhook.Value
+        end
+        if not wh or wh == "" then
+            Library:Notify({
+                Title = "Webhook Error",
+                Content = "Vui lòng nhập URL Discord Webhook trước khi kiểm tra!",
+                Type = "Error"
+            })
+            return
+        end
+        sendGeneralWebhook(
+            "Test Webhook Notification",
+            "Webhook Discord dang hoat dong hoan hao tren Arcane Lineage Hub!",
+            65280,
+            {
+                { name = "Nguoi choi", value = LocalPlayer.Name, inline = true },
+                { name = "User ID", value = tostring(LocalPlayer.UserId), inline = true },
+                { name = "Trang thai", value = "San sang hoat dong", inline = false }
+            }
+        )
+        Library:Notify({
+            Title = "Webhook Sent",
+            Content = "Da gui thong bao Test Webhook thanh cong!",
+            Type = "Success"
+        })
+    end,
+})
+
+WebhookActionsGroup:AddButton({
+    Text = "Send Test Yar'thul Boss Webhook",
+    Tooltip = "Gửi thử 1 thông báo Discord Webhook mô phỏng nhận Drop Boss Yar'thul",
+    Func = function()
+        local wh = Options.YarthulWebhook and Options.YarthulWebhook.Value
+        if not wh or wh == "" then
+            wh = Options.DiscordWebhook and Options.DiscordWebhook.Value
+        end
+        if not wh or wh == "" then
+            Library:Notify({
+                Title = "Webhook Error",
+                Content = "Vui lòng nhập URL Discord Webhook trước!",
+                Type = "Error"
+            })
+            return
+        end
+        AutoYarthul.sendWebhook("Test")
+        Library:Notify({
+            Title = "Webhook Sent",
+            Content = "Da gui thong bao Test Yar'thul Drop!",
+            Type = "Success"
+        })
+    end,
+})
+
+WebhookActionsGroup:AddButton({
+    Text = "Send Test Corrupt Server Webhook",
+    Tooltip = "Gửi thử 1 thông báo Discord Webhook mô phỏng tìm thấy Corrupt Server",
+    Func = function()
+        local evName = "Sandstorm (Desert)"
+        if Options.CorruptEvent and Options.CorruptEvent.Value then
+            evName = Options.CorruptEvent.Value
+        end
+        sendCorruptServerWebhook(evName)
+        Library:Notify({
+            Title = "Webhook Sent",
+            Content = "Da gui thong bao Test Corrupt Server!",
+            Type = "Success"
+        })
+    end,
+})
+
+-- SETTINGS & CONFIGURATION ENGINE (ZEROLIB v2.7)
+-- =============================================================================
+local ThemeGroup = Tabs.Settings:AddLeftGroupbox("Theme & Visual Appearance")
+
+ThemeGroup:AddDropdown("ThemeSelect", {
+    Text = "Select UI Color Theme",
+    Values = {"Cyber-Tactical Cyan", "Crimson Bloodline", "Midnight Violet", "Emerald Glass"},
+    Default = "Cyber-Tactical Cyan",
+    Callback = function(themeName)
+        if themeName == "Crimson Bloodline" then ZeroLib:SetTheme("Crimson")
+        elseif themeName == "Cyber-Tactical Cyan" then ZeroLib:SetTheme("CyberCyan")
+        elseif themeName == "Midnight Violet" then ZeroLib:SetTheme("MidnightViolet")
+        elseif themeName == "Emerald Glass" then ZeroLib:SetTheme("EmeraldGlass")
+        end
+        ZeroLib:Notify({
+            Title = "Theme Applied",
+            Content = "Đã áp dụng giao diện: " .. themeName,
+            Type = "Success"
+        })
+    end
+})
+
+local MenuGroup = Tabs.Settings:AddRightGroupbox("Menu Settings")
+
+local function unloadHub()
+    hubLog("[ArcaneHub]  Đang tiến hành Unload toàn bộ script và giải phóng tài nguyên...")
+    HubState.running = false
+    if Farmer then Farmer.running = false end
+    if AutoFight then AutoFight.stop() end
+    if AutoYarthul then AutoYarthul.stop(true) end
+    if LevelFarmer then LevelFarmer.running = false end
+    if Miner then Miner.running = false end
+    if FlightController then FlightController.active = false end
+    if EnemyPredictor then EnemyPredictor.stop() end
+    if CorruptHunter then CorruptHunter.stop() end
+    if ServerHopper then ServerHopper.isHopping = false end
+
+    for _, conn in ipairs(HubState.connections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    HubState.connections = {}
+
+    if AntiAFK and AntiAFK.connections then
+        for _, conn in ipairs(AntiAFK.connections) do
+            pcall(function() conn:Disconnect() end)
+        end
+        AntiAFK.connections = {}
+    end
+
+    if activeESP then
+        for inst, data in pairs(activeESP) do
+            pcall(function() data.billboard:Destroy() end)
+        end
+        activeESP = {}
+    end
+
+    pcall(function()
+        local char = LocalPlayer.Character
+        if char then
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then part.CanCollide = true end
+            end
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.PlatformStand = false; hum.WalkSpeed = 16 end
+        end
+    end)
+
+    pcall(function() Library:Unload() end)
+    shared.ArcaneHub = nil
+    globalEnv._ArcaneHubRunning = nil
+    globalEnv._ArcaneHubInitLock = nil
+    hubLog("[ArcaneHub] Da Unload sach se 100%!")
+end
+
+MenuGroup:AddButton("Unload Script", function()
+    unloadHub()
+end)
+
+MenuGroup:AddToggle("AutoLoadOnChangingServer", {
+    Text = "Auto Load on Changing Server",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            local queued = queueTeleportScript()
+            if queued then
+                Library:Notify({ Title = "Auto Load", Content = "Đã nạp Teleport Queue!", Type = "Success" })
+            else
+                Library:Notify({ Title = "Warning", Content = "Executor không hỗ trợ queue_on_teleport!", Type = "Warning" })
+            end
+        end
+    end
+})
+
+local menuBindLabel = MenuGroup:AddLabel("Menu Keybind")
+local menuKeybind = menuBindLabel:AddKeyPicker("MenuKeybind", {
+    Default = "End",
+    NoUI = true,
+    Text = "Menu keybind",
+    Callback = function(key)
+        ZeroLib:SetToggleKey(key)
+    end
+})
+if menuKeybind and menuKeybind.OnChanged then
+    menuKeybind:OnChanged(function(key)
+        ZeroLib:SetToggleKey(key)
+    end)
+end
+
+local ConfigGroup = Tabs.Settings:AddLeftGroupbox("Configuration Manager")
+
+local configDropdown = ConfigGroup:AddDropdown("ConfigList", {
+    Text = "Select Saved Config",
+    Values = ZeroLib.ConfigManager:GetConfigs(),
+    Default = 1,
+    Callback = function(selectedName)
+        if ZeroLib.Options.ConfigName then
+            ZeroLib.Options.ConfigName:SetValue(selectedName)
+        end
+    end
+})
+
+ConfigGroup:AddInput("ConfigName", {
+    Text = "Config Profile Name",
+    Placeholder = "my_profile",
+    Default = "default",
+    Callback = function(val) end
+})
+
+ConfigGroup:AddButton({
+    Text = "Save Configuration",
+    Func = function()
+        local name = ZeroLib.Options.ConfigName and ZeroLib.Options.ConfigName.Value or "default"
+        if name == "" then name = "default" end
+        ZeroLib.ConfigManager:Save(name)
+        configDropdown:SetValues(ZeroLib.ConfigManager:GetConfigs())
+    end
+})
+
+ConfigGroup:AddButton({
+    Text = "Load Configuration",
+    Func = function()
+        local name = ZeroLib.Options.ConfigName and ZeroLib.Options.ConfigName.Value or "default"
+        ZeroLib.ConfigManager:Load(name)
+    end
+})
+
+ConfigGroup:AddButton({
+    Text = "Refresh Configs List",
+    Func = function()
+        local fresh = ZeroLib.ConfigManager:GetConfigs()
+        configDropdown:SetValues(fresh)
+        ZeroLib:Notify({ Title = "Refreshed", Content = "Đã cập nhật danh sách configs (" .. #fresh .. " profiles)", Type = "Info" })
+    end
+})
+
+local AntiAFK = {
+    initialized = false,
+    connections = {},
+}
+
+local function initAntiAFK()
+    if AntiAFK.initialized then return end
+    AntiAFK.initialized = true
+
+    -- Lớp 1: Gỡ bỏ / Vô hiệu hóa kết nối Idled mặc định của Roblox CoreGui (nếu executor hỗ trợ getconnections)
+    pcall(function()
+        if getconnections then
+            for _, conn in ipairs(getconnections(LocalPlayer.Idled)) do
+                if conn.Disable then
+                    conn:Disable()
+                elseif conn.Disconnect then
+                    conn:Disconnect()
+                end
+            end
+        end
+    end)
+
+    -- Lớp 2: Lắng nghe sự kiện LocalPlayer.Idled và gửi tương tác ảo mô phỏng người dùng
+    local idledConn = registerConnection(LocalPlayer.Idled:Connect(function()
+        if HubState.running and Toggles.AntiAFK and Toggles.AntiAFK.Value then
+            pcall(function()
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new(0, 0))
+            end)
+        end
+    end))
+    table.insert(AntiAFK.connections, idledConn)
+
+    -- Lớp 3: Luồng nhịp tim (Heartbeat pulse) định kỳ mỗi 60 giây chủ động reset bộ đếm AFK
+    task.spawn(function()
+        while HubState.running do
+            task.wait(60)
+            if HubState.running and Toggles.AntiAFK and Toggles.AntiAFK.Value then
+                pcall(function()
+                    VirtualUser:CaptureController()
+                    VirtualUser:ClickButton2(Vector2.new(0, 0))
+                end)
+                pcall(function()
+                    local vim = game:GetService("VirtualInputManager")
+                    if vim then
+                        -- Safe virtual user click
+                VirtualUser:CaptureController()
+                VirtualUser:ClickButton2(Vector2.new(0, 0))
+                        task.wait(0.05)
+                        -- Heartbeat pulse complete
+                    end
+                end)
+            end
+        end
+    end)
+
+    hubLog("[AntiAFK] Built-in Anti-AFK Engine Initialized Successfully!")
+end
+
+initAntiAFK()
+
+-- =============================================================================
+-- QOL: REAL HP/MANA REVEAL & UNIDENTIFIED ITEMS REVEALER
+-- =============================================================================
+task.spawn(function()
+    local blueEnergyColor = Color3.fromRGB(106, 192, 242)
+    local RS = game:GetService("ReplicatedStorage")
+    local ItemModifiers = nil
+    pcall(function() ItemModifiers = require(RS.Libraries.ItemModifiers) end)
+
+    while HubState.running do
+        task.wait(0.25)
+        if not HubState.running then break end
+
+        -- 1. GIẢI MÃ VÀ HIỆN TÊN THẬT + FULL STATS KHI GIÁM ĐỊNH (UNIDENTIFIED REVEALER WITH STATS)
+        if Toggles.RevealUnidentified and Toggles.RevealUnidentified.Value then
+            pcall(function()
+                local pgui = PlayerGui
+                local inv = pgui and pgui:FindFirstChild("Inventory")
+                if inv then
+                    local invScript = inv:FindFirstChildWhichIsA("LocalScript", true)
+                    local itemDict = nil
+                    if invScript and getsenv and getupvalues then
+                        pcall(function()
+                            local env = getsenv(invScript)
+                            if env and env.newTile then
+                                local uvs = getupvalues(env.newTile)
+                                itemDict = uvs[6]
+                            end
+                        end)
+                    end
+
+                    local ItemRegistry = nil
+                    pcall(function() ItemRegistry = require(RS.ItemRegistry) end)
+
+                    for _, btn in ipairs(inv:GetDescendants()) do
+                        if btn:IsA("TextButton") and itemDict and itemDict[btn.Name] then
+                            local itemObj = itemDict[btn.Name]
+                            local itemData = itemObj and (itemObj.ItemData or itemObj)
+                            if itemData and itemData.Config and itemData.Config.Unidentified then
+                                local realName = itemData.Name or itemData.Tool
+                                if realName then
+                                    local statList = {}
+                                    local cfg = itemData.Config
+
+                                    if cfg.Enchant and tostring(cfg.Enchant) ~= "" then
+                                        table.insert(statList, "Enchant: " .. tostring(cfg.Enchant))
+                                    end
+                                    if cfg.Tier then
+                                        table.insert(statList, "T" .. tostring(cfg.Tier))
+                                    end
+
+                                    -- Quét chỉ số rolled stats từ Config
+                                    for k, v in pairs(cfg) do
+                                        if type(v) == "number" and v ~= 0 and k ~= "Unidentified" and k ~= "Tier" and k ~= "Cost" and k ~= "ID" then
+                                            table.insert(statList, string.format("+%d %s", v, tostring(k):sub(1, 3)))
+                                        elseif type(v) == "table" and tostring(k):lower():find("stat") then
+                                            for sk, sv in pairs(v) do
+                                                if type(sv) == "number" and sv ~= 0 then
+                                                    table.insert(statList, string.format("+%d %s", sv, tostring(sk):sub(1, 3)))
+                                                end
+                                            end
+                                        end
+                                    end
+
+                                    -- Quét chỉ số BaseStats từ ItemRegistry nếu có
+                                    if ItemRegistry and ItemRegistry.GetItem then
+                                        local regData = ItemRegistry:GetItem(realName:gsub(" ", ""))
+                                        if regData then
+                                            if regData.Stats and type(regData.Stats) == "table" then
+                                                for sk, sv in pairs(regData.Stats) do
+                                                    if type(sv) == "number" and sv ~= 0 then
+                                                        table.insert(statList, string.format("+%d %s", sv, tostring(sk):sub(1, 3)))
+                                                    end
+                                                end
+                                            end
+                                            if regData.Damage then table.insert(statList, string.format("%d Dmg", regData.Damage)) end
+                                            if regData.Defense then table.insert(statList, string.format("%d Def", regData.Defense)) end
+                                        end
+                                    end
+
+                                    local statsStr = #statList > 0 and (" [" .. table.concat(statList, ", ") .. "]") or ""
+                                    btn.Text = realName .. statsStr
+                                end
+                            end
+                        end
+                    end
+
+                    -- Giải mã luôn ToolTip khi di chuột vào món đồ chưa giám định
+                    local tooltip = inv:FindFirstChild("ToolTip", true)
+                    if tooltip and tooltip.Visible then
+                        local textLbl = tooltip:FindFirstChildWhichIsA("TextLabel", true)
+                        if textLbl and textLbl.Text:find("You have no idea what this does") then
+                            textLbl.Text = "[Real Item & Stats Revealed by Arcane Hub]"
+                        end
+                    end
+
+                    local advTooltip = inv:FindFirstChild("AdvancedTooltip", true)
+                    if advTooltip and advTooltip.Visible then
+                        local descLbl = advTooltip:FindFirstChild("Desc")
+                        if descLbl and descLbl:IsA("TextLabel") and descLbl.Text:find("You have no idea what this does") then
+                            local nameLbl = advTooltip:FindFirstChild("ItemName")
+                            local realItemName = nameLbl and nameLbl.Text:gsub(" ", "")
+                            if realItemName and ItemRegistry then
+                                local regData = ItemRegistry:GetItem(realItemName)
+                                if regData then
+                                    local descText = (regData.GearDesc and (regData.GearDesc .. " | ") or "") .. (regData.ToolTip or "")
+                                    descLbl.Text = "[Stats Revealed] " .. descText
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+
+        -- 2. GIẢI MÃ VÀ HIỆN MANA/ENERGY THẬT (REAL ENERGY / MANA)
+        pcall(function()
+            local char = LocalPlayer.Character
+            local pgui = PlayerGui
+            local combatGui = pgui and pgui:FindFirstChild("Combat")
+            local holder = combatGui and combatGui:FindFirstChild("Holder")
+            if char and holder then
+                local status = char:FindFirstChild("Status")
+                local energyVal = status and status:FindFirstChild("Energy")
+                if energyVal then
+                    local curEnergy = energyVal.Value
+                    local maxEnergy = energyVal.MaxValue or 6
+
+                    -- Cập nhật chữ CurrentEnergy.Amount (VD: 1/6 thay vì ???)
+                    local currentEnergyFrame = holder:FindFirstChild("CurrentEnergy")
+                    local energyAmountLabel = currentEnergyFrame and currentEnergyFrame:FindFirstChild("Amount")
+                    if energyAmountLabel and energyAmountLabel:IsA("TextLabel") then
+                        if energyAmountLabel.Text == "???" or energyAmountLabel.Text:find("%?") then
+                            energyAmountLabel.Text = string.format("%d/%d", curEnergy, maxEnergy)
+                        end
+                    end
+
+                    -- Cập nhật các ô vạch Energy xanh sáng
+                    local energyBarsContainer = holder:FindFirstChild("Energy")
+                    if energyBarsContainer then
+                        for i = 1, maxEnergy do
+                            local bar = energyBarsContainer:FindFirstChild(tostring(i))
+                            if bar and bar:IsA("GuiObject") then
+                                bar.BackgroundColor3 = blueEnergyColor
+                                if i <= curEnergy then
+                                    bar.Visible = true
+                                else
+                                    bar.Visible = false
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+-- KHỞI CHẠY CHU TRÌNH TỰ ĐỘNG & LƯU GLOBAL STATE
+-- =============================================================================
+globalEnv._ArcaneHubRunning = true
+shared.ArcaneHub = {
+    Unload = unloadHub,
+    Library = Library,
+}
+
+if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then
+    Farmer.runCycle()
+end
+if Toggles.AutoMineOre and Toggles.AutoMineOre.Value then
+    Miner.runCycle()
+end
+if Toggles.AutoFarmLevel and Toggles.AutoFarmLevel.Value then
+    LevelFarmer.runCycle()
+end
+if AutoYarthul then
+    AutoYarthul.checkSessionOnBoot()
+end-- =============================================================================
 -- ENEMY STATUS & SKILL COOLDOWN MONITOR (QOL VISUAL SUITE)
 -- =============================================================================
 local EnemyStatusEngine = {
@@ -9209,7 +10147,6 @@ local EnemyStatusEngine = {
     currentDecidingEnemy = nil,
 }
 
--- Khởi tạo Cache dữ liệu Kỹ năng và NPC từ ReplicatedStorage
 local function initEnemyStatusData()
     pcall(function()
         local skillsMod = ReplicatedStorage:FindFirstChild("Constants") and ReplicatedStorage.Constants:FindFirstChild("Skills")
@@ -9237,7 +10174,6 @@ local function initEnemyStatusData()
 end
 initEnemyStatusData()
 
--- Lắng nghe AttackIndicate từ Server để bắt chiêu quái đang chuẩn bị ra
 pcall(function()
     local fightRemotes = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Fight")
     if fightRemotes then
@@ -9260,7 +10196,6 @@ pcall(function()
     end
 end)
 
--- Tạo Giao diện HUD trên màn hình
 local function createEnemyStatusScreenHUD()
     if EnemyStatusEngine.gui then return EnemyStatusEngine.gui end
 
@@ -9284,7 +10219,7 @@ local function createEnemyStatusScreenHUD()
     uiCorner.Parent = mainFrame
 
     local uiStroke = Instance.new("UIStroke")
-    uiStroke.Color = Color3.fromRGB(6, 182, 212) -- Cyan border
+    uiStroke.Color = Color3.fromRGB(6, 182, 212)
     uiStroke.Thickness = 1.5
     uiStroke.Parent = mainFrame
 
@@ -9315,7 +10250,6 @@ local function createEnemyStatusScreenHUD()
     contentLabel.RichText = true
     contentLabel.Parent = mainFrame
 
-    -- Kéo thả HUD
     local dragging, dragInput, dragStart, startPos
     mainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -9351,7 +10285,6 @@ local function createEnemyStatusScreenHUD()
     return sg
 end
 
--- Tính toán phân tích chiêu thức, mana/energy và cooldown cho quái vật
 local function analyzeEnemyStatus(enemyModel)
     if not enemyModel or not enemyModel.Parent then return nil end
 
@@ -9414,7 +10347,6 @@ local function analyzeEnemyStatus(enemyModel)
     }
 end
 
--- Vòng lặp cập nhật Enemy Status
 function EnemyStatusEngine.start()
     if EnemyStatusEngine.running then return end
     EnemyStatusEngine.running = true
@@ -9432,7 +10364,6 @@ function EnemyStatusEngine.start()
                     hud.Visible = false
                 end
 
-                -- Lọc quái vật CHÍNH XÁC trong trận đấu của người chơi
                 local activeEnemies = {}
                 local living = workspace:FindFirstChild("Living")
                 local char = LocalPlayer.Character
@@ -9461,7 +10392,6 @@ function EnemyStatusEngine.start()
                     end
                 end
 
-                -- Xây dựng nội dung hiển thị HUD
                 local hudLines = {}
                 local now = os.clock()
                 if EnemyStatusEngine.lastIndicatedSkill and (now - EnemyStatusEngine.lastIndicatedTime < 2.5) then
@@ -9490,7 +10420,6 @@ function EnemyStatusEngine.start()
                             table.insert(hudLines, "")
                         end
 
-                        -- Cập nhật Billboard trên đầu quái
                         if Toggles.ShowEnemyStatusHead and Toggles.ShowEnemyStatusHead.Value then
                             local head = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
                             if head then
@@ -9593,3 +10522,5 @@ function EnemyStatusEngine.stop()
 end
 
 EnemyStatusEngine.start()
+
+
