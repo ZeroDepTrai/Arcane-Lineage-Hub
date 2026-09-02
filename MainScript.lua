@@ -6012,8 +6012,8 @@ function AutoYarthul.stop(explicit)
     Library:Notify(" Auto Farm Yar'thul Stopped!", 3)
 end
 
-local isSummonTurnActive = false
-local currentTurnSkills = {}
+HubState.HubState.isSummonTurnActive = false
+HubState.currentTurnSkills = {}
 
 pcall(function()
     local rep = game:GetService("ReplicatedStorage")
@@ -6025,22 +6025,22 @@ pcall(function()
         local startSummon = fightRemotes:FindFirstChild("StartSummonedAction")
         if startSummon and startSummon:IsA("RemoteEvent") then
             startSummon.OnClientEvent:Connect(function()
-                isSummonTurnActive = true
+                HubState.isSummonTurnActive = true
             end)
         end
 
         local startAction = fightRemotes:FindFirstChild("StartAction")
         if startAction and startAction:IsA("RemoteEvent") then
             startAction.OnClientEvent:Connect(function()
-                isSummonTurnActive = false
+                HubState.isSummonTurnActive = false
             end)
         end
 
         local endFight = fightRemotes:FindFirstChild("EndFight")
         if endFight and endFight:IsA("RemoteEvent") then
             endFight.OnClientEvent:Connect(function()
-                isSummonTurnActive = false
-                table.clear(currentTurnSkills)
+                HubState.isSummonTurnActive = false
+                table.clear(HubState.currentTurnSkills)
             end)
         end
     end
@@ -6050,7 +6050,7 @@ pcall(function()
         if updateSkills and updateSkills:IsA("RemoteEvent") then
             updateSkills.OnClientEvent:Connect(function(skillsList)
                 if type(skillsList) == "table" then
-                    currentTurnSkills = skillsList
+                    HubState.currentTurnSkills = skillsList
                 end
             end)
         end
@@ -6078,7 +6078,7 @@ local function executeDirectRemoteTurn()
     local subAction = (Options.CombatSubAction and Options.CombatSubAction.Value) or "None"
 
     -- 1. Authoritative Summon Turn Detection
-    local isSummon = isSummonTurnActive
+    local isSummon = HubState.isSummonTurnActive
     if not isSummon and combatGui then
         local deciding = combatGui:FindFirstChild("Deciding")
         if deciding and deciding.Visible then
@@ -6157,8 +6157,8 @@ local function executeDirectRemoteTurn()
 
     -- 3. Determine available skills for this unit
     local activeSkillNames = {}
-    if #currentTurnSkills > 0 then
-        for _, s in ipairs(currentTurnSkills) do
+    if #HubState.currentTurnSkills > 0 then
+        for _, s in ipairs(HubState.currentTurnSkills) do
             if s ~= "Gate" and s ~= "Summon" then
                 table.insert(activeSkillNames, s)
             end
