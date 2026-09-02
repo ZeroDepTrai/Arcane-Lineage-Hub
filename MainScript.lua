@@ -7874,47 +7874,50 @@ task.spawn(function()
                 end
             end)
         end
-        
+
         -- 2. GIẢI MÃ VÀ HIỆN MANA/ENERGY THẬT (REAL ENERGY / MANA)
-                if char and holder then
-                    local status = char:FindFirstChild("Status")
-                    local energyVal = status and status:FindFirstChild("Energy")
-                    if energyVal then
-                        local curEnergy = energyVal.Value
-                        local maxEnergy = energyVal.MaxValue or 6
+        pcall(function()
+            local char = LocalPlayer.Character
+            local pgui = PlayerGui
+            local combatGui = pgui and pgui:FindFirstChild("Combat")
+            local holder = combatGui and combatGui:FindFirstChild("Holder")
+            if char and holder then
+                local status = char:FindFirstChild("Status")
+                local energyVal = status and status:FindFirstChild("Energy")
+                if energyVal then
+                    local curEnergy = energyVal.Value
+                    local maxEnergy = energyVal.MaxValue or 6
 
-                        -- Cập nhật chữ CurrentEnergy.Amount (VD: 1/6 thay vì ???)
-                        local currentEnergyFrame = holder:FindFirstChild("CurrentEnergy")
-                        local energyAmountLabel = currentEnergyFrame and currentEnergyFrame:FindFirstChild("Amount")
-                        if energyAmountLabel and energyAmountLabel:IsA("TextLabel") then
-                            if energyAmountLabel.Text == "???" or energyAmountLabel.Text:find("%?") then
-                                energyAmountLabel.Text = string.format("%d/%d", curEnergy, maxEnergy)
-                            end
+                    -- Cập nhật chữ CurrentEnergy.Amount (VD: 1/6 thay vì ???)
+                    local currentEnergyFrame = holder:FindFirstChild("CurrentEnergy")
+                    local energyAmountLabel = currentEnergyFrame and currentEnergyFrame:FindFirstChild("Amount")
+                    if energyAmountLabel and energyAmountLabel:IsA("TextLabel") then
+                        if energyAmountLabel.Text == "???" or energyAmountLabel.Text:find("%?") then
+                            energyAmountLabel.Text = string.format("%d/%d", curEnergy, maxEnergy)
                         end
+                    end
 
-                        -- Cập nhật các ô vạch Energy xanh sáng
-                        local energyBarsContainer = holder:FindFirstChild("Energy")
-                        if energyBarsContainer then
-                            for i = 1, maxEnergy do
-                                local bar = energyBarsContainer:FindFirstChild(tostring(i))
-                                if bar and bar:IsA("GuiObject") then
-                                    bar.BackgroundColor3 = blueEnergyColor
-                                    if i <= curEnergy then
-                                        bar.Visible = true
-                                    else
-                                        bar.Visible = false
-                                    end
+                    -- Cập nhật các ô vạch Energy xanh sáng
+                    local energyBarsContainer = holder:FindFirstChild("Energy")
+                    if energyBarsContainer then
+                        for i = 1, maxEnergy do
+                            local bar = energyBarsContainer:FindFirstChild(tostring(i))
+                            if bar and bar:IsA("GuiObject") then
+                                bar.BackgroundColor3 = blueEnergyColor
+                                if i <= curEnergy then
+                                    bar.Visible = true
+                                else
+                                    bar.Visible = false
                                 end
                             end
                         end
                     end
                 end
-            end)
-        end
+            end
+        end)
     end
 end)
 
--- =============================================================================
 -- KHỞI CHẠY CHU TRÌNH TỰ ĐỘNG & LƯU GLOBAL STATE
 -- =============================================================================
 globalEnv._ArcaneHubRunning = true
