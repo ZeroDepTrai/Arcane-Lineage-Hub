@@ -4936,7 +4936,6 @@ end
 
 -- 6. UNIVERSAL AUTO-ACCEPT & LOOT NOTIFICATION HOOK ENGINE
 local AutoAcceptEngine = {
-    installed = false,
     keywords = { "accept", "accpet", "acc", "yes", "confirm", "ok", "take", "roll", "claim", "agree", "equip", "loot" },
 }
 
@@ -5005,11 +5004,9 @@ local function handleNotification(data)
     end)
 end
 
-function AutoYarthul.hookLootRemote()
-    if AutoAcceptEngine.installed or shared.ArcaneSetCoreHookInstalled then return end
-    AutoAcceptEngine.installed = true
-    shared.ArcaneSetCoreHookInstalled = true
+shared.ArcaneHandleNotification = handleNotification
 
+function AutoYarthul.hookLootRemote()
     -- 1. Direct Server ItemDrop Hook (ReplicatedStorage.Remotes.Information.ItemDrop)
     pcall(function()
         local remotes = ReplicatedStorage:FindFirstChild("Remotes")
@@ -5043,6 +5040,9 @@ function AutoYarthul.hookLootRemote()
         end
     end)
 
+    if shared.ArcaneSetCoreHookInstalled then return end
+    shared.ArcaneSetCoreHookInstalled = true
+
     -- 2. Hook game __namecall on StarterGui:SetCore("SendNotification")
     pcall(function()
         if hookmetamethod then
@@ -5053,7 +5053,9 @@ function AutoYarthul.hookLootRemote()
 
                 if (self == StarterGui or tostring(self) == "StarterGui") and (method == "SetCore" or method == "setCore") then
                     if args[1] == "SendNotification" and type(args[2]) == "table" then
-                        handleNotification(args[2])
+                        if shared.ArcaneHandleNotification then
+                            shared.ArcaneHandleNotification(args[2])
+                        end
                     end
                 end
 
@@ -5068,7 +5070,9 @@ function AutoYarthul.hookLootRemote()
             local oldSetCore
             oldSetCore = hookfunction(StarterGui.SetCore, function(self, coreName, data, ...)
                 if (coreName == "SendNotification" or tostring(coreName) == "SendNotification") and type(data) == "table" then
-                    handleNotification(data)
+                    if shared.ArcaneHandleNotification then
+                        shared.ArcaneHandleNotification(data)
+                    end
                 end
                 return oldSetCore(self, coreName, data, ...)
             end)
