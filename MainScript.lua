@@ -2637,142 +2637,378 @@ function ZeroLib:CreateWindow(config)
 end
 
 -- =============================================================================
--- CONFIG SYSTEM
+-- LINORIA-STYLE SAVE & CONFIG MANAGER
 -- =============================================================================
-local ConfigManager = { Folder = "arcane_configs" }
+local SaveManager = {
+    Folder = "arcane_configs",
+    Ignore = {},
+    AutoloadLabel = nil
+}
 
-function ConfigManager:Init()
-    if makefolder and not isfolder(self.Folder) then
-        pcall(makefolder, self.Folder)
+function SaveManager:SetFolder(folder)
+    self.Folder = folder
+    self:BuildFolderTree()
+end
+
+function SaveManager:BuildFolderTree()
+    if makefolder then
+        if not isfolder(self.Folder) then pcall(makefolder, self.Folder) end
+        if not isfolder(self.Folder .. "/settings") then pcall(makefolder, self.Folder .. "/settings") end
     end
 end
 
-function ConfigManager:Save(name, isSilent)
-    self:Init()
-    local safeName = (name and name ~= "") and name or "default"
-    local data = { Toggles = {}, Options = {} }
-
-    for k, v in pairs(ZeroLib.Toggles) do
-        data.Toggles[k] = v.Value
+function SaveManager:SetIgnoreIndexes(list)
+    for _, key in ipairs(list) do
+        self.Ignore[key] = true
     end
+end
 
-    for k, v in pairs(ZeroLib.Options) do
-        if v.Type == "Slider" or v.Type == "Input" or v.Type == "Dropdown" then
-            data.Options[k] = v.Value
-        elseif v.Type == "Keybind" then
-            data.Options[k] = v.Value.Name
-        elseif v.Type == "ColorPicker" then
-            data.Options[k] = v.Value:ToHex()
+function SaveManager:Save(name)
+    if not name or name:gsub("%s+", "") == "" then
+        return false, "invalid config name"
+    end
+    self:BuildFolderTree()
+
+    local data = { Toggles = {}, Options = {}, objects = {} }
+
+    for idx, toggle in pairs(ZeroLib.Toggles) do
+        if not self.Ignore[idx] then
+            data.Toggles[idx] = toggle.Value
+            table.insert(data.objects, { type = "Toggle", idx = idx, value = toggle.Value })
         end
     end
 
-    local json = HttpService:JSONEncode(data)
+    for idx, option in pairs(ZeroLib.Options) do
+        if not self.Ignore[idx] then
+            if option.Type == "Slider" or option.Type == "Input" or option.Type == "Dropdown" then
+                data.Options[idx] = option.Value
+                table.insert(data.objects, { type = option.Type, idx = idx, value = option.Value })
+            elseif option.Type == "Keybind" or option.Type == "KeyPicker" then
+                local kName = (typeof(option.Value) == "EnumItem") and option.Value.Name or tostring(option.Value)
+                data.Options[idx] = kName
+                table.insert(data.objects, { type = "KeyPicker", idx = idx, key = kName })
+            elseif option.Type == "ColorPicker" then
+                local hex = option.Value:ToHex()
+                data.Options[idx] = hex
+                table.insert(data.objects, { type = "ColorPicker", idx = idx, value = hex })
+            end
+        end
+    end
+
+    local ok, encoded = pcall(HttpService.JSONEncode, HttpService, data)
+    if not ok then return false, "json encode error" end
+
+    local fullPath = self.Folder .. "/settings/" .. name .. ".json"
     if writefile then
-        writefile(self.Folder .. "/" .. safeName .. ".json", json)
-        if not isSilent then
-            ZeroLib:Notify({ Title = "Config Saved", Content = "Đã lưu config: " .. safeName, Type = "Success" })
-        end
+        writefile(fullPath, encoded)
+        return true
     end
+    return false, "executor missing writefile"
 end
 
-function ConfigManager:Load(name, isSilent)
-    self:Init()
-    local safeName = (name and name ~= "") and name or "default"
-    local path = self.Folder .. "/" .. safeName .. ".json"
-    if readfile and isfile and isfile(path) then
-        local json = readfile(path)
-        local ok, data = pcall(HttpService.JSONDecode, HttpService, json)
-        if ok and data then
-            if data.Toggles then
-                for k, v in pairs(data.Toggles) do
-                    if ZeroLib.Toggles[k] then
-                        pcall(function() ZeroLib.Toggles[k]:SetValue(v) end)
-                    end
-                end
-            end
-            if data.Options then
-                for k, v in pairs(data.Options) do
-                    if ZeroLib.Options[k] then
-                        pcall(function()
-                            if ZeroLib.Options[k].Type == "Keybind" then
-                                local key = Enum.KeyCode[v] or Enum.KeyCode.Unknown
-                                ZeroLib.Options[k]:SetValue(key)
-                            elseif ZeroLib.Options[k].Type == "ColorPicker" then
-                                local col = Color3.fromHex(v)
-                                if col then ZeroLib.Options[k]:SetValue(col) end
-                            else
-                                ZeroLib.Options[k]:SetValue(v)
-                            end
-                        end)
-                    end
-                end
-            end
-            if not isSilent then
-                ZeroLib:Notify({ Title = "Config Loaded", Content = "Đã nạp config: " .. safeName, Type = "Success" })
-            end
-            return true
-        end
-    else
-        if not isSilent then
-            ZeroLib:Notify({ Title = "Config Error", Content = "Không tìm thấy file config: " .. safeName .. ".json", Type = "Error" })
+function SaveManager:Load(name)
+    if not name or name:gsub("%s+", "") == "" then
+        return false, "invalid config name"
+    end
+    self:BuildFolderTree()
+
+    local fullPath = self.Folder .. "/settings/" .. name .. ".json"
+    -- Fallback to legacy path if not in settings subfolder
+    if not (isfile and isfile(fullPath)) then
+        local legacyPath = self.Folder .. "/" .. name .. ".json"
+        if isfile and isfile(legacyPath) then
+            fullPath = legacyPath
         else
-            -- Tự động lưu cấu hình mặc định nếu chưa tồn tại
-            self:Save(safeName, true)
-            print("[ConfigManager] 📁 Đã tự động tạo config ban đầu: " .. safeName)
+            return false, "invalid file"
+        end
+    end
+
+    local raw = readfile(fullPath)
+    local ok, data = pcall(HttpService.JSONDecode, HttpService, raw)
+    if not ok or type(data) ~= "table" then return false, "json decode error" end
+
+    -- Support both Linoria objects array and Toggles/Options dictionary
+    if data.Toggles then
+        for k, v in pairs(data.Toggles) do
+            if ZeroLib.Toggles[k] and not self.Ignore[k] then
+                pcall(function() ZeroLib.Toggles[k]:SetValue(v) end)
+            end
+        end
+    end
+
+    if data.Options then
+        for k, v in pairs(data.Options) do
+            if ZeroLib.Options[k] and not self.Ignore[k] then
+                pcall(function()
+                    if ZeroLib.Options[k].Type == "Keybind" or ZeroLib.Options[k].Type == "KeyPicker" then
+                        local key = Enum.KeyCode[v] or Enum.KeyCode.Unknown
+                        ZeroLib.Options[k]:SetValue(key)
+                    elseif ZeroLib.Options[k].Type == "ColorPicker" then
+                        local col = Color3.fromHex(v)
+                        if col then ZeroLib.Options[k]:SetValue(col) end
+                    else
+                        ZeroLib.Options[k]:SetValue(v)
+                    end
+                end)
+            end
+        end
+    end
+
+    if data.objects then
+        for _, obj in ipairs(data.objects) do
+            if obj.type == "Toggle" and ZeroLib.Toggles[obj.idx] and not self.Ignore[obj.idx] then
+                pcall(function() ZeroLib.Toggles[obj.idx]:SetValue(obj.value) end)
+            elseif obj.type == "ColorPicker" and ZeroLib.Options[obj.idx] and not self.Ignore[obj.idx] then
+                pcall(function()
+                    local col = Color3.fromHex(obj.value)
+                    if col then ZeroLib.Options[obj.idx]:SetValue(col) end
+                end)
+            elseif (obj.type == "KeyPicker" or obj.type == "Keybind") and ZeroLib.Options[obj.idx] and not self.Ignore[obj.idx] then
+                pcall(function()
+                    local key = Enum.KeyCode[obj.key] or Enum.KeyCode.Unknown
+                    ZeroLib.Options[obj.idx]:SetValue(key)
+                end)
+            elseif ZeroLib.Options[obj.idx] and not self.Ignore[obj.idx] then
+                pcall(function() ZeroLib.Options[obj.idx]:SetValue(obj.value or obj.text) end)
+            end
+        end
+    end
+
+    return true
+end
+
+function SaveManager:Delete(name)
+    if not name or name == "" then return false end
+    self:BuildFolderTree()
+    local path = self.Folder .. "/settings/" .. name .. ".json"
+    if isfile and isfile(path) and delfile then
+        delfile(path)
+        -- If this was the autoload config, reset autoload
+        local autoName = self:GetAutoloadName()
+        if autoName == name then
+            self:ResetAutoload()
+        end
+        return true
+    end
+    return false
+end
+
+function SaveManager:RefreshConfigList()
+    self:BuildFolderTree()
+    local list = {}
+    if listfiles then
+        local scanPaths = { self.Folder .. "/settings", self.Folder }
+        for _, folder in ipairs(scanPaths) do
+            if isfolder and isfolder(folder) then
+                pcall(function()
+                    for _, p in ipairs(listfiles(folder)) do
+                        local fName = p:match("([^/\\]+)%.json$")
+                        if fName and not table.find(list, fName) then
+                            table.insert(list, fName)
+                        end
+                    end
+                end)
+            end
+        end
+    end
+    return #list > 0 and list or { "default" }
+end
+
+function SaveManager:GetAutoloadName()
+    self:BuildFolderTree()
+    local paths = { self.Folder .. "/settings/autoload.txt", self.Folder .. "/autoload.txt" }
+    for _, p in ipairs(paths) do
+        if isfile and isfile(p) and readfile then
+            local name = readfile(p):gsub("%s+", "")
+            if #name > 0 then return name end
+        end
+    end
+    return nil
+end
+
+function SaveManager:SetAutoload(name)
+    if not name or name == "" then return false end
+    self:BuildFolderTree()
+    -- Ensure file exists by saving current config if needed
+    local path = self.Folder .. "/settings/" .. name .. ".json"
+    if not (isfile and isfile(path)) then
+        self:Save(name)
+    end
+    if writefile then
+        writefile(self.Folder .. "/settings/autoload.txt", name)
+        if self.AutoloadLabel and self.AutoloadLabel.SetText then
+            self.AutoloadLabel:SetText("Current autoload config: " .. name)
+        end
+        return true
+    end
+    return false
+end
+
+function SaveManager:ResetAutoload()
+    self:BuildFolderTree()
+    local paths = { self.Folder .. "/settings/autoload.txt", self.Folder .. "/autoload.txt" }
+    for _, p in ipairs(paths) do
+        if isfile and isfile(p) and delfile then
+            pcall(delfile, p)
+        end
+    end
+    if self.AutoloadLabel and self.AutoloadLabel.SetText then
+        self.AutoloadLabel:SetText("Current autoload config: none")
+    end
+    return true
+end
+
+function SaveManager:LoadAutoloadConfig()
+    local name = self:GetAutoloadName()
+    if name then
+        local success, err = self:Load(name)
+        if success then
+            ZeroLib:Notify({ Title = "Auto Load", Content = string.format("Auto loaded config %q", name), Type = "Success" })
+            return true
+        else
+            -- If missing, auto-save default
+            self:Save(name)
+            return false
         end
     end
     return false
 end
 
-function ConfigManager:GetConfigs()
-    self:Init()
-    local list = {}
-    if listfiles then
-        pcall(function()
-            for _, p in ipairs(listfiles(self.Folder)) do
-                local fName = p:match("([^/\\]+)%.json$")
-                if fName then table.insert(list, fName) end
+function SaveManager:BuildConfigSection(groupbox)
+    self:BuildFolderTree()
+    self:SetIgnoreIndexes({ "SaveManager_ConfigName", "SaveManager_ConfigList" })
+
+    groupbox:AddInput("SaveManager_ConfigName", {
+        Text = "Config name",
+        Placeholder = "my_config",
+        Default = "default",
+        Callback = function(val) end
+    })
+
+    local configDropdown = groupbox:AddDropdown("SaveManager_ConfigList", {
+        Text = "Config list",
+        Values = self:RefreshConfigList(),
+        Default = 1,
+        Callback = function(val)
+            if ZeroLib.Options.SaveManager_ConfigName and val then
+                ZeroLib.Options.SaveManager_ConfigName:SetValue(val)
             end
-        end)
-    end
-    return #list > 0 and list or {"default"}
+        end
+    })
+
+    groupbox:AddDivider()
+
+    -- 1. Create config button
+    groupbox:AddButton({
+        Text = "Create config",
+        Func = function()
+            local name = ZeroLib.Options.SaveManager_ConfigName and ZeroLib.Options.SaveManager_ConfigName.Value or "default"
+            if name:gsub("%s+", "") == "" then
+                return ZeroLib:Notify({ Title = "Warning", Content = "Invalid config name (empty)", Type = "Warning" })
+            end
+            local success, err = self:Save(name)
+            if success then
+                ZeroLib:Notify({ Title = "Config Created", Content = string.format("Created config %q", name), Type = "Success" })
+                configDropdown:SetValues(self:RefreshConfigList())
+                configDropdown:SetValue(name)
+            else
+                ZeroLib:Notify({ Title = "Error", Content = "Failed to save config: " .. tostring(err), Type = "Error" })
+            end
+        end
+    })
+
+    -- 2. Load config button
+    groupbox:AddButton({
+        Text = "Load config",
+        Func = function()
+            local name = ZeroLib.Options.SaveManager_ConfigList and ZeroLib.Options.SaveManager_ConfigList.Value or (ZeroLib.Options.SaveManager_ConfigName and ZeroLib.Options.SaveManager_ConfigName.Value) or "default"
+            local success, err = self:Load(name)
+            if success then
+                ZeroLib:Notify({ Title = "Config Loaded", Content = string.format("Loaded config %q", name), Type = "Success" })
+            else
+                ZeroLib:Notify({ Title = "Error", Content = "Failed to load config: " .. tostring(err), Type = "Error" })
+            end
+        end
+    })
+
+    -- 3. Overwrite config button
+    groupbox:AddButton({
+        Text = "Overwrite config",
+        Func = function()
+            local name = ZeroLib.Options.SaveManager_ConfigList and ZeroLib.Options.SaveManager_ConfigList.Value or (ZeroLib.Options.SaveManager_ConfigName and ZeroLib.Options.SaveManager_ConfigName.Value) or "default"
+            local success, err = self:Save(name)
+            if success then
+                ZeroLib:Notify({ Title = "Config Overwritten", Content = string.format("Overwrote config %q", name), Type = "Success" })
+            else
+                ZeroLib:Notify({ Title = "Error", Content = "Failed to overwrite config: " .. tostring(err), Type = "Error" })
+            end
+        end
+    })
+
+    -- 4. Delete config button
+    groupbox:AddButton({
+        Text = "Delete config",
+        Func = function()
+            local name = ZeroLib.Options.SaveManager_ConfigList and ZeroLib.Options.SaveManager_ConfigList.Value or (ZeroLib.Options.SaveManager_ConfigName and ZeroLib.Options.SaveManager_ConfigName.Value)
+            if name then
+                local success = self:Delete(name)
+                if success then
+                    ZeroLib:Notify({ Title = "Config Deleted", Content = string.format("Deleted config %q", name), Type = "Info" })
+                    configDropdown:SetValues(self:RefreshConfigList())
+                end
+            end
+        end
+    })
+
+    -- 5. Refresh list button
+    groupbox:AddButton({
+        Text = "Refresh list",
+        Func = function()
+            local fresh = self:RefreshConfigList()
+            configDropdown:SetValues(fresh)
+            ZeroLib:Notify({ Title = "Refreshed", Content = string.format("Refreshed configs list (%d profiles)", #fresh), Type = "Info" })
+        end
+    })
+
+    groupbox:AddDivider()
+
+    -- 6. Set as autoload button
+    groupbox:AddButton({
+        Text = "Set as autoload",
+        Func = function()
+            local name = ZeroLib.Options.SaveManager_ConfigList and ZeroLib.Options.SaveManager_ConfigList.Value or (ZeroLib.Options.SaveManager_ConfigName and ZeroLib.Options.SaveManager_ConfigName.Value) or "default"
+            self:SetAutoload(name)
+            ZeroLib:Notify({ Title = "Autoload Set", Content = string.format("Set %q to auto load", name), Type = "Success" })
+        end
+    })
+
+    -- 7. Reset autoload button
+    groupbox:AddButton({
+        Text = "Reset autoload",
+        Func = function()
+            self:ResetAutoload()
+            ZeroLib:Notify({ Title = "Autoload Reset", Content = "Reset autoload config", Type = "Info" })
+        end
+    })
+
+    -- 8. Current autoload config label (exact Linoria layout)
+    local autoName = self:GetAutoloadName()
+    self.AutoloadLabel = groupbox:AddLabel("Current autoload config: " .. (autoName or "none"))
 end
 
-function ConfigManager:SetAutoLoad(name)
-    self:Init()
-    local safeName = (name and name ~= "") and name or "default"
-    
-    local path = self.Folder .. "/" .. safeName .. ".json"
-    if not (isfile and isfile(path)) then
-        self:Save(safeName, true)
-    end
+-- Backward compatibility aliases
+local ConfigManager = {
+    Folder = "arcane_configs",
+    Init = function(self) SaveManager:BuildFolderTree() end,
+    Save = function(self, name, silent) return SaveManager:Save(name) end,
+    Load = function(self, name, silent) return SaveManager:Load(name) end,
+    GetConfigs = function(self) return SaveManager:RefreshConfigList() end,
+    SetAutoLoad = function(self, name) return SaveManager:SetAutoload(name) end,
+    ClearAutoLoad = function(self) return SaveManager:ResetAutoload() end,
+    GetAutoLoad = function(self) return SaveManager:GetAutoloadName() end
+}
 
-    if writefile then
-        writefile(self.Folder .. "/autoload.txt", safeName)
-        ZeroLib:Notify({ Title = "Auto Load Config", Content = "Đã đặt auto load cho profile: " .. safeName, Type = "Success" })
-    end
-end
-
-function ConfigManager:ClearAutoLoad()
-    self:Init()
-    if isfile and isfile(self.Folder .. "/autoload.txt") and delfile then
-        delfile(self.Folder .. "/autoload.txt")
-        ZeroLib:Notify({ Title = "Auto Load Config", Content = "Đã tắt tính năng Auto Load Config", Type = "Info" })
-    elseif writefile then
-        writefile(self.Folder .. "/autoload.txt", "")
-    end
-end
-
-function ConfigManager:GetAutoLoad()
-    self:Init()
-    local path = self.Folder .. "/autoload.txt"
-    if readfile and isfile and isfile(path) then
-        local name = readfile(path):gsub("%s+", "")
-        if #name > 0 then return name end
-    end
-    return nil
-end
-
+ZeroLib.SaveManager = SaveManager
 ZeroLib.ConfigManager = ConfigManager
 
 return ZeroLib
@@ -9907,82 +10143,8 @@ if menuKeybind and menuKeybind.OnChanged then
     end)
 end
 
-local ConfigGroup = Tabs.Settings:AddLeftGroupbox("Configuration Manager")
-
-local configDropdown = ConfigGroup:AddDropdown("ConfigList", {
-    Text = "Select Saved Config",
-    Values = ZeroLib.ConfigManager:GetConfigs(),
-    Default = 1,
-    Callback = function(selectedName)
-        if ZeroLib.Options.ConfigName then
-            ZeroLib.Options.ConfigName:SetValue(selectedName)
-        end
-    end
-})
-
-ConfigGroup:AddInput("ConfigName", {
-    Text = "Config Profile Name",
-    Placeholder = "my_profile",
-    Default = "default",
-    Callback = function(val) end
-})
-
-ConfigGroup:AddButton({
-    Text = "Save Configuration",
-    Func = function()
-        local name = ZeroLib.Options.ConfigName and ZeroLib.Options.ConfigName.Value or "default"
-        if name == "" then name = "default" end
-        ZeroLib.ConfigManager:Save(name, false)
-        configDropdown:SetValues(ZeroLib.ConfigManager:GetConfigs())
-    end
-})
-
-ConfigGroup:AddButton({
-    Text = "Load Configuration",
-    Func = function()
-        local name = ZeroLib.Options.ConfigName and ZeroLib.Options.ConfigName.Value or "default"
-        ZeroLib.ConfigManager:Load(name, false)
-    end
-})
-
-ConfigGroup:AddButton({
-    Text = "Refresh Configs List",
-    Func = function()
-        local fresh = ZeroLib.ConfigManager:GetConfigs()
-        configDropdown:SetValues(fresh)
-        ZeroLib:Notify({ Title = "Refreshed", Content = "Đã cập nhật danh sách configs (" .. #fresh .. " profiles)", Type = "Info" })
-    end
-})
-
-ConfigGroup:AddDivider()
-
-local currentAutoLoad = ZeroLib.ConfigManager:GetAutoLoad()
-local autoLoadToggle = ConfigGroup:AddToggle("AutoLoadConfig", {
-    Text = "Auto Load Selected Config on Boot",
-    Default = (currentAutoLoad ~= nil and currentAutoLoad ~= ""),
-    Tooltip = "Tự động lưu và nạp cấu hình đã chọn mỗi khi khởi chạy script",
-    Callback = function(val)
-        local name = ZeroLib.Options.ConfigName and ZeroLib.Options.ConfigName.Value or (ZeroLib.Options.ConfigList and ZeroLib.Options.ConfigList.Value) or "default"
-        if val then
-            ZeroLib.ConfigManager:Save(name, true)
-            ZeroLib.ConfigManager:SetAutoLoad(name)
-            configDropdown:SetValues(ZeroLib.ConfigManager:GetConfigs())
-        else
-            ZeroLib.ConfigManager:ClearAutoLoad()
-        end
-    end
-})
-
-ConfigGroup:AddButton({
-    Text = "Set Current Config as Auto Load",
-    Func = function()
-        local name = ZeroLib.Options.ConfigName and ZeroLib.Options.ConfigName.Value or (ZeroLib.Options.ConfigList and ZeroLib.Options.ConfigList.Value) or "default"
-        ZeroLib.ConfigManager:Save(name, true)
-        ZeroLib.ConfigManager:SetAutoLoad(name)
-        configDropdown:SetValues(ZeroLib.ConfigManager:GetConfigs())
-        if autoLoadToggle then autoLoadToggle:SetValue(true) end
-    end
-})
+local ConfigGroup = Tabs.Settings:AddLeftGroupbox("Configuration")
+ZeroLib.SaveManager:BuildConfigSection(ConfigGroup)
 
 local AntiAFK = {
     initialized = false,
@@ -10221,15 +10383,11 @@ if Toggles.AutoFarmLevel and Toggles.AutoFarmLevel.Value then
     LevelFarmer.runCycle()
 end
 
--- Tự động nạp cấu hình (Auto Load Config on Boot)
+-- LINORIA-STYLE AUTOLOAD CONFIG ON BOOT
 task.spawn(function()
     task.wait(0.5)
     pcall(function()
-        local autoCfg = ZeroLib.ConfigManager:GetAutoLoad()
-        if autoCfg and #autoCfg > 0 then
-            hubLog("[AutoLoad] 📂 Tự động nạp cấu hình mặc định:", autoCfg)
-            ZeroLib.ConfigManager:Load(autoCfg, true)
-        end
+        ZeroLib.SaveManager:LoadAutoloadConfig()
     end)
 end)
 
