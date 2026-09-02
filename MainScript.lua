@@ -4596,7 +4596,19 @@ local function scanPlayerSkills()
         ["Info"] = true, ["Template"] = true, ["Return"] = true, ["Shadow Form"] = true, ["SKILL NAME"] = true,
     }
 
-    -- 1. Scan from SkillDisplay (Player or Summon Active Skills)
+    local summonMovesWhitelist = {
+        ["Smack"] = true,
+        ["Bone Spray"] = true,
+        ["Self Destruct"] = true,
+        ["Rotten Swipe"] = true,
+        ["Shriek"] = true,
+        ["Double Slam"] = true,
+        ["Light Bolt"] = true,
+        ["Gale Uplift"] = true,
+        ["Sylph's Prayer"] = true,
+    }
+
+    -- 1. Scan from live SkillDisplay
     pcall(function()
         local skillDisplay = pgui and pgui:FindFirstChild("SkillDisplay")
         if skillDisplay then
@@ -4606,9 +4618,8 @@ local function scanPlayerSkills()
                     if (c:IsA("TextButton") or c:IsA("GuiButton") or c:IsA("TextLabel")) and not blacklist[c.Name] then
                         local name = c:IsA("TextButton") and c.Text or c.Name
                         if #name > 1 and not blacklist[name] then
-                            if name == "Smack" or name == "Bone Spray" or name == "Self Destruct" or name == "Rotten Swipe" then
+                            if summonMovesWhitelist[name] then
                                 skillSet[string.format("[Summon] %s", name)] = true
-                                skillSet[name] = true
                             else
                                 skillSet[name] = true
                                 HubState.knownPlayerSkills[name] = true
@@ -4633,9 +4644,8 @@ local function scanPlayerSkills()
                     local label = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
                     local sName = (label and label.Text ~= "" and label.Text) or btn.Name
                     if #sName > 1 and not blacklist[sName] then
-                        if sName == "Smack" or sName == "Bone Spray" or sName == "Self Destruct" or sName == "Rotten Swipe" then
+                        if summonMovesWhitelist[sName] then
                             skillSet[string.format("[Summon] %s", sName)] = true
-                            skillSet[sName] = true
                         else
                             skillSet[sName] = true
                             HubState.knownPlayerSkills[sName] = true
@@ -4656,8 +4666,14 @@ local function scanPlayerSkills()
         if skillSet[spellName] then
             for _, move in ipairs(moves) do
                 skillSet[string.format("[Summon] %s", move)] = true
-                skillSet[move] = true
             end
+        end
+    end
+
+    -- Clean up any bare summon moves that might have leaked into skillSet without [Summon] prefix
+    for sMove in pairs(summonMovesWhitelist) do
+        if skillSet[sMove] and not HubState.knownPlayerSkills[sMove] then
+            skillSet[sMove] = nil
         end
     end
 
@@ -7285,7 +7301,22 @@ local originalQTEFunctions = {}
 local qteHookInstalled = false
 
 local qteTargetHandlers = {
-    ["DodgeQTE"] = function(params) return { true, true } end,
+    ["DodgeQTE"] = function(params)
+        if type(params) == "table" then
+            local blockWin = tonumber(params.BlockWindow) or 1
+            local dodgeWin = tonumber(params.DodgeWindow) or 1
+            if dodgeWin > 0 and blockWin > 0 then
+                return { true, true } -- Perfect Dodge + Perfect Block
+            elseif dodgeWin > 0 and blockWin <= 0 then
+                return { false, true } -- Unblockable Attack -> Dodge Only
+            elseif blockWin > 0 and dodgeWin <= 0 then
+                return { true, false } -- Undodgeable / Block-Only Attack -> Block Only (Prevents server soft-lock)
+            else
+                return { true, false }
+            end
+        end
+        return { true, true }
+    end,
     ["YarthulQTE"] = function(params) return { true, 0 } end,
     ["ThorianQTE"] = function(params) return true end,
     ["SwordQTE"] = function(params) return true end,
