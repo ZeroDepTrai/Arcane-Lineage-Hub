@@ -9637,14 +9637,20 @@ local StatsGroup = Tabs.AutoFarm:AddRightGroupbox("Auto Stats Build & Cache")
 -- -----------------------------------------------------------------------------
 -- SUB-GROUP: AUTO BOSS YAR'THUL (THE BLAZING DRAGON)
 -- -----------------------------------------------------------------------------
-local YarthulGroup = Tabs.AutoFarm:AddRightGroupbox("🐉 Auto Boss: Yar'thul (Blazing Dragon)")
+local YarthulGroup = Tabs.AutoFarm:AddRightGroupbox("🐲 Auto Boss: Yar'thul (Blazing Dragon)")
 
 YarthulGroup:AddToggle("AutoFarmYarthul", {
     Text = "Enable Auto Farm & Retry Yar'thul",
     Default = false,
-    Tooltip = "Tự động kiểm tra vị trí Spawn trong Instance -> Tween tới Cổng Boss để Begin Fight -> Tự động đánh theo chiến thuật chuẩn (Ưu tiên 1: Sense Expansion xen kẽ dứt khoát không Meditate -> Ưu tiên 2: Carnage khi E>=3 & Carnage đã hồi CD & không có Flame Pillar dứt khoát không Meditate -> Ưu tiên 3: Strike kèm Meditate Sub-Action để nạp Energy) -> Tự động nhặt đồ, Hook SetCore Callback tự động Accept vào Roll Pool (0ms) & Tự động quét toàn bộ Drop mới vào kho đồ -> Tự động Retry lặp lại vô tận",
+    Tooltip = "Tự động kiểm tra vị trí Spawn trong Instance -> Tween tới cửa Boss để Begin Fight -> Tự động đánh theo chiến thuật chuẩn (Ưu tiên 1: Sense Expansion xen kẽ dứt khoát không Meditate -> Ưu tiên 2: Carnage khi E>=3 & Carnage đã hồi CD & KHÔNG có Flame Pillar dứt khoát không Meditate -> Ưu tiên 3: Strike kèm Meditate Sub-Action để nạp Energy) -> Tự động nhặt đồ, Hook SetCore Callback tự động Accept vào Roll Pool (0ms) & tự động quét toàn bộ Drop mới vào túi đồ -> Tự động Retry lặp lại vô tận",
     Callback = function(Value)
         if Value then
+            if Toggles.AutoFight and not Toggles.AutoFight.Value then
+                Toggles.AutoFight:SetValue(true)
+            end
+            if Options.SelectedCombatAction then
+                Options.SelectedCombatAction:SetValue("Auto Smart (Best Skill -> Strike)")
+            end
             AutoYarthul.start()
         else
             if not AutoYarthul.isRestoring then
@@ -9659,7 +9665,7 @@ YarthulGroup:AddLabel("📜 Strat: Sense (Alternating) > Carnage > Strike + Med"
 YarthulGroup:AddToggle("YarthulMeditateSubAction", {
     Text = "Use Meditate Sub-Action on Strike",
     Default = true,
-    Tooltip = "Tự động kích hoạt Sub-Action Meditate kèm sau đòn Strike để nạp nhanh Energy (Carnage và Sense Expansion được tung đòn dứt khoát KHÔNG kèm Meditate để tránh kết thúc lượt sớm hoặc trúng Flame Pillar)",
+    Tooltip = "Tự động kích hoạt Sub-Action Meditate kèm ngay sau đòn Strike để nạp nhanh Energy (Carnage và Sense Expansion được tung đòn dứt khoát không kèm Meditate để tránh kết thúc turn sớm hoặc trúng Flame Pillar)",
 })
 
 YarthulGroup:AddToggle("YarthulAutoLoot", {
@@ -9674,47 +9680,40 @@ YarthulGroup:AddSlider("YarthulTweenSpeed", {
     Min = 120,
     Max = 350,
     Rounding = 0,
-    Tooltip = "Tốc độ bay Sky-Tween tới cổng Mount Thul (mặc định 220 studs/s)",
+    Tooltip = "Tốc độ bay Sky-Tween tới cửa Mount Thul (mặc định 220 studs/s)",
 })
 
 YarthulGroup:AddToggle("YarthulSendWebhook", {
     Text = "Enable Discord Webhook",
     Default = true,
-    Tooltip = "Tự động gửi thông báo Discord Embed chi tiết danh sách tất cả vật phẩm rơi (Loot Drops) nhận được vào kho đồ sau khi diệt Boss Yar'thul",
+    Tooltip = "Gửi thông báo thống kê chi tiết vật phẩm rơi (Drops & Artifacts) sau khi diệt Boss Yar'thul",
 })
 
 YarthulGroup:AddInput("YarthulWebhook", {
     Default = "",
     Numeric = false,
     Finished = false,
-    Text = "Discord Webhook URL",
-    Tooltip = "Dán link Discord Webhook URL của bạn vào đây để nhận thông báo realtime",
+    Text = "Custom Yar'thul Webhook URL",
+    Tooltip = "Nhập Discord Webhook URL riêng cho Boss Yar'thul (để trống nếu dùng chung Webhook tổng)",
     Placeholder = "https://discord.com/api/webhooks/...",
 })
 
 YarthulGroup:AddButton({
-    Text = "🧪 Test Yar'thul Webhook Now",
+    Text = "🔔 Test Yar'thul Webhook Now",
     Func = function()
         AutoYarthul.sendWebhook("Test")
     end
 })
 
 YarthulGroup:AddButton({
-    Text = "🐉 Tween to Mount Thul Door Now",
+    Text = "🚀 Tween to Mount Thul Door Now",
     Func = function()
         teleportToLocation(AutoYarthul.gatePosition)
     end
 })
 
 YarthulGroup:AddButton({
-    Text = "🔍 Check Current Place & Instance ID",
-    Func = function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/Check_Place_Info.lua?t=" .. tick()))()
-    end
-})
-
-YarthulGroup:AddButton({
-    Text = "🛑 Stop Auto Farm Yar'thul",
+    Text = "⏹️ Stop Auto Farm Yar'thul",
     Func = function()
         AutoYarthul.stop(true)
         if Toggles.AutoFarmYarthul then
