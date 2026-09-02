@@ -433,7 +433,7 @@ end
 -- UNLOAD SYSTEM
 -- =============================================================================
 function ZeroLib:Unload()
-    print("[ZeroLib] 🧹 Đang dọn dẹp và Unload toàn bộ GUI...")
+    print("[ZeroLib] 🧹 Cleaning up and unloading GUI...")
 
     for _, conn in ipairs(self.Connections) do
         if typeof(conn) == "RBXScriptConnection" and conn.Connected then
@@ -462,7 +462,7 @@ function ZeroLib:Unload()
     self.Notifications = nil
 
     getgenv().ZeroLib = nil
-    print("[ZeroLib] ✨ Đã Unload hoàn tất!")
+    print("[ZeroLib] ✨ Unloaded successfully!")
 end
 
 -- =============================================================================
@@ -3223,11 +3223,11 @@ local function sendDiscordReport(harvestedMap, totalHarvested)
             avatar_url = "https://cdn-icons-png.flaticon.com/512/3655/3655581.png",
             embeds = {{
                 title = "🌿 HARVEST REPORT",
-                description = string.format("Nhân vật vừa hoàn thành thu hoạch **%d** tài nguyên!", totalHarvested),
+                description = string.format("Character has finished harvesting **%d** resources!", totalHarvested),
                 color = 0x10B981, -- Emerald Green
                 fields = {
-                    { name = "📦 Danh Sách Thu Hoạch", value = itemListStr, inline = false },
-                    { name = "👤 Người Chơi", value = string.format("||%s|| (||%s||)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true }
+                    { name = "📦 Harvested Items", value = itemListStr, inline = false },
+                    { name = "👤 Player", value = string.format("||%s|| (||%s||)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true }
                 },
                 footer = { text = "Arcane Lineage • Automated Intelligence System" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -3324,13 +3324,13 @@ local function sendCorruptServerWebhook(eventName)
             content = pingContent,
             embeds = {{
                 title = "🔮 CORRUPTED SERVER DETECTED",
-                description = string.format("Đã phát hiện Server có sự kiện đặc biệt: **%s**!", eventName),
+                description = string.format("Special Corrupted server event detected: **%s**!", eventName),
                 color = 0x8B5CF6, -- Neon Purple
                 fields = {
-                    { name = "⚡ Sự Kiện (Event)", value = string.format("**%s**", eventName), inline = true },
-                    { name = "👥 Người Chơi", value = string.format("%d / %d", pCount, pMax), inline = true },
-                    { name = "🌍 Khu Vực (Region)", value = string.format("`%s`", reg), inline = true },
-                    { name = "👤 Phát Hiện Bởi", value = string.format("||%s||", LocalPlayer.Name), inline = true }
+                    { name = "⚡ Event", value = string.format("**%s**", eventName), inline = true },
+                    { name = "👥 Players", value = string.format("%d / %d", pCount, pMax), inline = true },
+                    { name = "🌍 Region", value = string.format("`%s`", reg), inline = true },
+                    { name = "👤 Discovered By", value = string.format("||%s||", LocalPlayer.Name), inline = true }
                 },
                 footer = { text = "Arcane Lineage • Automated Intelligence System" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -4837,7 +4837,7 @@ function AutoYarthul.sendWebhook(eventType, extraData)
     local webhookUrl = Options.DiscordWebhook and Options.DiscordWebhook.Value or ""
     if #webhookUrl < 10 or not HttpRequest then
         if eventType == "Test" then
-            ZeroLib:Notify({ Title = "Webhook", Content = "Vui lòng nhập Discord Webhook URL trước!", Type = "Warning" })
+            ZeroLib:Notify({ Title = "Webhook", Content = "Please enter a valid Discord Webhook URL first!", Type = "Warning" })
         end
         return
     end
@@ -4852,16 +4852,16 @@ function AutoYarthul.sendWebhook(eventType, extraData)
         local maxHealth = char and char:FindFirstChildOfClass("Humanoid") and char:FindFirstChildOfClass("Humanoid").MaxHealth or 100
 
         if eventType == "Kill" then
-            local dropStr = extraData and extraData.dropStr or "• Không có vật phẩm mới nhận vào kho"
+            local dropStr = extraData and extraData.dropStr or "• No new items added to inventory"
             embed = {
                 title = "🔥 YAR'THUL BOSS SLAIN",
-                description = "Nhân vật vừa hạ gục thành công Boss **Yar'thul (Mount Thul)** và hoàn tất kiểm tra kho đồ!",
+                description = "Character successfully defeated Boss **Yar'thul (Mount Thul)** and verified inventory!",
                 color = 0xF97316, -- Fiery Amber Orange
                 fields = {
-                    { name = "🎁 Vật Phẩm Nhận Được", value = dropStr, inline = false },
-                    { name = "🏆 Tổng Số Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
-                    { name = "❤️ Máu Nhân Vật", value = string.format("`%.0f / %.0f`", health, maxHealth), inline = true },
-                    { name = "👤 Người Chơi", value = string.format("||%s|| (||%s||)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true }
+                    { name = "🎁 Acquired Drops", value = dropStr, inline = false },
+                    { name = "🏆 Total Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
+                    { name = "❤️ Player Health", value = string.format("`%.0f / %.0f`", health, maxHealth), inline = true },
+                    { name = "👤 Player", value = string.format("||%s|| (||%s||)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true }
                 },
                 footer = { text = "Arcane Lineage • Automated Intelligence System" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -4871,13 +4871,13 @@ function AutoYarthul.sendWebhook(eventType, extraData)
             local droppedBy = extraData and extraData.droppedBy or "Yar'thul, the Blazing Dragon"
             embed = {
                 title = "🎁 ITEM DROP RECEIVED",
-                description = string.format("Nhân vật vừa tự động nhận thành công vật phẩm **%s**!", itemName),
+                description = string.format("Character automatically received **%s**!", itemName),
                 color = 0x06B6D4, -- Cyber Cyan
                 fields = {
-                    { name = "📦 Vật Phẩm (Item Drop)", value = string.format("**%s**", itemName), inline = true },
-                    { name = "⚔️ Nguồn Rơi (Source)", value = string.format("`%s`", droppedBy), inline = true },
-                    { name = "🏆 Tổng Boss Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
-                    { name = "👤 Người Chơi", value = string.format("||%s||", LocalPlayer.Name), inline = true }
+                    { name = "📦 Item Drop", value = string.format("**%s**", itemName), inline = true },
+                    { name = "⚔️ Source", value = string.format("`%s`", droppedBy), inline = true },
+                    { name = "🏆 Total Boss Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
+                    { name = "👤 Player", value = string.format("||%s||", LocalPlayer.Name), inline = true }
                 },
                 footer = { text = "Arcane Lineage • Automated Intelligence System" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -4891,11 +4891,11 @@ function AutoYarthul.sendWebhook(eventType, extraData)
                 description = "Discord Webhook connection verified and operating flawlessly with Arcane Lineage Hub!",
                 color = 0x06B6D4, -- Cyber Cyan
                 fields = {
-                    { name = "👤 Người Chơi", value = string.format("||%s|| (ID: ||%s||)", LocalPlayer.Name, tostring(LocalPlayer.UserId)), inline = true },
-                    { name = "🟢 Trạng Thái", value = "`Active & Operational`", inline = true },
-                    { name = "🏆 Boss Kills Hiện Tại", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
-                    { name = "📦 Loại Item Trong Túi", value = string.format("`%d` Loại", snapCount), inline = true },
-                    { name = "🎮 Game Target", value = "`Arcane Lineage`", inline = true }
+                    { name = "👤 Player", value = string.format("||%s|| (ID: ||%s||)", LocalPlayer.Name, tostring(LocalPlayer.UserId)), inline = true },
+                    { name = "🟢 Status", value = "`Active & Operational`", inline = true },
+                    { name = "🏆 Current Boss Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
+                    { name = "📦 Inventory Item Types", value = string.format("`%d` Loại", snapCount), inline = true },
+                    { name = "🎮 Target Game", value = "`Arcane Lineage`", inline = true }
                 },
                 footer = { text = "Arcane Lineage • Automated Intelligence System" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -4919,9 +4919,9 @@ function AutoYarthul.sendWebhook(eventType, extraData)
 
         if eventType == "Test" then
             if ok then
-                ZeroLib:Notify({ Title = "Webhook Sent", Content = "Đã gửi Test Webhook thành công tới Discord!", Type = "Success", Duration = 4 })
+                ZeroLib:Notify({ Title = "Webhook Sent", Content = "Test Webhook sent successfully to Discord!", Type = "Success", Duration = 4 })
             else
-                ZeroLib:Notify({ Title = "Webhook Error", Content = "Gửi Test Webhook thất bại! Kiểm tra URL.", Type = "Error", Duration = 4 })
+                ZeroLib:Notify({ Title = "Webhook Error", Content = "Failed to send Test Webhook! Check URL.", Type = "Error", Duration = 4 })
             end
         end
     end)
@@ -4976,12 +4976,12 @@ local function handleNotification(data)
 
         if success then
             local displayInfo = (title ~= "" and title ~= "Item dropped!") and title or text
-            print(string.format("[AutoLoot] ✅ Đã ấn '%s' thành công cho thông báo rơi đồ: '%s' (%s)!", targetButton, title, text))
+            print(string.format("[AutoLoot] ✅ Successfully pressed '%s' for drop notification: '%s' (%s)!", targetButton, title, text))
             
             pcall(function()
                 ZeroLib:Notify({
-                    Title = "Auto Loot Thành Công",
-                    Content = string.format("Đã tự động nhận: %s", displayInfo),
+                    Title = "Auto Loot Success",
+                    Content = string.format("Auto received: %s", displayInfo),
                     Type = "Success",
                     Duration = 4
                 })
@@ -5010,12 +5010,12 @@ function AutoYarthul.hookLootRemote()
                 local mobStr = tostring(mobName or "Boss")
                 local itemStr = tostring(itemName or "Item")
                 
-                print(string.format("[AutoLoot] 🎁 Server ItemDrop: %s rơi '%s' -> Tự động trả về ACCEPT (true) thành công!", mobStr, itemStr))
+                print(string.format("[AutoLoot] 🎁 Server ItemDrop: %s dropped '%s' -> Auto-Accepted successfully!", mobStr, itemStr))
                 
                 pcall(function()
                     ZeroLib:Notify({
-                        Title = "Auto Loot Thành Công",
-                        Content = string.format("Đã nhận vật phẩm: %s (%s)", itemStr, mobStr),
+                        Title = "Auto Loot Success",
+                        Content = string.format("Received item: %s (%s)", itemStr, mobStr),
                         Type = "Success",
                         Duration = 4
                     })
@@ -5227,7 +5227,7 @@ function AutoYarthul.createHUD()
         statusLabel.Position = UDim2.new(0, 10, 0, 38)
         statusLabel.BackgroundTransparency = 1
         statusLabel.Font = Enum.Font.GothamMedium
-        statusLabel.Text = "Status: ⚡ Đang chuẩn bị..."
+        statusLabel.Text = "Status: ⚡ Initializing..."
         statusLabel.TextColor3 = Color3.fromRGB(6, 182, 212)
         statusLabel.TextSize = 11
         statusLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -5291,7 +5291,7 @@ function AutoYarthul.createHUD()
         btnCorner.Parent = stopBtn
 
         stopBtn.MouseButton1Click:Connect(function()
-            hubLog("[AutoYarthul] 🛑 Người dùng ấn [STOP AUTO FARM] trên màn hình -> Dừng chu trình!")
+            hubLog("[AutoYarthul] 🛑 [STOP AUTO FARM] clicked -> Stopping farm cycle!")
             AutoYarthul.stop(true)
             if Toggles.AutoFarmYarthul then
                 Toggles.AutoFarmYarthul:SetValue(false)
@@ -9372,7 +9372,7 @@ local FilterGroup      = Tabs.Visuals:AddLeftGroupbox("Filters & Categories")
 local pToggle = PlayerESPGroup:AddToggle("PlayerESP", {
     Text = "Enable Player ESP",
     Default = false,
-    Tooltip = "Hiển thị tên người chơi, thanh máu và khoảng cách tới người chơi khác trong server",
+    Tooltip = "Display player names, health bars, and distance to players",
 })
 pToggle:AddColorPicker("PlayerESPColor", {
     Default = Color3.fromRGB(6, 182, 212),
@@ -9385,14 +9385,14 @@ PlayerESPGroup:AddSlider("PlayerESPMaxDist", {
     Min = 500,
     Max = 10000,
     Rounding = 0,
-    Tooltip = "Khoảng cách quét tối đa để hiển thị người chơi",
+    Tooltip = "Maximum scan distance to display players",
 })
 
 -- 2. Class Trainer ESP
 local tToggle = TrainerESPGroup:AddToggle("Trainer_ESP", {
     Text = "Enable Class Trainer ESP",
     Default = false,
-    Tooltip = "Hiển thị tất cả Thầy dạy Base Class, Super Class và Subclass trên bản đồ",
+    Tooltip = "Display all Base, Super, and Subclass trainers on the map",
 })
 tToggle:AddColorPicker("TrainerESPColor", {
     Default = Color3.fromRGB(168, 85, 247),
@@ -9411,7 +9411,7 @@ TrainerESPGroup:AddSlider("Trainer_ESPMaxDist", {
 local nToggle = NpcESPGroup:AddToggle("NPC_ESP", {
     Text = "Enable General NPC ESP",
     Default = false,
-    Tooltip = "Hiển thị tất cả NPC làm nhiệm vụ, Thợ rèn, Bác sĩ, Thủ kho và Thương nhân",
+    Tooltip = "Display all Quest NPCs, Blacksmiths, Doctors, Bankers, and Merchants",
 })
 nToggle:AddColorPicker("NPCESPColor", {
     Default = Color3.fromRGB(251, 191, 36),
@@ -9430,7 +9430,7 @@ NpcESPGroup:AddSlider("NPC_ESPMaxDist", {
 local wToggle = WaypointESPGroup:AddToggle("Location_ESP", {
     Text = "Enable Waypoints & POI ESP",
     Default = false,
-    Tooltip = "Hiển thị các địa danh trọng yếu: Caldera, Heavens Point Church, Sanctuary of Blades, Mount Thul...",
+    Tooltip = "Display landmarks: Caldera, Heavens Point Church, Sanctuary of Blades, Mount Thul...",
 })
 wToggle:AddColorPicker("LocationESPColor", {
     Default = Color3.fromRGB(34, 197, 94),
@@ -9447,9 +9447,9 @@ WaypointESPGroup:AddSlider("Location_ESPMaxDist", {
 
 -- 5. Ingredient & Ore ESP
 local cToggle = ESPGroup:AddToggle("ESP_Crylight", {
-    Text = "Enable Ingredient ESP (Thảo dược)",
+    Text = "Enable Ingredient ESP (Herbs)",
     Default = false,
-    Tooltip = "Hiển thị vị trí các loại thảo dược: Crylight, Aestic, Everthorn, etc.",
+    Tooltip = "Display locations of herbs: Crylight, Aestic, Everthorn, etc.",
 })
 cToggle:AddColorPicker("CrylightESPColor", {
     Default = Color3.fromRGB(56, 189, 248),
@@ -9457,9 +9457,9 @@ cToggle:AddColorPicker("CrylightESPColor", {
 })
 
 local oToggle = ESPGroup:AddToggle("ESP_Ore", {
-    Text = "Enable Ore ESP (Khoáng sản)",
+    Text = "Enable Ore ESP (Ores)",
     Default = false,
-    Tooltip = "Hiển thị vị trí các mỏ quặng: Ferrus, Iron, Gold, Carnelian...",
+    Tooltip = "Display locations of ore nodes: Ferrus, Iron, Gold, Carnelian...",
 })
 oToggle:AddColorPicker("OreESPColor", {
     Default = Color3.fromRGB(245, 158, 11),
@@ -9494,31 +9494,31 @@ local QOLGroup = Tabs.Visuals:AddRightGroupbox("Quality of Life (QOL)")
 QOLGroup:AddToggle("ShowEnemyStatusHUD", {
     Text = "Show Enemies Status HUD",
     Default = false,
-    Tooltip = "Hiển thị bảng trạng thái thời gian thực của quái trong trận: HP, Energy, Chiêu thức, Cooldown và Energy cần dùng",
+    Tooltip = "Display real-time HUD for in-combat enemies: HP, Energy, Skills, Cooldowns, and Energy costs",
 })
 
 QOLGroup:AddToggle("ShowEnemyStatusHead", {
     Text = "Show Enemies Status Over Head",
     Default = false,
-    Tooltip = "Hiển thị bảng thông tin chi tiết trên đầu quái vật đang tham chiến: Máu, Energy, Skill đã dùng và Cooldown",
+    Tooltip = "Display 3D billboard over enemies: HP, Energy, Last Skill, and Skill Cooldowns",
 })
 
 QOLGroup:AddToggle("RevealRealHpMana", {
     Text = "Reveal Real HP / Mana",
     Default = false,
-    Tooltip = "Hiển thị chính xác chỉ số HP và Mana/Energy thật của bản thân thay vì dấu ???",
+    Tooltip = "Reveal exact HP and Mana/Energy numbers instead of ???",
 })
 
 QOLGroup:AddToggle("RevealUnidentified", {
     Text = "Reveal Unidentified Items",
     Default = false,
-    Tooltip = "Giải mã hiển thị trước tên thật, Enchant, Tier và toàn bộ chỉ số (+Stats/Dmg/Def) của trang bị chưa giám định trong túi đồ",
+    Tooltip = "Reveal true item names, Enchants, Tiers, and full stats (+Stats/Dmg/Def) of unidentified gear",
 })
 
 QOLGroup:AddToggle("AntiAFK", {
     Text = "Built-in Anti-AFK Engine",
     Default = false,
-    Tooltip = "Chống tự động ngắt kết nối (Disconnection / Kick) sau 20 phút treo máy",
+    Tooltip = "Prevent 20-minute idle disconnection / kick",
 })
 
 local FPSGroup = Tabs.Visuals:AddRightGroupbox("FPS Booster")
@@ -9988,7 +9988,7 @@ WebhookConfigGroup:AddInput("DiscordWebhook", {
     Numeric = false,
     Finished = false,
     Text = "Discord Webhook URL",
-    Tooltip = "URL Webhook Discord chung nhận tất cả thông báo: Boss Yar'thul, Thu hoạch Thảo dược/Quặng, Corrupt Server",
+    Tooltip = "Unified Discord Webhook URL for all alerts: Boss Yar'thul, Herb/Ore Harvest, and Corrupt Servers",
     Placeholder = "https://discord.com/api/webhooks/...",
 })
 
@@ -9997,24 +9997,24 @@ WebhookConfigGroup:AddDivider()
 WebhookConfigGroup:AddToggle("YarthulSendWebhook", {
     Text = "Enable Boss & Loot Alerts",
     Default = false,
-    Tooltip = "Gửi thông báo Discord Embed chi tiết khi hạ gục Boss hoặc nhận được vật phẩm mới",
+    Tooltip = "Send detailed Discord embeds when defeating bosses or looting items",
 })
 
 WebhookConfigGroup:AddToggle("NotifyOnHarvest", {
     Text = "Enable Herb & Ore Alerts",
     Default = false,
-    Tooltip = "Gửi thông báo Discord khi hoàn thành thu hoạch tài nguyên",
+    Tooltip = "Send Discord alerts when completing resource harvesting",
 })
 
 WebhookConfigGroup:AddToggle("CorruptPingRole", {
     Text = "Ping @everyone on Corrupt Server",
     Default = false,
-    Tooltip = "Gắn thẻ @everyone khi phát hiện Corrupt Server",
+    Tooltip = "Ping @everyone upon discovering a Corrupted Server",
 })
 
 WebhookActionsGroup:AddButton({
     Text = "Send Test Webhook",
-    Tooltip = "Gửi một Embed kiểm tra kết nối với giao diện Luxury Dark-Tech tới Webhook Discord của bạn",
+    Tooltip = "Send a luxury dark-tech test verification embed to your Discord Webhook",
     Func = function()
         AutoYarthul.sendWebhook("Test")
     end,
@@ -10104,9 +10104,9 @@ MenuGroup:AddToggle("AutoLoadOnChangingServer", {
         if Value then
             local queued = queueTeleportScript()
             if queued then
-                Library:Notify({ Title = "Auto Load", Content = "Đã nạp Teleport Queue!", Type = "Success" })
+                Library:Notify({ Title = "Auto Load", Content = "Teleport Queue Loaded!", Type = "Success" })
             else
-                Library:Notify({ Title = "Warning", Content = "Executor không hỗ trợ queue_on_teleport!", Type = "Warning" })
+                Library:Notify({ Title = "Warning", Content = "Executor does not support queue_on_teleport!", Type = "Warning" })
             end
         end
     end
@@ -10485,7 +10485,7 @@ local function createEnemyStatusScreenHUD()
     contentLabel.Size = UDim2.new(1, -20, 1, -38)
     contentLabel.Position = UDim2.new(0, 10, 0, 32)
     contentLabel.BackgroundTransparency = 1
-    contentLabel.Text = "Đang quét trạng thái quái..."
+    contentLabel.Text = "Scanning enemies status..."
     contentLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
     contentLabel.Font = Enum.Font.Gotham
     contentLabel.TextSize = 11
@@ -10544,7 +10544,7 @@ local function analyzeEnemyStatus(enemyModel)
     local curEnergy = energyVal and energyVal.Value or 0
 
     local lastAttackVal = enemyModel:FindFirstChild("Effects") and enemyModel.Effects:FindFirstChild("LastUsedAttack")
-    local lastAttack = lastAttackVal and lastAttackVal.Value or "Chưa dùng"
+    local lastAttack = lastAttackVal and lastAttackVal.Value or "None"
 
     local npcData = EnemyStatusEngine.npcCache[cleanName] or EnemyStatusEngine.npcCache[enemyName]
     local maxEnergy = npcData and npcData.MaxEnergy or 6
@@ -10560,7 +10560,7 @@ local function analyzeEnemyStatus(enemyModel)
         local skInfo = EnemyStatusEngine.skillsCache[sk]
         local cost = skInfo and skInfo.Cost or 1
         local isRecent = (lastAttack == sk)
-        local statusStr = isRecent and "<font color='#FFA500'>[Vừa dùng/CD]</font>" or (curEnergy >= cost and "<font color='#2ECC71'>[SẴN SÀNG]</font>" or "<font color='#E74C3C'>[THIẾU ENERGY]</font>")
+        local statusStr = isRecent and "<font color='#FFA500'>[Just Used / CD]</font>" or (curEnergy >= cost and "<font color='#2ECC71'>[READY]</font>" or "<font color='#E74C3C'>[LOW ENERGY]</font>")
         table.insert(skillBreakdown, string.format("• <b>%s</b> (%d Energy) %s", sk, cost, statusStr))
     end
 
@@ -10568,16 +10568,16 @@ local function analyzeEnemyStatus(enemyModel)
         local skInfo = EnemyStatusEngine.skillsCache[sk]
         local cost = skInfo and skInfo.Cost or 2
         local isRecent = (lastAttack == sk)
-        local statusStr = isRecent and "<font color='#FFA500'>[Vừa dùng/CD]</font>" or (curEnergy >= cost and "<font color='#9B59B6'>[ĐẶC BIỆT/READY]</font>" or "<font color='#E74C3C'>[THIẾU ENERGY]</font>")
+        local statusStr = isRecent and "<font color='#FFA500'>[Just Used / CD]</font>" or (curEnergy >= cost and "<font color='#9B59B6'>[SPECIAL / READY]</font>" or "<font color='#E74C3C'>[LOW ENERGY]</font>")
         table.insert(skillBreakdown, string.format("• <b>%s</b> (%d Energy) %s", sk, cost, statusStr))
     end
 
     for _, sk in ipairs(noEnergySkills) do
-        table.insert(skillBreakdown, string.format("• <b>%s</b> (0 Energy) <font color='#2ECC71'>[SẴN SÀNG]</font>", sk))
+        table.insert(skillBreakdown, string.format("• <b>%s</b> (0 Energy) <font color='#2ECC71'>[READY]</font>", sk))
     end
 
     if #skillBreakdown == 0 then
-        table.insert(skillBreakdown, "• <b>Strike (Đánh thường)</b> (0 Energy) <font color='#2ECC71'>[SẴN SÀNG]</font>")
+        table.insert(skillBreakdown, "• <b>Strike (Đánh thường)</b> (0 Energy) <font color='#2ECC71'>[READY]</font>")
     end
 
     return {
@@ -10641,10 +10641,10 @@ function EnemyStatusEngine.start()
                 local now = os.clock()
                 if EnemyStatusEngine.lastIndicatedSkill and (now - EnemyStatusEngine.lastIndicatedTime < 2.5) then
                     local skName = EnemyStatusEngine.lastIndicatedSkill
-                    table.insert(hudLines, string.format("⚠️ <b><font color='#FF5555'>ĐANG CHUẨN BỊ: %s</font></b>", skName))
+                    table.insert(hudLines, string.format("⚠️ <b><font color='#FF5555'>PREPARING: %s</font></b>", skName))
                     table.insert(hudLines, "────────────────────────────")
                 elseif EnemyStatusEngine.currentDecidingEnemy then
-                    table.insert(hudLines, string.format("⏳ <i><font color='#F39C12'>%s đang suy nghĩ lượt...</font></i>", EnemyStatusEngine.currentDecidingEnemy))
+                    table.insert(hudLines, string.format("⏳ <i><font color='#F39C12'>%s is deciding turn...</font></i>", EnemyStatusEngine.currentDecidingEnemy))
                     table.insert(hudLines, "────────────────────────────")
                 end
 
@@ -10656,8 +10656,8 @@ function EnemyStatusEngine.start()
                         local energyStr = string.format("⚡ Energy: <font color='#3498DB'><b>%d / %d</b></font>", sData.curEnergy, sData.maxEnergy)
 
                         table.insert(hudLines, string.format("<b>%s</b> (<font color='%s'>%d/%d HP</font>) | %s", sData.name, hpColor, sData.curHp, sData.maxHp, energyStr))
-                        table.insert(hudLines, string.format("  • <i>Chiêu trước:</i> <font color='#BDC3C7'>%s</font>", sData.lastAttack))
-                        table.insert(hudLines, "  • <b>Chiêu thức & Trạng thái:</b>")
+                        table.insert(hudLines, string.format("  • <i>Last Skill:</i> <font color='#BDC3C7'>%s</font>", sData.lastAttack))
+                        table.insert(hudLines, "  • <b>Skills & Status:</b>")
                         for _, skLine in ipairs(sData.skills) do
                             table.insert(hudLines, "    " .. skLine)
                         end
@@ -10730,7 +10730,7 @@ function EnemyStatusEngine.start()
                 end
 
                 if #activeEnemies == 0 then
-                    table.insert(hudLines, "<i>Đang đợi quái vật xuất hiện...</i>")
+                    table.insert(hudLines, "<i>Waiting for enemies to appear...</i>")
                 end
 
                 local cLbl = hud and hud:FindFirstChild("Content")
