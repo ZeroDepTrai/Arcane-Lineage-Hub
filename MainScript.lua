@@ -104,89 +104,39 @@ local HttpRequest = (syn and syn.request) or (http and http.request) or http_req
 
 local function getQueuePayload()
     return [=[
-local genv = (getgenv and getgenv()) or _G
-local now = os.clock()
-if genv._ArcaneHubTeleportQueuedExec and (now - genv._ArcaneHubTeleportQueuedExec < 5) then
-    return
-end
-genv._ArcaneHubTeleportQueuedExec = now
-
 task.spawn(function()
-    local startWait = os.clock()
-    if not game:IsLoaded() then
-        pcall(function() game.Loaded:Wait() end)
-    end
-    while not game:IsLoaded() and (os.clock() - startWait < 15) do
-        task.wait(0.2)
-    end
-
-    local players = game:GetService("Players")
-    local playerWait = os.clock()
-    while not players.LocalPlayer and (os.clock() - playerWait < 15) do
-        task.wait(0.2)
-    end
-
     task.wait(1.5)
-
+    local genv = (getgenv and getgenv()) or _G
     if genv._ArcaneHubRunning or (shared and shared.ArcaneHub) then
         return
     end
 
     local executed = false
-
-    -- 1. Ưu tiên nạp từ local script của executor
+    -- 1. Thử nạp từ local script của executor
     local fileCandidates = {
-        "Arcane_Hub.lua",
-        "Arcane_Hub.luau",
-        "scripts/Arcane_Hub.lua",
-        "scripts/Arcane_Hub.luau"
+        "MainScript.lua",
+        "Arcane_Hub_ZeroLib.lua",
+        "scripts/MainScript.lua",
+        "scripts/Arcane_Hub_ZeroLib.lua",
     }
-
     for _, path in ipairs(fileCandidates) do
-        if not executed and loadfile then
-            local ok, fn = pcall(loadfile, path)
-            if ok and type(fn) == "function" then
-                local runOk, err = pcall(fn)
-                if runOk then
-                    executed = true
-                    break
-                end
-            end
-        end
-        if not executed and readfile then
+        if not executed and readfile and isfile and isfile(path) then
             local ok, src = pcall(readfile, path)
             if ok and type(src) == "string" and #src > 100 then
                 local loadOk, fn = pcall(loadstring, src)
                 if loadOk and type(fn) == "function" then
                     local runOk, err = pcall(fn)
-                    if runOk then
-                        executed = true
-                        break
-                    end
+                    if runOk then executed = true; break end
                 end
             end
         end
     end
 
-    -- 2. Fallback tải trực tiếp từ GitHub / Gist
+    -- 2. Master GitHub Loader
     if not executed then
-        local remoteUrls = {
-            "https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/Arcane_Hub.lua",
-            "https://gist.githubusercontent.com/ZeroDepTrai/c81661682d9297b3f8130a53bc900df8/raw/Arcane_Hub.lua"
-        }
-        for _, url in ipairs(remoteUrls) do
-            local ok, code = pcall(function() return game:HttpGet(url) end)
-            if ok and type(code) == "string" and #code > 100 then
-                local loadOk, fn = pcall(loadstring, code)
-                if loadOk and type(fn) == "function" then
-                    local runOk, err = pcall(fn)
-                    if runOk then
-                        executed = true
-                        break
-                    end
-                end
-            end
-        end
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/MainScript.lua"))()
+        end)
     end
 end)
 ]=]
@@ -2771,7 +2721,7 @@ ZeroLib.ConfigManager = ConfigManager
 return ZeroLib
 
 end)()
-ZeroLib = ZeroLib or shared.ZeroLib or _G.ZeroLib or ((getgenv and getgenv()).ZeroLib)
+
 local Library = ZeroLib
 local ThemeManager = nil
 local SaveManager = nil
@@ -9947,6 +9897,32 @@ ConfigGroup:AddButton({
     end
 })
 
+ConfigGroup:AddDivider()
+
+local currentAutoLoad = ZeroLib.ConfigManager:GetAutoLoad()
+local autoLoadToggle = ConfigGroup:AddToggle("AutoLoadConfig", {
+    Text = "Auto Load Selected Config on Boot",
+    Default = (currentAutoLoad ~= nil and currentAutoLoad ~= ""),
+    Tooltip = "Tự động nạp cấu hình đã chọn mỗi khi khởi chạy script",
+    Callback = function(val)
+        if val then
+            local name = ZeroLib.Options.ConfigName and ZeroLib.Options.ConfigName.Value or (ZeroLib.Options.ConfigList and ZeroLib.Options.ConfigList.Value) or "default"
+            ZeroLib.ConfigManager:SetAutoLoad(name)
+        else
+            ZeroLib.ConfigManager:ClearAutoLoad()
+        end
+    end
+})
+
+ConfigGroup:AddButton({
+    Text = "Set Current Config as Auto Load",
+    Func = function()
+        local name = ZeroLib.Options.ConfigName and ZeroLib.Options.ConfigName.Value or (ZeroLib.Options.ConfigList and ZeroLib.Options.ConfigList.Value) or "default"
+        ZeroLib.ConfigManager:SetAutoLoad(name)
+        if autoLoadToggle then autoLoadToggle:SetValue(true) end
+    end
+})
+
 local AntiAFK = {
     initialized = false,
     connections = {},
@@ -10183,6 +10159,19 @@ end
 if Toggles.AutoFarmLevel and Toggles.AutoFarmLevel.Value then
     LevelFarmer.runCycle()
 end
+
+-- Tự động nạp cấu hình (Auto Load Config on Boot)
+task.spawn(function()
+    task.wait(0.6)
+    pcall(function()
+        local autoCfg = ZeroLib.ConfigManager:GetAutoLoad()
+        if autoCfg and #autoCfg > 0 then
+            hubLog("[AutoLoad] 📂 Tự động nạp cấu hình mặc định:", autoCfg)
+            ZeroLib.ConfigManager:Load(autoCfg)
+        end
+    end)
+end)
+
 if AutoYarthul then
     AutoYarthul.checkSessionOnBoot()
 end-- =============================================================================
