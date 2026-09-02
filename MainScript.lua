@@ -9494,75 +9494,35 @@ local QOLGroup = Tabs.Visuals:AddRightGroupbox("Quality of Life (QOL)")
 QOLGroup:AddToggle("ShowEnemyStatusHUD", {
     Text = "Show Enemies Status HUD",
     Default = false,
-    Tooltip = "Display real-time HUD for in-combat enemies: HP, Energy, Skills, Cooldowns, and Energy costs",
+    Tooltip = "Display real-time combat HUD: accurate enemy HP, Energy, skill cooldowns, energy costs, and next move predictor",
 })
 
 QOLGroup:AddToggle("ShowEnemyStatusHead", {
     Text = "Show Enemies Status Over Head",
     Default = false,
-    Tooltip = "Display 3D billboard over enemies: HP, Energy, Last Skill, and Skill Cooldowns",
+    Tooltip = "Display detailed 3D overhead status cards on active enemies: real HP, Energy, skill cooldowns, and costs",
 })
 
 QOLGroup:AddToggle("RevealRealHpMana", {
     Text = "Reveal Real HP / Mana",
     Default = false,
-    Tooltip = "Reveal exact HP and Mana/Energy numbers instead of ???",
+    Tooltip = "Reveal exact numerical HP and Mana/Energy values on all health bars instead of '???'",
 })
 
 QOLGroup:AddToggle("RevealUnidentified", {
     Text = "Reveal Unidentified Items",
     Default = false,
-    Tooltip = "Reveal true item names, Enchants, Tiers, and full stats (+Stats/Dmg/Def) of unidentified gear",
+    Tooltip = "Reveal true item names, enchants, tiers, and rolled stats for unidentified items in your inventory",
 })
 
 QOLGroup:AddToggle("AntiAFK", {
     Text = "Built-in Anti-AFK Engine",
     Default = false,
-    Tooltip = "Prevent 20-minute idle disconnection / kick",
+    Tooltip = "Prevent Roblox 20-minute idle disconnection / kick",
 })
 
 local FPSGroup = Tabs.Visuals:AddRightGroupbox("FPS Booster")
 local OptGroup = Tabs.Visuals:AddRightGroupbox("Optimization & RAM")
-
-QOLGroup:AddToggle("EnemyAttackPredictor", {
-    Text = "Enemy Skill Predictor & Combat HUD",
-    Default = false,
-    Tooltip = "Hien thi bang phan tich du doan skill thuc tiep theo cua mobs, thanh Energy time thuc va bat skill now khi mobs vung don",
-})
-
-Toggles.EnemyAttackPredictor:OnChanged(function()
-    if Toggles.EnemyAttackPredictor.Value then
-        EnemyPredictor.start()
-    else
-        EnemyPredictor.stop()
-    end
-end)
-
-QOLGroup:AddToggle("PredictorWorldESP", {
-    Text = "Show Predictor On Enemy Heads (ESP)",
-    Default = false,
-    Tooltip = "Hien thi thanh Energy & skill du doan truc tiep dang Billboard overhead monster",
-})
-
-QOLGroup:AddToggle("PredictorSoundAlert", {
-    Text = "Sound Alert On Danger Skills",
-    Default = false,
-    Tooltip = "Phat chuong canh bao am thanh khi boss/mobs start tung skill nguy hiem (Magma Pillar, Inferno, v.v.)",
-})
-
-QOLGroup:AddDivider()
-
-QOLGroup:AddToggle("BypassNoPainHP", {
-    Text = "Reveal 'I Feel No Pain' HP & Mana",
-    Default = false,
-    Tooltip = "Reveals exact numerical Health and Mana/Energy bars when obscured by Trial I Feel No Pain",
-})
-
-QOLGroup:AddToggle("RevealUnidentified", {
-    Text = "Reveal Unidentified Items",
-    Default = false,
-    Tooltip = "Reveals the true real names and stats of all unidentified equipment and items in your inventory",
-})
 
 local FPSBooster = {
     originalFogEnd = (Lighting and Lighting.FogEnd) or 100000,
@@ -10387,15 +10347,18 @@ local EnemyStatusEngine = {
     billboards = {},
     skillsCache = {},
     npcCache = {},
+    cooldowns = {},
+    lastUsedAttacks = {},
     lastIndicatedSkill = nil,
     lastIndicatedTime = 0,
     currentDecidingEnemy = nil,
+    currentTurn = 0,
 }
 
 local function initEnemyStatusData()
     pcall(function()
         local skillsMod = ReplicatedStorage:FindFirstChild("Constants") and ReplicatedStorage.Constants:FindFirstChild("Skills")
-        if skillsMod then
+        if skillsMod and skillsMod:IsA("ModuleScript") then
             local ok, data = pcall(require, skillsMod)
             if ok and type(data) == "table" then
                 EnemyStatusEngine.skillsCache = data
@@ -10403,19 +10366,23 @@ local function initEnemyStatusData()
         end
     end)
 
-    pcall(function()
-        local npcFolder = ReplicatedStorage:FindFirstChild("NPCs")
-        if npcFolder then
-            for _, mod in ipairs(npcFolder:GetChildren()) do
+    local function scanNPCFolder(folder)
+        if folder then
+            for _, mod in ipairs(folder:GetChildren()) do
                 if mod:IsA("ModuleScript") then
                     local ok, data = pcall(require, mod)
                     if ok and type(data) == "table" then
                         EnemyStatusEngine.npcCache[mod.Name] = data
+                        local clean = mod.Name:gsub("%s*%(.*%)", ""):gsub("%d+$", ""):gsub("^%s*(.-)%s*$", "%1")
+                        EnemyStatusEngine.npcCache[clean] = data
                     end
                 end
             end
         end
-    end)
+    end
+
+    pcall(function() scanNPCFolder(ReplicatedStorage:FindFirstChild("NPCs")) end)
+    pcall(function() scanNPCFolder(ReplicatedStorage:FindFirstChild("NPCs_Extra")) end)
 end
 initEnemyStatusData()
 
@@ -10426,7 +10393,8 @@ pcall(function()
         if atkInd and atkInd:IsA("RemoteEvent") then
             atkInd.OnClientEvent:Connect(function(skillName)
                 if not skillName then return end
-                EnemyStatusEngine.lastIndicatedSkill = tostring(skillName)
+                local skStr = tostring(skillName)
+                EnemyStatusEngine.lastIndicatedSkill = skStr
                 EnemyStatusEngine.lastIndicatedTime = os.clock()
                 EnemyStatusEngine.currentDecidingEnemy = nil
             end)
@@ -10451,10 +10419,10 @@ local function createEnemyStatusScreenHUD()
 
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 340, 0, 190)
-    mainFrame.Position = UDim2.new(0.02, 0, 0.45, 0)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-    mainFrame.BackgroundTransparency = 0.15
+    mainFrame.Size = UDim2.new(0, 360, 0, 210)
+    mainFrame.Position = UDim2.new(0.02, 0, 0.42, 0)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
+    mainFrame.BackgroundTransparency = 0.12
     mainFrame.BorderSizePixel = 0
     mainFrame.Visible = false
     mainFrame.Parent = sg
@@ -10470,25 +10438,33 @@ local function createEnemyStatusScreenHUD()
 
     local title = Instance.new("TextLabel")
     title.Name = "Title"
-    title.Size = UDim2.new(1, -20, 0, 26)
+    title.Size = UDim2.new(1, -20, 0, 24)
     title.Position = UDim2.new(0, 10, 0, 6)
     title.BackgroundTransparency = 1
-    title.Text = "ACTIVE ENEMIES STATUS & COOLDOWNS"
-    title.TextColor3 = Color3.fromRGB(240, 240, 255)
+    title.Text = "ACTIVE ENEMIES STATUS & SKILL PREDICTOR"
+    title.TextColor3 = Color3.fromRGB(240, 245, 255)
     title.Font = Enum.Font.GothamBold
-    title.TextSize = 12
+    title.TextSize = 11.5
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = mainFrame
+
+    local div = Instance.new("Frame")
+    div.Name = "Div"
+    div.Size = UDim2.new(1, -16, 0, 1)
+    div.Position = UDim2.new(0, 8, 0, 30)
+    div.BackgroundColor3 = Color3.fromRGB(35, 40, 55)
+    div.BorderSizePixel = 0
+    div.Parent = mainFrame
 
     local contentLabel = Instance.new("TextLabel")
     contentLabel.Name = "Content"
     contentLabel.Size = UDim2.new(1, -20, 1, -38)
-    contentLabel.Position = UDim2.new(0, 10, 0, 32)
+    contentLabel.Position = UDim2.new(0, 10, 0, 34)
     contentLabel.BackgroundTransparency = 1
     contentLabel.Text = "Scanning enemies status..."
-    contentLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
+    contentLabel.TextColor3 = Color3.fromRGB(200, 210, 225)
     contentLabel.Font = Enum.Font.Gotham
-    contentLabel.TextSize = 11
+    contentLabel.TextSize = 10.5
     contentLabel.TextXAlignment = Enum.TextXAlignment.Left
     contentLabel.TextYAlignment = Enum.TextYAlignment.Top
     contentLabel.TextWrapped = true
@@ -10521,13 +10497,23 @@ local function createEnemyStatusScreenHUD()
     end)
 
     pcall(function()
-        local coreGui = game:GetService("CoreGui")
-        sg.Parent = coreGui
+        local parentGui = (gethui and gethui()) or (game:GetService("CoreGui"):FindFirstChild("RobloxGui")) or PlayerGui
+        sg.Parent = parentGui
     end)
-    if not sg.Parent then sg.Parent = PlayerGui end
 
     EnemyStatusEngine.gui = sg
     return sg
+end
+
+local function getSkillStats(skillName)
+    local sk = EnemyStatusEngine.skillsCache[skillName]
+    local cost = 0
+    local cd = 0
+    if sk and type(sk) == "table" then
+        cost = tonumber(sk.Cost or sk.Energy or sk.CostEnergy) or 0
+        cd = tonumber(sk.Cooldown or sk.CD or sk.Turns) or 0
+    end
+    return cost, cd
 end
 
 local function analyzeEnemyStatus(enemyModel)
@@ -10544,7 +10530,18 @@ local function analyzeEnemyStatus(enemyModel)
     local curEnergy = energyVal and energyVal.Value or 0
 
     local lastAttackVal = enemyModel:FindFirstChild("Effects") and enemyModel.Effects:FindFirstChild("LastUsedAttack")
-    local lastAttack = lastAttackVal and lastAttackVal.Value or "None"
+    local lastAttack = lastAttackVal and tostring(lastAttackVal.Value) or "None"
+
+    if lastAttack ~= "None" and lastAttack ~= "" then
+        if not EnemyStatusEngine.lastUsedAttacks[enemyModel] or EnemyStatusEngine.lastUsedAttacks[enemyModel] ~= lastAttack then
+            EnemyStatusEngine.lastUsedAttacks[enemyModel] = lastAttack
+            local _, baseCD = getSkillStats(lastAttack)
+            if baseCD > 0 then
+                if not EnemyStatusEngine.cooldowns[enemyModel] then EnemyStatusEngine.cooldowns[enemyModel] = {} end
+                EnemyStatusEngine.cooldowns[enemyModel][lastAttack] = baseCD
+            end
+        end
+    end
 
     local npcData = EnemyStatusEngine.npcCache[cleanName] or EnemyStatusEngine.npcCache[enemyName]
     local maxEnergy = npcData and npcData.MaxEnergy or 6
@@ -10553,41 +10550,113 @@ local function analyzeEnemyStatus(enemyModel)
     local damageSkills = attackPool.Damage or {}
     local specialSkills = attackPool.Special or {}
     local noEnergySkills = attackPool.NoEnergy or {}
+    local healingSkills = attackPool.Healing or {}
 
+    local modelCDs = EnemyStatusEngine.cooldowns[enemyModel] or {}
     local skillBreakdown = {}
+    local predictedMove = nil
+    local predictedCost = 0
+    local predictedReason = ""
 
-    for _, sk in ipairs(damageSkills) do
-        local skInfo = EnemyStatusEngine.skillsCache[sk]
-        local cost = skInfo and skInfo.Cost or 1
-        local isRecent = (lastAttack == sk)
-        local statusStr = isRecent and "<font color='#FFA500'>[Just Used / CD]</font>" or (curEnergy >= cost and "<font color='#2ECC71'>[READY]</font>" or "<font color='#E74C3C'>[LOW ENERGY]</font>")
-        table.insert(skillBreakdown, string.format("• <b>%s</b> (%d Energy) %s", sk, cost, statusStr))
-    end
-
+    -- 1. Evaluate Special Skills
     for _, sk in ipairs(specialSkills) do
-        local skInfo = EnemyStatusEngine.skillsCache[sk]
-        local cost = skInfo and skInfo.Cost or 2
-        local isRecent = (lastAttack == sk)
-        local statusStr = isRecent and "<font color='#FFA500'>[Just Used / CD]</font>" or (curEnergy >= cost and "<font color='#9B59B6'>[SPECIAL / READY]</font>" or "<font color='#E74C3C'>[LOW ENERGY]</font>")
-        table.insert(skillBreakdown, string.format("• <b>%s</b> (%d Energy) %s", sk, cost, statusStr))
+        local cost, baseCD = getSkillStats(sk)
+        local remCD = modelCDs[sk] or 0
+        local statusStr = ""
+        if remCD > 0 then
+            statusStr = string.format("<font color='#FFA500'>[CD: %d turns]</font>", remCD)
+        elseif curEnergy >= cost then
+            statusStr = "<font color='#9B59B6'>[SPECIAL / READY]</font>"
+            if not predictedMove then
+                predictedMove = sk
+                predictedCost = cost
+                predictedReason = "Special Ready"
+            end
+        else
+            statusStr = string.format("<font color='#E74C3C'>[LOW ENERGY: Need %d (Have %d)]</font>", cost, curEnergy)
+        end
+        table.insert(skillBreakdown, string.format("• <b>%s</b> (%d Energy, CD: %d) %s", sk, cost, baseCD, statusStr))
     end
 
+    -- 2. Evaluate Damage Skills
+    for _, sk in ipairs(damageSkills) do
+        local cost, baseCD = getSkillStats(sk)
+        local remCD = modelCDs[sk] or 0
+        local statusStr = ""
+        if remCD > 0 then
+            statusStr = string.format("<font color='#FFA500'>[CD: %d turns]</font>", remCD)
+        elseif curEnergy >= cost then
+            statusStr = "<font color='#2ECC71'>[READY]</font>"
+            if not predictedMove then
+                predictedMove = sk
+                predictedCost = cost
+                predictedReason = "Damage Ready"
+            end
+        else
+            statusStr = string.format("<font color='#E74C3C'>[LOW ENERGY: Need %d (Have %d)]</font>", cost, curEnergy)
+        end
+        table.insert(skillBreakdown, string.format("• <b>%s</b> (%d Energy, CD: %d) %s", sk, cost, baseCD, statusStr))
+    end
+
+    -- 3. Evaluate Healing Skills
+    for _, sk in ipairs(healingSkills) do
+        local cost, baseCD = getSkillStats(sk)
+        local remCD = modelCDs[sk] or 0
+        local statusStr = ""
+        if remCD > 0 then
+            statusStr = string.format("<font color='#FFA500'>[CD: %d turns]</font>", remCD)
+        elseif curEnergy >= cost then
+            statusStr = "<font color='#00FF88'>[HEAL / READY]</font>"
+            if not predictedMove and (curHp / math.max(1, maxHp)) < 0.6 then
+                predictedMove = sk
+                predictedCost = cost
+                predictedReason = "Low HP Heal"
+            end
+        else
+            statusStr = string.format("<font color='#E74C3C'>[LOW ENERGY: Need %d (Have %d)]</font>", cost, curEnergy)
+        end
+        table.insert(skillBreakdown, string.format("• <b>%s</b> (%d Energy, CD: %d) %s", sk, cost, baseCD, statusStr))
+    end
+
+    -- 4. Evaluate NoEnergy Skills
     for _, sk in ipairs(noEnergySkills) do
+        local cost, baseCD = getSkillStats(sk)
         table.insert(skillBreakdown, string.format("• <b>%s</b> (0 Energy) <font color='#2ECC71'>[READY]</font>", sk))
+        if not predictedMove then
+            predictedMove = sk
+            predictedCost = 0
+            predictedReason = "No Energy Skill"
+        end
     end
 
     if #skillBreakdown == 0 then
         table.insert(skillBreakdown, "• <b>Strike (Basic Attack)</b> (0 Energy) <font color='#2ECC71'>[READY]</font>")
     end
 
+    if not predictedMove then
+        if #noEnergySkills > 0 then
+            predictedMove = noEnergySkills[1]
+            predictedCost = 0
+            predictedReason = "Fallback 0 Energy Move"
+        else
+            predictedMove = "Strike"
+            predictedCost = 0
+            predictedReason = "Basic Attack"
+        end
+    end
+
     return {
         model = enemyModel,
-        name = enemyName,
+        name = cleanName,
+        fullName = enemyName,
         curHp = curHp,
         maxHp = maxHp,
         curEnergy = curEnergy,
         maxEnergy = maxEnergy,
         lastAttack = lastAttack,
+        predictedMove = predictedMove,
+        predictedCost = predictedCost,
+        predictedReason = predictedReason,
         skills = skillBreakdown
     }
 end
@@ -10626,7 +10695,7 @@ function EnemyStatusEngine.start()
                             local isMyEnemy = false
                             if myFightId and fVal and fVal.Value == myFightId then
                                 isMyEnemy = true
-                            elseif root and (root.Position - myRoot.Position).Magnitude < 40 then
+                            elseif root and (root.Position - myRoot.Position).Magnitude < 45 then
                                 isMyEnemy = true
                             end
 
@@ -10641,10 +10710,10 @@ function EnemyStatusEngine.start()
                 local now = os.clock()
                 if EnemyStatusEngine.lastIndicatedSkill and (now - EnemyStatusEngine.lastIndicatedTime < 2.5) then
                     local skName = EnemyStatusEngine.lastIndicatedSkill
-                    table.insert(hudLines, string.format("⚠️ <b><font color='#FF5555'>PREPARING: %s</font></b>", skName))
+                    table.insert(hudLines, string.format("⚠️ <b><font color='#FF5555'>CASTING NOW: %s</font></b>", skName))
                     table.insert(hudLines, "────────────────────────────")
                 elseif EnemyStatusEngine.currentDecidingEnemy then
-                    table.insert(hudLines, string.format("⏳ <i><font color='#F39C12'>%s is deciding turn...</font></i>", EnemyStatusEngine.currentDecidingEnemy))
+                    table.insert(hudLines, string.format("⏳ <i><font color='#F39C12'>%s is deciding move...</font></i>", EnemyStatusEngine.currentDecidingEnemy))
                     table.insert(hudLines, "────────────────────────────")
                 end
 
@@ -10653,11 +10722,12 @@ function EnemyStatusEngine.start()
                     if sData then
                         local hpPercent = math.clamp(sData.curHp / math.max(1, sData.maxHp), 0, 1)
                         local hpColor = hpPercent > 0.5 and "#2ECC71" or (hpPercent > 0.25 and "#F39C12" or "#E74C3C")
-                        local energyStr = string.format("⚡ Energy: <font color='#3498DB'><b>%d / %d</b></font>", sData.curEnergy, sData.maxEnergy)
+                        local energyStr = string.format("⚡ Energy: <font color='#06B6D4'><b>%d / %d</b></font>", sData.curEnergy, sData.maxEnergy)
 
                         table.insert(hudLines, string.format("<b>%s</b> (<font color='%s'>%d/%d HP</font>) | %s", sData.name, hpColor, sData.curHp, sData.maxHp, energyStr))
+                        table.insert(hudLines, string.format("  🎯 <b>Next Predicted Move:</b> <font color='#00FFFF'><b>%s</b></font> (%d Energy)", sData.predictedMove, sData.predictedCost))
                         table.insert(hudLines, string.format("  • <i>Last Skill:</i> <font color='#BDC3C7'>%s</font>", sData.lastAttack))
-                        table.insert(hudLines, "  • <b>Skills & Status:</b>")
+                        table.insert(hudLines, "  • <b>Skills, Costs & Cooldowns:</b>")
                         for _, skLine in ipairs(sData.skills) do
                             table.insert(hudLines, "    " .. skLine)
                         end
@@ -10665,6 +10735,7 @@ function EnemyStatusEngine.start()
                             table.insert(hudLines, "")
                         end
 
+                        -- Overhead 3D Billboard
                         if Toggles.ShowEnemyStatusHead and Toggles.ShowEnemyStatusHead.Value then
                             local head = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
                             if head then
@@ -10672,16 +10743,16 @@ function EnemyStatusEngine.start()
                                 if not bb or not bb.Parent then
                                     bb = Instance.new("BillboardGui")
                                     bb.Name = "EnemyStatusBB"
-                                    bb.Size = UDim2.new(0, 200, 0, 60)
-                                    bb.StudsOffset = Vector3.new(0, 3.2, 0)
+                                    bb.Size = UDim2.new(0, 220, 0, 75)
+                                    bb.StudsOffset = Vector3.new(0, 3.4, 0)
                                     bb.AlwaysOnTop = true
                                     bb.Adornee = head
                                     bb.MaxDistance = 150
 
                                     local frame = Instance.new("Frame")
                                     frame.Size = UDim2.new(1, 0, 1, 0)
-                                    frame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-                                    frame.BackgroundTransparency = 0.25
+                                    frame.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
+                                    frame.BackgroundTransparency = 0.15
                                     frame.BorderSizePixel = 0
                                     frame.Parent = bb
 
@@ -10691,7 +10762,7 @@ function EnemyStatusEngine.start()
 
                                     local stroke = Instance.new("UIStroke")
                                     stroke.Color = Color3.fromRGB(6, 182, 212)
-                                    stroke.Thickness = 1
+                                    stroke.Thickness = 1.2
                                     stroke.Parent = frame
 
                                     local lbl = Instance.new("TextLabel")
@@ -10699,18 +10770,17 @@ function EnemyStatusEngine.start()
                                     lbl.Size = UDim2.new(1, -8, 1, -6)
                                     lbl.Position = UDim2.new(0, 4, 0, 3)
                                     lbl.BackgroundTransparency = 1
-                                    lbl.TextColor3 = Color3.fromRGB(240, 240, 240)
+                                    lbl.TextColor3 = Color3.fromRGB(240, 245, 255)
                                     lbl.Font = Enum.Font.GothamMedium
-                                    lbl.TextSize = 10
+                                    lbl.TextSize = 9.5
                                     lbl.TextWrapped = true
                                     lbl.RichText = true
                                     lbl.Parent = frame
 
                                     pcall(function()
-                                        local coreGui = game:GetService("CoreGui")
-                                        bb.Parent = coreGui
+                                        local parentGui = (gethui and gethui()) or (game:GetService("CoreGui"):FindFirstChild("RobloxGui")) or PlayerGui
+                                        bb.Parent = parentGui
                                     end)
-                                    if not bb.Parent then bb.Parent = PlayerGui end
                                     EnemyStatusEngine.billboards[enemyModel] = bb
                                 end
 
@@ -10721,8 +10791,11 @@ function EnemyStatusEngine.start()
                                         local skClean = sData.skills[i]:gsub("•%s*", "")
                                         table.insert(shortSkills, skClean)
                                     end
-                                    infoLbl.Text = string.format("<b>%s</b> (<font color='%s'>%d HP</font>) | ⚡ %d/%d E\nLast: %s\n%s", 
-                                        sData.name, hpColor, sData.curHp, sData.curEnergy, sData.maxEnergy, sData.lastAttack, table.concat(shortSkills, "\n"))
+                                    infoLbl.Text = string.format("<b>%s</b> (<font color='%s'>%d HP</font>) | ⚡ %d/%d E
+🎯 <b>Next:</b> <font color='#00FFFF'>%s (%d E)</font>
+%s", 
+                                        sData.name, hpColor, sData.curHp, sData.curEnergy, sData.maxEnergy, sData.predictedMove, sData.predictedCost, table.concat(shortSkills, "
+"))
                                 end
                             end
                         end
@@ -10730,12 +10803,13 @@ function EnemyStatusEngine.start()
                 end
 
                 if #activeEnemies == 0 then
-                    table.insert(hudLines, "<i>Waiting for enemies to appear...</i>")
+                    table.insert(hudLines, "<i>Waiting for combat enemies to appear...</i>")
                 end
 
                 local cLbl = hud and hud:FindFirstChild("Content")
                 if cLbl then
-                    cLbl.Text = table.concat(hudLines, "\n")
+                    cLbl.Text = table.concat(hudLines, "
+")
                 end
             else
                 if hud then hud.Visible = false end
@@ -10767,5 +10841,3 @@ function EnemyStatusEngine.stop()
 end
 
 EnemyStatusEngine.start()
-
-
