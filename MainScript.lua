@@ -4964,28 +4964,44 @@ local function handleNotification(data)
     local title = tostring(data.Title or "")
     local text = tostring(data.Text or "")
 
-    hubLog(string.format("[AutoAccept] 🎁 Bắt được SetCore Notification '%s' ('%s') -> Auto Invoking '%s'!", title, text, targetButton))
-
-    if AutoYarthul and AutoYarthul.running then
-        AutoYarthul.updateHUD(string.format("🎁 Auto Accepted: %s", title ~= "" and title or targetButton))
-        pcall(function()
-            AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
-        end)
-    end
-
     task.defer(function()
-        task.wait(0.05)
+        task.wait(0.04)
+        local success = false
         pcall(function()
             if typeof(data.Callback) == "Instance" then
                 if data.Callback:IsA("BindableFunction") then
                     data.Callback:Invoke(targetButton)
+                    success = true
                 elseif data.Callback:IsA("BindableEvent") then
                     data.Callback:Fire(targetButton)
+                    success = true
                 end
             elseif type(data.Callback) == "function" then
                 data.Callback(targetButton)
+                success = true
             end
         end)
+
+        if success then
+            local displayInfo = (title ~= "" and title ~= "Item dropped!") and title or text
+            print(string.format("[AutoLoot] ✅ Đã ấn '%s' thành công cho thông báo rơi đồ: '%s' (%s)!", targetButton, title, text))
+            
+            pcall(function()
+                ZeroLib:Notify({
+                    Title = "Auto Loot Thành Công",
+                    Content = string.format("Đã tự động nhận: %s", displayInfo),
+                    Type = "Success",
+                    Duration = 4
+                })
+            end)
+
+            if AutoYarthul and AutoYarthul.running then
+                AutoYarthul.updateHUD(string.format("🎁 Auto Accepted: %s", displayInfo))
+                pcall(function()
+                    AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
+                end)
+            end
+        end
     end)
 end
 
@@ -4994,7 +5010,40 @@ function AutoYarthul.hookLootRemote()
     AutoAcceptEngine.installed = true
     shared.ArcaneSetCoreHookInstalled = true
 
-    -- 1. Hook game __namecall
+    -- 1. Direct Server ItemDrop Hook (ReplicatedStorage.Remotes.Information.ItemDrop)
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+        local info = remotes and remotes:FindFirstChild("Information")
+        local itemDrop = info and info:FindFirstChild("ItemDrop")
+        if itemDrop and itemDrop:IsA("RemoteFunction") then
+            itemDrop.OnClientInvoke = function(mobName, itemName)
+                local mobStr = tostring(mobName or "Boss")
+                local itemStr = tostring(itemName or "Item")
+                
+                print(string.format("[AutoLoot] 🎁 Server ItemDrop: %s rơi '%s' -> Tự động trả về ACCEPT (true) thành công!", mobStr, itemStr))
+                
+                pcall(function()
+                    ZeroLib:Notify({
+                        Title = "Auto Loot Thành Công",
+                        Content = string.format("Đã nhận vật phẩm: %s (%s)", itemStr, mobStr),
+                        Type = "Success",
+                        Duration = 4
+                    })
+                end)
+
+                if AutoYarthul and AutoYarthul.running then
+                    AutoYarthul.updateHUD(string.format("🎁 Auto Accepted: %s", itemStr))
+                    pcall(function()
+                        AutoYarthul.sendWebhook("Loot", { itemName = itemStr, droppedBy = mobStr })
+                    end)
+                end
+
+                return true
+            end
+        end
+    end)
+
+    -- 2. Hook game __namecall on StarterGui:SetCore("SendNotification")
     pcall(function()
         if hookmetamethod then
             local oldNamecall
@@ -5010,11 +5059,10 @@ function AutoYarthul.hookLootRemote()
 
                 return oldNamecall(self, ...)
             end)
-            hubLog("[AutoAccept] ✅ Hookmetamethod __namecall on SetCore installed!")
         end
     end)
 
-    -- 2. Hook function index fallback
+    -- 3. Hook function index fallback on StarterGui.SetCore
     pcall(function()
         if hookfunction and StarterGui.SetCore then
             local oldSetCore
@@ -5024,11 +5072,10 @@ function AutoYarthul.hookLootRemote()
                 end
                 return oldSetCore(self, coreName, data, ...)
             end)
-            hubLog("[AutoAccept] ✅ Hookfunction on StarterGui.SetCore installed!")
         end
     end)
 
-    -- 3. Visual cleanup: Remove lingering notification card from CoreGui
+    -- 4. Visual cleanup: Remove lingering notification card from CoreGui
     task.spawn(function()
         pcall(function()
             local coreGui = game:GetService("CoreGui")
@@ -5044,8 +5091,6 @@ function AutoYarthul.hookLootRemote()
             end)
         end)
     end)
-
-    hubLog("[AutoAccept] 🚀 Universal AutoAccept & Loot Hook Engine Fully Initialized!")
 end
 
 AutoYarthul.hookLootRemote()
