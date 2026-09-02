@@ -9003,15 +9003,22 @@ LandmarkGroup:AddButton({
         Teleporter.cancel()
     end
 })
-local PlayerESPGroup = Tabs.Visuals:AddLeftGroupbox("Player ESP & Trackers")
-local NpcESPGroup = Tabs.Visuals:AddLeftGroupbox("NPC & Waypoint ESP")
-local ESPGroup = Tabs.Visuals:AddLeftGroupbox("Ingredient & Ore ESP")
-local FilterGroup = Tabs.Visuals:AddLeftGroupbox("Filters & Categories")
+local PlayerESPGroup   = Tabs.Visuals:AddLeftGroupbox("Player ESP & Trackers")
+local TrainerESPGroup  = Tabs.Visuals:AddLeftGroupbox("Class Trainer ESP")
+local NpcESPGroup      = Tabs.Visuals:AddLeftGroupbox("General NPC & Service ESP")
+local WaypointESPGroup = Tabs.Visuals:AddLeftGroupbox("Waypoint & POI ESP")
+local ESPGroup         = Tabs.Visuals:AddLeftGroupbox("Ingredient & Ore ESP")
+local FilterGroup      = Tabs.Visuals:AddLeftGroupbox("Filters & Categories")
 
-PlayerESPGroup:AddToggle("PlayerESP", {
+-- 1. Player ESP
+local pToggle = PlayerESPGroup:AddToggle("PlayerESP", {
     Text = "Enable Player ESP",
     Default = false,
-    Tooltip = "Hiển thị tên người chơi, thanh máu, cấp độ và khoảng cách tới người chơi khác trong server",
+    Tooltip = "Hiển thị tên người chơi, thanh máu và khoảng cách tới người chơi khác trong server",
+})
+pToggle:AddColorPicker("PlayerESPColor", {
+    Default = Color3.fromRGB(6, 182, 212),
+    Title = "Player Color",
 })
 
 PlayerESPGroup:AddSlider("PlayerESPMaxDist", {
@@ -9023,10 +9030,34 @@ PlayerESPGroup:AddSlider("PlayerESPMaxDist", {
     Tooltip = "Khoảng cách quét tối đa để hiển thị người chơi",
 })
 
-NpcESPGroup:AddToggle("NPC_ESP", {
-    Text = "Enable NPC & Trainers ESP",
+-- 2. Class Trainer ESP
+local tToggle = TrainerESPGroup:AddToggle("Trainer_ESP", {
+    Text = "Enable Class Trainer ESP",
     Default = false,
-    Tooltip = "Hiển thị tất cả NPC làm nhiệm vụ, Thầy dạy Class, Bác sĩ và Thương nhân trong thế giới",
+    Tooltip = "Hiển thị tất cả Thầy dạy Base Class, Super Class và Subclass trên bản đồ",
+})
+tToggle:AddColorPicker("TrainerESPColor", {
+    Default = Color3.fromRGB(168, 85, 247),
+    Title = "Trainer Color",
+})
+
+TrainerESPGroup:AddSlider("Trainer_ESPMaxDist", {
+    Text = "Max Trainer ESP Distance",
+    Default = 4000,
+    Min = 500,
+    Max = 12000,
+    Rounding = 0,
+})
+
+-- 3. General NPC & Services ESP
+local nToggle = NpcESPGroup:AddToggle("NPC_ESP", {
+    Text = "Enable General NPC ESP",
+    Default = false,
+    Tooltip = "Hiển thị tất cả NPC làm nhiệm vụ, Thợ rèn, Bác sĩ, Thủ kho và Thương nhân",
+})
+nToggle:AddColorPicker("NPCESPColor", {
+    Default = Color3.fromRGB(251, 191, 36),
+    Title = "General NPC Color",
 })
 
 NpcESPGroup:AddSlider("NPC_ESPMaxDist", {
@@ -9037,13 +9068,18 @@ NpcESPGroup:AddSlider("NPC_ESPMaxDist", {
     Rounding = 0,
 })
 
-NpcESPGroup:AddToggle("Location_ESP", {
+-- 4. Waypoints & POI ESP
+local wToggle = WaypointESPGroup:AddToggle("Location_ESP", {
     Text = "Enable Waypoints & POI ESP",
     Default = false,
     Tooltip = "Hiển thị các địa danh trọng yếu: Caldera, Heavens Point Church, Sanctuary of Blades, Mount Thul...",
 })
+wToggle:AddColorPicker("LocationESPColor", {
+    Default = Color3.fromRGB(34, 197, 94),
+    Title = "Waypoint Color",
+})
 
-NpcESPGroup:AddSlider("Location_ESPMaxDist", {
+WaypointESPGroup:AddSlider("Location_ESPMaxDist", {
     Text = "Max Location ESP Distance",
     Default = 6000,
     Min = 1000,
@@ -9051,11 +9087,39 @@ NpcESPGroup:AddSlider("Location_ESPMaxDist", {
     Rounding = 0,
 })
 
+-- 5. Ingredient & Ore ESP
+local cToggle = ESPGroup:AddToggle("ESP_Crylight", {
+    Text = "Enable Ingredient ESP (Thảo dược)",
+    Default = false,
+    Tooltip = "Hiển thị vị trí các loại thảo dược: Crylight, Aestic, Everthorn, etc.",
+})
+cToggle:AddColorPicker("CrylightESPColor", {
+    Default = Color3.fromRGB(56, 189, 248),
+    Title = "Ingredient Color",
+})
+
+local oToggle = ESPGroup:AddToggle("ESP_Ore", {
+    Text = "Enable Ore ESP (Khoáng sản)",
+    Default = false,
+    Tooltip = "Hiển thị vị trí các mỏ quặng: Ferrus, Iron, Gold, Carnelian...",
+})
+oToggle:AddColorPicker("OreESPColor", {
+    Default = Color3.fromRGB(245, 158, 11),
+    Title = "Ore Color",
+})
+
+ESPGroup:AddSlider("ESP_MaxDistance", {
+    Text = "Max Resource ESP Distance",
+    Default = 3000,
+    Min = 500,
+    Max = 8000,
+    Rounding = 0,
+})
 
 -- =============================================================================
--- ENEMY SKILL PREDICTOR & COMBAT HUD ENGINE (QOL VISUAL SUITE)
+-- ENEMY STATUS & SKILL COOLDOWN MONITOR (QOL VISUAL SUITE)
 -- =============================================================================
-local EnemyPredictor = {
+local EnemyStatusEngine = {
     running = false,
     thread = nil,
     gui = nil,
@@ -9068,13 +9132,13 @@ local EnemyPredictor = {
 }
 
 -- Khởi tạo Cache dữ liệu Kỹ năng và NPC từ ReplicatedStorage
-local function initPredictorData()
+local function initEnemyStatusData()
     pcall(function()
         local skillsMod = ReplicatedStorage:FindFirstChild("Constants") and ReplicatedStorage.Constants:FindFirstChild("Skills")
         if skillsMod then
             local ok, data = pcall(require, skillsMod)
             if ok and type(data) == "table" then
-                EnemyPredictor.skillsCache = data
+                EnemyStatusEngine.skillsCache = data
             end
         end
     end)
@@ -9086,16 +9150,16 @@ local function initPredictorData()
                 if mod:IsA("ModuleScript") then
                     local ok, data = pcall(require, mod)
                     if ok and type(data) == "table" then
-                        EnemyPredictor.npcCache[mod.Name] = data
+                        EnemyStatusEngine.npcCache[mod.Name] = data
                     end
                 end
             end
         end
     end)
 end
-initPredictorData()
+initEnemyStatusData()
 
--- Lắng nghe AttackIndicate và Deciding từ Server để bắt chiêu sớm nhất
+-- Lắng nghe AttackIndicate từ Server để bắt chiêu quái đang chuẩn bị ra
 pcall(function()
     local fightRemotes = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Fight")
     if fightRemotes then
@@ -9103,55 +9167,33 @@ pcall(function()
         if atkInd and atkInd:IsA("RemoteEvent") then
             atkInd.OnClientEvent:Connect(function(skillName)
                 if not skillName then return end
-                EnemyPredictor.lastIndicatedSkill = tostring(skillName)
-                EnemyPredictor.lastIndicatedTime = os.clock()
-                EnemyPredictor.currentDecidingEnemy = nil
-
-                if Toggles.EnemyAttackPredictor and Toggles.EnemyAttackPredictor.Value then
-                    local skInfo = EnemyPredictor.skillsCache[tostring(skillName)]
-                    local aff = skInfo and skInfo.Affinity or "Unknown"
-                    local dmg = skInfo and skInfo.Damage or "?"
-                    local sType = skInfo and skInfo.Type or "Attack"
-
-                    hubLog(string.format("[Predictor]  QUÁI TUNG CHIÊU: '%s' | Hệ: %s | Sát thương: %s | Loại: %s", tostring(skillName), aff, tostring(dmg), sType))
-
-                    -- Cảnh báo âm thanh nếu là chiêu nguy hiểm
-                    if Toggles.PredictorSoundAlert and Toggles.PredictorSoundAlert.Value then
-                        local lowerS = tostring(skillName):lower()
-                        if lowerS:find("pillar") or lowerS:find("inferno") or lowerS:find("armageddon") or lowerS:find("beam") or lowerS:find("eruption") or lowerS:find("crush") then
-                            local sound = Instance.new("Sound")
-                            sound.SoundId = "rbxassetid://6534948092" -- Warning beep
-                            sound.Volume = 1.5
-                            sound.Parent = game:GetService("SoundService")
-                            sound:Play()
-                            game:GetService("Debris"):AddItem(sound, 3)
-                        end
-                    end
-                end
+                EnemyStatusEngine.lastIndicatedSkill = tostring(skillName)
+                EnemyStatusEngine.lastIndicatedTime = os.clock()
+                EnemyStatusEngine.currentDecidingEnemy = nil
             end)
         end
 
         local deciding = fightRemotes:FindFirstChild("Deciding")
         if deciding and deciding:IsA("RemoteEvent") then
             deciding.OnClientEvent:Connect(function(enemyName)
-                EnemyPredictor.currentDecidingEnemy = enemyName
+                EnemyStatusEngine.currentDecidingEnemy = enemyName
             end)
         end
     end
 end)
 
 -- Tạo Giao diện HUD trên màn hình
-local function createPredictorScreenHUD()
-    if EnemyPredictor.gui then return EnemyPredictor.gui end
+local function createEnemyStatusScreenHUD()
+    if EnemyStatusEngine.gui then return EnemyStatusEngine.gui end
 
     local sg = Instance.new("ScreenGui")
-    sg.Name = "ArcaneEnemyPredictorHUD"
+    sg.Name = "ArcaneEnemyStatusHUD"
     sg.ResetOnSpawn = false
     sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 320, 0, 180)
+    mainFrame.Size = UDim2.new(0, 340, 0, 190)
     mainFrame.Position = UDim2.new(0.02, 0, 0.45, 0)
     mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
     mainFrame.BackgroundTransparency = 0.15
@@ -9164,7 +9206,7 @@ local function createPredictorScreenHUD()
     uiCorner.Parent = mainFrame
 
     local uiStroke = Instance.new("UIStroke")
-    uiStroke.Color = Color3.fromRGB(155, 89, 182) -- Purple neon
+    uiStroke.Color = Color3.fromRGB(6, 182, 212) -- Cyan border
     uiStroke.Thickness = 1.5
     uiStroke.Parent = mainFrame
 
@@ -9173,10 +9215,10 @@ local function createPredictorScreenHUD()
     title.Size = UDim2.new(1, -20, 0, 26)
     title.Position = UDim2.new(0, 10, 0, 6)
     title.BackgroundTransparency = 1
-    title.Text = "ENEMY SKILL PREDICTOR"
+    title.Text = "ACTIVE ENEMIES STATUS & COOLDOWNS"
     title.TextColor3 = Color3.fromRGB(240, 240, 255)
     title.Font = Enum.Font.GothamBold
-    title.TextSize = 13
+    title.TextSize = 12
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = mainFrame
 
@@ -9185,7 +9227,7 @@ local function createPredictorScreenHUD()
     contentLabel.Size = UDim2.new(1, -20, 1, -38)
     contentLabel.Position = UDim2.new(0, 10, 0, 32)
     contentLabel.BackgroundTransparency = 1
-    contentLabel.Text = "Đang quét trận đấu..."
+    contentLabel.Text = "Đang quét trạng thái quái..."
     contentLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
     contentLabel.Font = Enum.Font.Gotham
     contentLabel.TextSize = 11
@@ -9195,7 +9237,7 @@ local function createPredictorScreenHUD()
     contentLabel.RichText = true
     contentLabel.Parent = mainFrame
 
-    -- Hỗ trợ kéo thả HUD
+    -- Kéo thả HUD
     local dragging, dragInput, dragStart, startPos
     mainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -9225,36 +9267,30 @@ local function createPredictorScreenHUD()
         local coreGui = game:GetService("CoreGui")
         sg.Parent = coreGui
     end)
-    if not sg.Parent then
-        sg.Parent = PlayerGui
-    end
+    if not sg.Parent then sg.Parent = PlayerGui end
 
-    EnemyPredictor.gui = sg
+    EnemyStatusEngine.gui = sg
     return sg
 end
 
--- Tính toán dự đoán chiêu thức cho 1 quái vật
-local function predictEnemySkills(enemyModel)
+-- Tính toán phân tích chiêu thức, mana/energy và cooldown cho quái vật
+local function analyzeEnemyStatus(enemyModel)
     if not enemyModel or not enemyModel.Parent then return nil end
 
     local enemyName = enemyModel.Name
     local cleanName = enemyName:gsub("%s*%(.*%)", ""):gsub("%d+$", ""):gsub("^%s*(.-)%s*$", "%1")
 
-    -- 1. Lấy thông tin máu
     local hum = enemyModel:FindFirstChildOfClass("Humanoid")
     local curHp = hum and math.floor(hum.Health) or 0
     local maxHp = hum and math.floor(hum.MaxHealth) or 100
 
-    -- 2. Lấy thông tin Năng lượng (Energy)
     local energyVal = enemyModel:FindFirstChild("Status") and enemyModel.Status:FindFirstChild("Energy")
     local curEnergy = energyVal and energyVal.Value or 0
 
-    -- 3. Lấy chiêu vừa dùng
     local lastAttackVal = enemyModel:FindFirstChild("Effects") and enemyModel.Effects:FindFirstChild("LastUsedAttack")
-    local lastAttack = lastAttackVal and lastAttackVal.Value or "Chưa rõ"
+    local lastAttack = lastAttackVal and lastAttackVal.Value or "Chưa dùng"
 
-    -- 4. Tìm dữ liệu NPC gốc
-    local npcData = EnemyPredictor.npcCache[cleanName] or EnemyPredictor.npcCache[enemyName]
+    local npcData = EnemyStatusEngine.npcCache[cleanName] or EnemyStatusEngine.npcCache[enemyName]
     local maxEnergy = npcData and npcData.MaxEnergy or 6
     local attackPool = npcData and npcData.Attacks or {}
 
@@ -9262,44 +9298,30 @@ local function predictEnemySkills(enemyModel)
     local specialSkills = attackPool.Special or {}
     local noEnergySkills = attackPool.NoEnergy or {}
 
-    -- 5. Thuật toán dự đoán dựa trên Energy và Cooldown
-    local predictedList = {}
-    
-    if curEnergy == 0 then
-        -- Chắc chắn chỉ có thể dùng NoEnergy skills hoặc Strike
-        if #noEnergySkills > 0 then
-            for _, sk in ipairs(noEnergySkills) do
-                table.insert(predictedList, { name = sk, chance = "Cao (100% khi hết Energy)", danger = false })
-            end
-        else
-            table.insert(predictedList, { name = "Strike (Đánh thường)", chance = "Cao (100%)", danger = false })
-        end
-    else
-        -- Có Energy: Lọc các chiêu có Cost <= curEnergy
-        for _, sk in ipairs(damageSkills) do
-            local skInfo = EnemyPredictor.skillsCache[sk]
-            local cost = skInfo and skInfo.Cost or 1
-            if cost <= curEnergy then
-                local isRecent = (lastAttack == sk)
-                local chanceStr = isRecent and "Trung bình (Vừa dùng)" or "Rất Cao"
-                local isDanger = (sk:lower():find("pillar") or sk:lower():find("beam") or sk:lower():find("hellfire") or sk:lower():find("crush"))
-                table.insert(predictedList, { name = sk, cost = cost, chance = chanceStr, danger = isDanger })
-            end
-        end
+    local skillBreakdown = {}
 
-        for _, sk in ipairs(specialSkills) do
-            local skInfo = EnemyPredictor.skillsCache[sk]
-            local cost = skInfo and skInfo.Cost or 2
-            if cost <= curEnergy then
-                local isRecent = (lastAttack == sk)
-                local chanceStr = isRecent and "Thấp (Cooldown)" or "Cao (Special)"
-                table.insert(predictedList, { name = sk, cost = cost, chance = chanceStr, danger = true })
-            end
-        end
+    for _, sk in ipairs(damageSkills) do
+        local skInfo = EnemyStatusEngine.skillsCache[sk]
+        local cost = skInfo and skInfo.Cost or 1
+        local isRecent = (lastAttack == sk)
+        local statusStr = isRecent and "<font color='#FFA500'>[Vừa dùng/CD]</font>" or (curEnergy >= cost and "<font color='#2ECC71'>[SẴN SÀNG]</font>" or "<font color='#E74C3C'>[THIẾU ENERGY]</font>")
+        table.insert(skillBreakdown, string.format("• <b>%s</b> (%d Energy) %s", sk, cost, statusStr))
+    end
 
-        if #predictedList == 0 then
-            table.insert(predictedList, { name = "Strike (Đánh thường)", chance = "100%", danger = false })
-        end
+    for _, sk in ipairs(specialSkills) do
+        local skInfo = EnemyStatusEngine.skillsCache[sk]
+        local cost = skInfo and skInfo.Cost or 2
+        local isRecent = (lastAttack == sk)
+        local statusStr = isRecent and "<font color='#FFA500'>[Vừa dùng/CD]</font>" or (curEnergy >= cost and "<font color='#9B59B6'>[ĐẶC BIỆT/READY]</font>" or "<font color='#E74C3C'>[THIẾU ENERGY]</font>")
+        table.insert(skillBreakdown, string.format("• <b>%s</b> (%d Energy) %s", sk, cost, statusStr))
+    end
+
+    for _, sk in ipairs(noEnergySkills) do
+        table.insert(skillBreakdown, string.format("• <b>%s</b> (0 Energy) <font color='#2ECC71'>[SẴN SÀNG]</font>", sk))
+    end
+
+    if #skillBreakdown == 0 then
+        table.insert(skillBreakdown, "• <b>Strike (Đánh thường)</b> (0 Energy) <font color='#2ECC71'>[SẴN SÀNG]</font>")
     end
 
     return {
@@ -9310,116 +9332,145 @@ local function predictEnemySkills(enemyModel)
         curEnergy = curEnergy,
         maxEnergy = maxEnergy,
         lastAttack = lastAttack,
-        predictions = predictedList
+        skills = skillBreakdown
     }
 end
 
--- Vòng lặp cập nhật Predictor
-function EnemyPredictor.start()
-    if EnemyPredictor.running then return end
-    EnemyPredictor.running = true
-    createPredictorScreenHUD()
+-- Vòng lặp cập nhật Enemy Status
+function EnemyStatusEngine.start()
+    if EnemyStatusEngine.running then return end
+    EnemyStatusEngine.running = true
+    createEnemyStatusScreenHUD()
 
-    EnemyPredictor.thread = task.spawn(function()
-        while EnemyPredictor.running do
+    EnemyStatusEngine.thread = task.spawn(function()
+        while EnemyStatusEngine.running do
             local inCombat = isInCombat()
-            local hud = EnemyPredictor.gui and EnemyPredictor.gui:FindFirstChild("MainFrame")
+            local hud = EnemyStatusEngine.gui and EnemyStatusEngine.gui:FindFirstChild("MainFrame")
 
-            if inCombat and Toggles.EnemyAttackPredictor and Toggles.EnemyAttackPredictor.Value then
-                if hud then hud.Visible = true end
+            if inCombat and (Toggles.ShowEnemyStatusHUD and Toggles.ShowEnemyStatusHUD.Value or Toggles.ShowEnemyStatusHead and Toggles.ShowEnemyStatusHead.Value) then
+                if hud and Toggles.ShowEnemyStatusHUD and Toggles.ShowEnemyStatusHUD.Value then
+                    hud.Visible = true
+                elseif hud then
+                    hud.Visible = false
+                end
 
-                -- Lấy danh sách quái trong trận
+                -- Lọc quái vật CHÍNH XÁC trong trận đấu của người chơi
                 local activeEnemies = {}
                 local living = workspace:FindFirstChild("Living")
                 local char = LocalPlayer.Character
                 local myFightVal = char and char:FindFirstChild("FightInProgress")
                 local myFightId = myFightVal and myFightVal.Value
+                local myRoot = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
 
-                if living then
+                if living and myRoot then
                     for _, m in ipairs(living:GetChildren()) do
-                        if m ~= char and m:FindFirstChildOfClass("Humanoid") then
+                        if m ~= char and m:FindFirstChildOfClass("Humanoid") and not Players:GetPlayerFromCharacter(m) then
                             local fVal = m:FindFirstChild("FightInProgress")
-                            if not myFightId or not fVal or fVal.Value == myFightId then
-                                local hum = m:FindFirstChildOfClass("Humanoid")
-                                if hum and hum.Health > 0 and not Players:GetPlayerFromCharacter(m) then
-                                    table.insert(activeEnemies, m)
-                                end
+                            local hum = m:FindFirstChildOfClass("Humanoid")
+                            local root = m:FindFirstChild("HumanoidRootPart") or m:FindFirstChild("Torso")
+                            
+                            local isMyEnemy = false
+                            if myFightId and fVal and fVal.Value == myFightId then
+                                isMyEnemy = true
+                            elseif root and (root.Position - myRoot.Position).Magnitude < 40 then
+                                isMyEnemy = true
+                            end
+
+                            if isMyEnemy and hum and hum.Health > 0 then
+                                table.insert(activeEnemies, m)
                             end
                         end
                     end
                 end
 
-                -- Xây dựng văn bản hiển thị HUD
+                -- Xây dựng nội dung hiển thị HUD
                 local hudLines = {}
-
-                -- Hiển thị cảnh báo thời gian thực nếu vừa có AttackIndicate (< 2.5s)
                 local now = os.clock()
-                if EnemyPredictor.lastIndicatedSkill and (now - EnemyPredictor.lastIndicatedTime < 2.5) then
-                    local skName = EnemyPredictor.lastIndicatedSkill
-                    local skInfo = EnemyPredictor.skillsCache[skName]
-                    local aff = skInfo and skInfo.Affinity or "Fire/Physical"
-                    table.insert(hudLines, string.format(" <b><font color='#FF5555'>ĐANG TUNG CHIÊU: %s</font></b> <font color='#F1C40F'>[%s]</font>", skName, aff))
+                if EnemyStatusEngine.lastIndicatedSkill and (now - EnemyStatusEngine.lastIndicatedTime < 2.5) then
+                    local skName = EnemyStatusEngine.lastIndicatedSkill
+                    table.insert(hudLines, string.format("⚠️ <b><font color='#FF5555'>ĐANG CHUẨN BỊ: %s</font></b>", skName))
                     table.insert(hudLines, "────────────────────────────")
-                elseif EnemyPredictor.currentDecidingEnemy then
-                    table.insert(hudLines, string.format("⏳ <i><font color='#F39C12'>%s đang suy nghĩ lượt...</font></i>", EnemyPredictor.currentDecidingEnemy))
+                elseif EnemyStatusEngine.currentDecidingEnemy then
+                    table.insert(hudLines, string.format("⏳ <i><font color='#F39C12'>%s đang suy nghĩ lượt...</font></i>", EnemyStatusEngine.currentDecidingEnemy))
                     table.insert(hudLines, "────────────────────────────")
                 end
 
                 for idx, enemyModel in ipairs(activeEnemies) do
-                    local pData = predictEnemySkills(enemyModel)
-                    if pData then
-                        local hpPercent = math.clamp(pData.curHp / math.max(1, pData.maxHp), 0, 1)
+                    local sData = analyzeEnemyStatus(enemyModel)
+                    if sData then
+                        local hpPercent = math.clamp(sData.curHp / math.max(1, sData.maxHp), 0, 1)
                         local hpColor = hpPercent > 0.5 and "#2ECC71" or (hpPercent > 0.25 and "#F39C12" or "#E74C3C")
-                        local energyStr = string.format(" Energy: <font color='#3498DB'><b>%d / %d</b></font>", pData.curEnergy, pData.maxEnergy)
+                        local energyStr = string.format("⚡ Energy: <font color='#3498DB'><b>%d / %d</b></font>", sData.curEnergy, sData.maxEnergy)
 
-                        table.insert(hudLines, string.format(" <b>%s</b> (<font color='%s'>%d/%d HP</font>) | %s", pData.name, hpColor, pData.curHp, pData.maxHp, energyStr))
-                        table.insert(hudLines, string.format("  • <i>Chiêu vừa ra:</i> <font color='#BDC3C7'>%s</font>", pData.lastAttack))
-                        
-                        local predStrList = {}
-                        for _, pr in ipairs(pData.predictions) do
-                            local color = pr.danger and "#FF7675" or "#55EFC4"
-                            table.insert(predStrList, string.format("<font color='%s'>%s</font>", color, pr.name))
+                        table.insert(hudLines, string.format("<b>%s</b> (<font color='%s'>%d/%d HP</font>) | %s", sData.name, hpColor, sData.curHp, sData.maxHp, energyStr))
+                        table.insert(hudLines, string.format("  • <i>Chiêu trước:</i> <font color='#BDC3C7'>%s</font>", sData.lastAttack))
+                        table.insert(hudLines, "  • <b>Chiêu thức & Trạng thái:</b>")
+                        for _, skLine in ipairs(sData.skills) do
+                            table.insert(hudLines, "    " .. skLine)
                         end
-                        table.insert(hudLines, "  •  <b>Dự đoán:</b> " .. table.concat(predStrList, " | "))
                         if idx < #activeEnemies then
                             table.insert(hudLines, "")
                         end
 
-                        -- Cập nhật World Billboard trên đầu quái
-                        if Toggles.PredictorWorldESP and Toggles.PredictorWorldESP.Value then
+                        -- Cập nhật Billboard trên đầu quái
+                        if Toggles.ShowEnemyStatusHead and Toggles.ShowEnemyStatusHead.Value then
                             local head = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
                             if head then
-                                local bb = EnemyPredictor.billboards[enemyModel]
+                                local bb = EnemyStatusEngine.billboards[enemyModel]
                                 if not bb or not bb.Parent then
                                     bb = Instance.new("BillboardGui")
-                                    bb.Name = "EnemyPredictorBB"
-                                    bb.Size = UDim2.new(0, 160, 0, 45)
+                                    bb.Name = "EnemyStatusBB"
+                                    bb.Size = UDim2.new(0, 200, 0, 60)
                                     bb.StudsOffset = Vector3.new(0, 3.2, 0)
                                     bb.AlwaysOnTop = true
                                     bb.Adornee = head
-                                    
-                                    local bbLabel = Instance.new("TextLabel")
-                                    bbLabel.Name = "Label"
-                                    bbLabel.Size = UDim2.new(1, 0, 1, 0)
-                                    bbLabel.BackgroundTransparency = 0.4
-                                    bbLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-                                    bbLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                    bbLabel.Font = Enum.Font.GothamBold
-                                    bbLabel.TextSize = 10
-                                    bbLabel.RichText = true
-                                    bbLabel.Parent = bb
+                                    bb.MaxDistance = 150
 
-                                    local crn = Instance.new("UICorner")
-                                    crn.CornerRadius = UDim.new(0, 4)
-                                    crn.Parent = bbLabel
+                                    local frame = Instance.new("Frame")
+                                    frame.Size = UDim2.new(1, 0, 1, 0)
+                                    frame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+                                    frame.BackgroundTransparency = 0.25
+                                    frame.BorderSizePixel = 0
+                                    frame.Parent = bb
 
-                                    bb.Parent = head
-                                    EnemyPredictor.billboards[enemyModel] = bb
+                                    local corner = Instance.new("UICorner")
+                                    corner.CornerRadius = UDim.new(0, 6)
+                                    corner.Parent = frame
+
+                                    local stroke = Instance.new("UIStroke")
+                                    stroke.Color = Color3.fromRGB(6, 182, 212)
+                                    stroke.Thickness = 1
+                                    stroke.Parent = frame
+
+                                    local lbl = Instance.new("TextLabel")
+                                    lbl.Name = "Info"
+                                    lbl.Size = UDim2.new(1, -8, 1, -6)
+                                    lbl.Position = UDim2.new(0, 4, 0, 3)
+                                    lbl.BackgroundTransparency = 1
+                                    lbl.TextColor3 = Color3.fromRGB(240, 240, 240)
+                                    lbl.Font = Enum.Font.GothamMedium
+                                    lbl.TextSize = 10
+                                    lbl.TextWrapped = true
+                                    lbl.RichText = true
+                                    lbl.Parent = frame
+
+                                    pcall(function()
+                                        local coreGui = game:GetService("CoreGui")
+                                        bb.Parent = coreGui
+                                    end)
+                                    if not bb.Parent then bb.Parent = PlayerGui end
+                                    EnemyStatusEngine.billboards[enemyModel] = bb
                                 end
 
-                                if bb and bb:FindFirstChild("Label") then
-                                    local topPred = pData.predictions[1] and pData.predictions[1].name or "Strike"
-                                    bb.Label.Text = string.format(" <b>%d/%d Energy</b>\n <b>Next: %s</b>", pData.curEnergy, pData.maxEnergy, topPred)
+                                local infoLbl = bb:FindFirstChild("Info", true)
+                                if infoLbl then
+                                    local shortSkills = {}
+                                    for i = 1, math.min(3, #sData.skills) do
+                                        local skClean = sData.skills[i]:gsub("•%s*", "")
+                                        table.insert(shortSkills, skClean)
+                                    end
+                                    infoLbl.Text = string.format("<b>%s</b> (<font color='%s'>%d HP</font>) | ⚡ %d/%d E\nLast: %s\n%s", 
+                                        sData.name, hpColor, sData.curHp, sData.curEnergy, sData.maxEnergy, sData.lastAttack, table.concat(shortSkills, "\n"))
                                 end
                             end
                         end
@@ -9427,1011 +9478,291 @@ function EnemyPredictor.start()
                 end
 
                 if #activeEnemies == 0 then
-                    table.insert(hudLines, "<i>Đang tìm mục tiêu quái trong trận...</i>")
+                    table.insert(hudLines, "<i>Đang đợi quái vật xuất hiện...</i>")
                 end
 
-                local contentLabel = hud and hud:FindFirstChild("Content")
-                if contentLabel then
-                    contentLabel.Text = table.concat(hudLines, "\n")
+                local cLbl = hud and hud:FindFirstChild("Content")
+                if cLbl then
+                    cLbl.Text = table.concat(hudLines, "\n")
                 end
             else
                 if hud then hud.Visible = false end
-                -- Ẩn hoặc dọn dẹp billboards
-                for model, bb in pairs(EnemyPredictor.billboards) do
-                    if bb and bb.Parent then pcall(function() bb:Destroy() end) end
+                -- Xóa sạch các billboard khi thoát giao tranh hoặc tắt toggle
+                for m, bb in pairs(EnemyStatusEngine.billboards) do
+                    if bb and bb.Parent then bb:Destroy() end
                 end
-                EnemyPredictor.billboards = {}
+                table.clear(EnemyStatusEngine.billboards)
             end
 
-            task.wait(0.25)
+            task.wait(0.2)
         end
     end)
 end
 
-function EnemyPredictor.stop()
-    EnemyPredictor.running = false
-    if EnemyPredictor.thread then
-        task.cancel(EnemyPredictor.thread)
-        EnemyPredictor.thread = nil
+function EnemyStatusEngine.stop()
+    EnemyStatusEngine.running = false
+    if EnemyStatusEngine.thread then
+        task.cancel(EnemyStatusEngine.thread)
+        EnemyStatusEngine.thread = nil
     end
-    if EnemyPredictor.gui then
-        pcall(function() EnemyPredictor.gui:Destroy() end)
-        EnemyPredictor.gui = nil
+    if EnemyStatusEngine.gui then
+        EnemyStatusEngine.gui:Destroy()
+        EnemyStatusEngine.gui = nil
     end
-    for model, bb in pairs(EnemyPredictor.billboards) do
-        if bb and bb.Parent then pcall(function() bb:Destroy() end) end
+    for _, bb in pairs(EnemyStatusEngine.billboards) do
+        if bb and bb.Parent then bb:Destroy() end
     end
-    EnemyPredictor.billboards = {}
+    table.clear(EnemyStatusEngine.billboards)
 end
 
-local QOLGroup = Tabs.Visuals:AddRightGroupbox("Quality of Life (QOL)")
-local FPSGroup = Tabs.Visuals:AddRightGroupbox("FPS Booster")
-local OptGroup = Tabs.Visuals:AddRightGroupbox("Optimization & RAM")
+EnemyStatusEngine.start()
 
-QOLGroup:AddToggle("EnemyAttackPredictor", {
-    Text = "Enemy Skill Predictor & Combat HUD",
-    Default = false,
-    Tooltip = "Hiển thị bảng phân tích dự đoán chiêu thức tiếp theo của quái, thanh Energy thời gian thực và bắt chiêu ngay khi quái vung đòn",
-})
-
-Toggles.EnemyAttackPredictor:OnChanged(function()
-    if Toggles.EnemyAttackPredictor.Value then
-        EnemyPredictor.start()
-    else
-        EnemyPredictor.stop()
-    end
-end)
-
-QOLGroup:AddToggle("PredictorWorldESP", {
-    Text = "Show Predictor On Enemy Heads (ESP)",
-    Default = false,
-    Tooltip = "Hiển thị thanh Energy & Chiêu dự đoán trực tiếp dạng Billboard trên đầu quái vật",
-})
-
-QOLGroup:AddToggle("PredictorSoundAlert", {
-    Text = "Sound Alert On Danger Skills",
-    Default = false,
-    Tooltip = "Phát chuông cảnh báo âm thanh khi boss/quái bắt đầu tung chiêu nguy hiểm (Magma Pillar, Inferno, v.v.)",
-})
-
-QOLGroup:AddDivider()
-
-QOLGroup:AddToggle("BypassNoPainHP", {
-    Text = "Reveal 'I Feel No Pain' HP & Mana",
-    Default = false,
-    Tooltip = "Reveals exact numerical Health and Mana/Energy bars when obscured by Trial I Feel No Pain",
-})
-
-QOLGroup:AddToggle("RevealUnidentified", {
-    Text = "Reveal Unidentified Items",
-    Default = false,
-    Tooltip = "Reveals the true real names and stats of all unidentified equipment and items in your inventory",
-})
-
-local FPSBooster = {
-    originalFogEnd = (Lighting and Lighting.FogEnd) or 100000,
-    originalFogStart = (Lighting and Lighting.FogStart) or 0,
-    originalGlobalShadows = (Lighting and Lighting.GlobalShadows) or true,
-    originalBrightness = (Lighting and Lighting.Brightness) or 2,
-    originalAmbient = (Lighting and Lighting.Ambient) or Color3.fromRGB(0, 0, 0),
-    originalOutdoorAmbient = (Lighting and Lighting.OutdoorAmbient) or Color3.fromRGB(128, 128, 128),
-    originalShadowSoftness = (Lighting and Lighting.ShadowSoftness) or 0.2,
-}
-
-local OptimizationState = {
-    extremeActive = false,
-    extremeConnection = nil,
-    lowGraphicsActive = false,
-    lowGraphicsConnection = nil,
-    removeTreesActive = false,
-    removeTreesConnection = nil,
-}
-
--- 1. XỬ LÝ ẨN CÂY CỐI & THẢM THỰC VẬT (REMOVE TREES / FOLIAGE / GRASS)
-local function applyPartTreeRemoval(obj, hideTrees)
-    if not obj then return end
-    local name = obj.Name:lower()
-    local isTreeFoliage = name:find("tree") or name:find("bush") or name:find("leaf") or name:find("leaves")
-        or name:find("foliage") or name:find("grass") or name:find("plant") or name:find("flora")
-        or name:find("canopy") or name:find("trunk") or name:find("vine") or name:find("wood")
-
-    if obj:IsA("Model") and isTreeFoliage and not obj:FindFirstChildOfClass("Humanoid") and not obj:FindFirstChild("ClickDetector") then
-        for _, p in ipairs(obj:GetDescendants()) do
-            if p:IsA("BasePart") then
-                p.Transparency = hideTrees and 1 or 0
-                p.CastShadow = not hideTrees
-                p.CanCollide = not hideTrees
-            end
-        end
-    elseif obj:IsA("BasePart") and isTreeFoliage and not (LocalPlayer.Character and obj:IsDescendantOf(LocalPlayer.Character)) then
-        obj.Transparency = hideTrees and 1 or 0
-        obj.CastShadow = not hideTrees
-        obj.CanCollide = not hideTrees
-    end
-end
-
-local function applyTreeRemoval()
-    task.spawn(function()
-        pcall(function()
-            local hideTrees = Toggles.RemoveTrees and Toggles.RemoveTrees.Value or false
-            OptimizationState.removeTreesActive = hideTrees
-
-            -- Quét thư mục rác MapGarbage & toàn bộ workspace
-            local mapGarbage = workspace:FindFirstChild("MapGarbage")
-            if mapGarbage then
-                local treeGarb = mapGarbage:FindFirstChild("TreeGarbage")
-                if treeGarb then
-                    for _, m in ipairs(treeGarb:GetDescendants()) do
-                        if m:IsA("BasePart") then
-                            m.Transparency = hideTrees and 1 or 0
-                            m.CastShadow = not hideTrees
-                        end
-                    end
-                end
-            end
-
-            for _, obj in ipairs(workspace:GetDescendants()) do
-                applyPartTreeRemoval(obj, hideTrees)
-            end
-
-            if hideTrees then
-                if not OptimizationState.removeTreesConnection then
-                    OptimizationState.removeTreesConnection = workspace.DescendantAdded:Connect(function(child)
-                        if OptimizationState.removeTreesActive then
-                            task.defer(function()
-                                applyPartTreeRemoval(child, true)
-                            end)
-                        end
-                    end)
-                    registerConnection(OptimizationState.removeTreesConnection)
-                end
-            else
-                if OptimizationState.removeTreesConnection then
-                    OptimizationState.removeTreesConnection:Disconnect()
-                    OptimizationState.removeTreesConnection = nil
-                end
-            end
-        end)
-    end)
-end
-
--- 2. XỬ LÝ ĐỒ HỌA MƯỢT & TẮT PARTICLE (LOW GRAPHICS)
-local function applyPartLowGraphics(p, isLow)
-    if not p then return end
-    if LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character) then return end
-
-    if p:IsA("BasePart") then
-        if isLow then
-            p.Material = Enum.Material.SmoothPlastic
-            p.Reflectance = 0
-            p.CastShadow = false
-        end
-    elseif p:IsA("MeshPart") then
-        if isLow then
-            p.Material = Enum.Material.SmoothPlastic
-            p.Reflectance = 0
-            p.CastShadow = false
-            p.TextureID = ""
-        end
-    elseif p:IsA("SpecialMesh") then
-        if isLow then
-            p.TextureId = ""
-        end
-    elseif p:IsA("Decal") or p:IsA("Texture") then
-        if isLow then
-            p.Transparency = 1
-        end
-    elseif p:IsA("SurfaceAppearance") then
-        if isLow then
-            p:Destroy()
-        end
-    elseif p:IsA("ParticleEmitter") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") or p:IsA("Trail") or p:IsA("Beam") or p:IsA("Highlight") then
-        p.Enabled = not isLow
-    elseif p:IsA("PointLight") or p:IsA("SpotLight") or p:IsA("SurfaceLight") then
-        p.Enabled = not isLow
-    end
-end
-
-local function applyLowGraphics()
-    task.spawn(function()
-        pcall(function()
-            local isLow = Toggles.LowGraphics and Toggles.LowGraphics.Value or false
-            OptimizationState.lowGraphicsActive = isLow
-
-            if isLow then
-                pcall(function() settings().Rendering.QualityLevel = 1 end)
-                local terrain = workspace:FindFirstChildOfClass("Terrain")
-                if terrain then
-                    terrain.Decoration = false
-                end
-            end
-
-            for _, p in ipairs(workspace:GetDescendants()) do
-                applyPartLowGraphics(p, isLow)
-            end
-
-            if isLow then
-                if not OptimizationState.lowGraphicsConnection then
-                    OptimizationState.lowGraphicsConnection = workspace.DescendantAdded:Connect(function(child)
-                        if OptimizationState.lowGraphicsActive then
-                            task.defer(function()
-                                applyPartLowGraphics(child, true)
-                            end)
-                        end
-                    end)
-                    registerConnection(OptimizationState.lowGraphicsConnection)
-                end
-            else
-                if OptimizationState.lowGraphicsConnection then
-                    OptimizationState.lowGraphicsConnection:Disconnect()
-                    OptimizationState.lowGraphicsConnection = nil
-                end
-            end
-        end)
-    end)
-end
-
--- 3. XỬ LÝ MASTER FPS BOOST (XÓA SƯƠNG MÙ / HIỆU ỨNG ÁNH SÁNG)
-local function applyFPSBoost()
-    task.spawn(function()
-        pcall(function()
-            local isBoost = Toggles.EnableFPSBoost and Toggles.EnableFPSBoost.Value
-            if isBoost then
-                Lighting.GlobalShadows = false
-                Lighting.FogEnd = 9e9
-                Lighting.FogStart = 9e9
-                Lighting.ShadowSoftness = 0
-
-                local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-                if atmosphere then
-                    atmosphere.Density = 0
-                    atmosphere.Haze = 0
-                    atmosphere.Glare = 0
-                end
-
-                for _, effect in ipairs(Lighting:GetChildren()) do
-                    if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") then
-                        effect.Enabled = false
-                    end
-                end
-
-                local terrain = workspace:FindFirstChildOfClass("Terrain")
-                if terrain then
-                    terrain.Decoration = false
-                    terrain.WaterWaveSize = 0
-                    terrain.WaterWaveSpeed = 0
-                    terrain.WaterReflectance = 0
-                end
-            else
-                Lighting.GlobalShadows = FPSBooster.originalGlobalShadows or true
-                Lighting.FogEnd = FPSBooster.originalFogEnd or 100000
-                Lighting.FogStart = FPSBooster.originalFogStart or 0
-                Lighting.ShadowSoftness = FPSBooster.originalShadowSoftness or 0.2
-                local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-                if atmosphere then
-                    atmosphere.Density = 0.3
-                end
-            end
-        end)
-    end)
-end
-
--- 4. XỬ LÝ EXTREME FPS BOOSTER (POTATO MODE TOÀN DIỆN - KHÔNG TẮT 3D RENDER)
-local function applyExtremePart(p)
-    if not p then return end
-    if p:IsA("BasePart") then
-        p.Material = Enum.Material.SmoothPlastic
-        p.Reflectance = 0
-        p.CastShadow = false
-    elseif p:IsA("MeshPart") then
-        p.Material = Enum.Material.SmoothPlastic
-        p.Reflectance = 0
-        p.CastShadow = false
-        p.TextureID = ""
-    elseif p:IsA("SpecialMesh") then
-        p.TextureId = ""
-    elseif p:IsA("Decal") or p:IsA("Texture") then
-        p.Transparency = 1
-    elseif p:IsA("SurfaceAppearance") then
-        p:Destroy()
-    elseif p:IsA("ParticleEmitter") or p:IsA("Trail") or p:IsA("Beam") or p:IsA("Smoke") or p:IsA("Fire") or p:IsA("Sparkles") or p:IsA("Highlight") or p:IsA("Explosion") then
-        p.Enabled = false
-    elseif p:IsA("PointLight") or p:IsA("SpotLight") or p:IsA("SurfaceLight") then
-        p.Enabled = false
-    elseif p:IsA("PostEffect") or p:IsA("BloomEffect") or p:IsA("BlurEffect") or p:IsA("SunRaysEffect") or p:IsA("DepthOfFieldEffect") or p:IsA("ColorCorrectionEffect") or p:IsA("Atmosphere") or p:IsA("Clouds") then
-        p.Enabled = false
-    end
-end
-
-local function applyExtremeFPSBoost()
-    task.spawn(function()
-        pcall(function()
-            local isExtreme = (Toggles.FPSBoost and Toggles.FPSBoost.Value) or (Toggles.ExtremeFPSBoost and Toggles.ExtremeFPSBoost.Value) or false
-            OptimizationState.extremeActive = isExtreme
-
-            if isExtreme then
-                -- A. Cấu hình Engine Renderer & GPU Settings thấp nhất tuyệt đối
-                pcall(function() settings().Rendering.QualityLevel = 1 end)
-                pcall(function() sethiddenproperty(Lighting, "Technology", Enum.Technology.Compatibility) end)
-
-                -- B. Triệt tiêu toàn bộ hiệu ứng ánh sáng / sương mù / bóng đổ
-                Lighting.GlobalShadows = false
-                Lighting.FogEnd = 9e9
-                Lighting.FogStart = 9e9
-                Lighting.Brightness = 1
-                Lighting.ShadowSoftness = 0
-                Lighting.ClockTime = 14
-                Lighting.Ambient = Color3.fromRGB(130, 130, 130)
-                Lighting.OutdoorAmbient = Color3.fromRGB(130, 130, 130)
-
-                for _, effect in ipairs(Lighting:GetChildren()) do
-                    if effect:IsA("PostEffect") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("Atmosphere") or effect:IsA("Clouds") then
-                        effect.Enabled = false
-                    end
-                end
-
-                -- C. Triệt tiêu toàn bộ thảm thực vật & cây cối
-                local mapGarbage = workspace:FindFirstChild("MapGarbage")
-                if mapGarbage then
-                    local treeGarb = mapGarbage:FindFirstChild("TreeGarbage")
-                    if treeGarb then
-                        for _, m in ipairs(treeGarb:GetDescendants()) do
-                            if m:IsA("BasePart") then
-                                m.Transparency = 1
-                                m.CastShadow = false
-                                m.CanCollide = false
-                            end
-                        end
-                    end
-                end
-
-                -- D. Triệt tiêu Terrain Water & Decorations
-                local terrain = workspace:FindFirstChildOfClass("Terrain")
-                if terrain then
-                    terrain.Decoration = false
-                    terrain.WaterWaveSize = 0
-                    terrain.WaterWaveSpeed = 0
-                    terrain.WaterReflectance = 0
-                    terrain.WaterTransparency = 0
-                end
-
-                -- E. Quét toàn bộ vật thể trong Workspace
-                for _, obj in ipairs(workspace:GetDescendants()) do
-                    applyExtremePart(obj)
-                    applyPartTreeRemoval(obj, true)
-                end
-
-                -- F. Lắng nghe vật thể mới sinh ra và lập tức ép về dạng Potato
-                if not OptimizationState.extremeConnection then
-                    OptimizationState.extremeConnection = workspace.DescendantAdded:Connect(function(child)
-                        if OptimizationState.extremeActive then
-                            task.defer(function()
-                                applyExtremePart(child)
-                                applyPartTreeRemoval(child, true)
-                            end)
-                        end
-                    end)
-                    registerConnection(OptimizationState.extremeConnection)
-                end
-
-                -- G. Dọn dẹp bộ nhớ RAM
-                collectgarbage("collect")
-                Library:Notify("🔥 Extreme Potato FPS Mode (Max FPS) Activated!", 3)
-            else
-                if OptimizationState.extremeConnection then
-                    OptimizationState.extremeConnection:Disconnect()
-                    OptimizationState.extremeConnection = nil
-                end
-
-                Lighting.GlobalShadows = FPSBooster.originalGlobalShadows or true
-                Lighting.FogEnd = FPSBooster.originalFogEnd or 100000
-                Lighting.FogStart = FPSBooster.originalFogStart or 0
-                Lighting.Brightness = FPSBooster.originalBrightness or 2
-                Lighting.Ambient = FPSBooster.originalAmbient or Color3.fromRGB(0, 0, 0)
-                Lighting.OutdoorAmbient = FPSBooster.originalOutdoorAmbient or Color3.fromRGB(128, 128, 128)
-                Lighting.ShadowSoftness = FPSBooster.originalShadowSoftness or 0.2
-
-                applyFPSBoost()
-                Library:Notify("Extreme FPS Booster Deactivated.", 3)
-            end
-        end)
-    end)
-end
-
-ESPGroup:AddToggle("MasterESP", {
-    Text = "Enable Ingredient ESP",
-    Default = false,
-})
-
-ESPGroup:AddToggle("ESPShowDistance", {
-    Text = "Show Distance [..m]",
-    Default = false,
-})
-
-ESPGroup:AddSlider("ESPMaxDistance", {
-    Text = "Max Distance (Studs)",
-    Default = 10000,
-    Min = 500,
-    Max = 20000,
-    Rounding = 0,
-})
-
-FilterGroup:AddDropdown("ESPFilterMode", {
-    Values = { "All", "CrylightOnly", "Whitelist" },
-    Default = 1,
-    Multi = false,
-    Text = "Filter Mode",
-})
-
-FilterGroup:AddDropdown("ESPWhitelist", {
-    Values = {
-        "Crylight", "Cryastem", "Hightail", "Everthistle",
-        "7 Leafed Everthistle", "Carnastool", "Driproot", "Cursed Shroom", "Cursed Shroom 2",
-        "Mushrooms", "Bones", "Branch Pile", "Ferrus", "Aestic", "Laneus"
-    },
-    Default = {},
-    Multi = true,
-    Text = "Whitelist Selection",
-})
-
-FPSGroup:AddToggle("FPSBoost", {
-    Text = "🔥 FPS Boost (Potato Mode)",
-    Default = false,
-    Tooltip = " Tối đa hóa FPS kịch khung: Ép Smooth Plastic, xóa Decal/Texture/Light, ẩn cây cối thảm thực vật, tắt Particles/Shadows/Fog (KHÔNG tắt 3D Render).",
-    Callback = function(val)
-        applyExtremeFPSBoost()
-    end,
-})
-
-FPSGroup:AddSlider("FPSCap", {
-    Text = "Max FPS Cap",
-    Default = 360,
-    Min = 30,
-    Max = 360,
-    Rounding = 0,
-    Callback = function(val)
-        if setfpscap then
-            setfpscap(val)
-        end
-    end
-})
-
-OptGroup:AddToggle("AntiAFK", {
-    Text = "Built-in Anti-AFK (20m Kick Bypass)",
-    Default = false,
-    Tooltip = "Tự động gửi tín hiệu chống ngắt kết nối khi treo máy AFK 24/7",
-})
-
-OptGroup:AddButton(" Instant Clean RAM / Garbage", function()
-    collectgarbage("collect")
-    Library:Notify("RAM / Garbage Collection executed!", 3)
-end)
-
-OptGroup:AddButton(" Remove All Fog Permanently", function()
-    Lighting.FogEnd = 9e9
-    Lighting.FogStart = 9e9
-    local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
-    if atmo then atmo.Density = 0 end
-    Library:Notify("All Fog & Haze removed!", 3)
-end)
-
--- -----------------------------------------------------------------------------
--- TAB 6: SETTINGS / CONFIG
--- -----------------------------------------------------------------------------
-
--- =============================================================================
-
--- -----------------------------------------------------------------------------
--- TAB: DISCORD WEBHOOK INTEGRATION & NOTIFICATIONS
--- -----------------------------------------------------------------------------
-local WebhookConfigGroup = Tabs.Webhook:AddLeftGroupbox("Webhook Configuration")
-local WebhookActionsGroup = Tabs.Webhook:AddRightGroupbox("Webhook Testing & Actions")
-
-WebhookConfigGroup:AddInput("DiscordWebhook", {
-    Default = "",
-    Numeric = false,
-    Finished = false,
-    Text = "Primary Discord Webhook URL",
-    Tooltip = "Nhập URL Webhook Discord để nhận thông báo tự động khi tìm thấy Server Corrupt, Boss Drops hoặc nhặt nguyên liệu",
-    Placeholder = "https://discord.com/api/webhooks/...",
-})
-
-WebhookConfigGroup:AddInput("YarthulWebhook", {
-    Default = "",
-    Numeric = false,
-    Finished = false,
-    Text = "Yar'thul Boss Webhook (Optional)",
-    Tooltip = "Link Webhook riêng cho Boss Yar'thul (để trống sẽ dùng Primary Webhook URL)",
-    Placeholder = "https://discord.com/api/webhooks/...",
-})
-
-WebhookConfigGroup:AddDivider()
-
-WebhookConfigGroup:AddToggle("YarthulSendWebhook", {
-    Text = "Enable Yar'thul Boss Drop Alerts",
-    Default = false,
-    Tooltip = "Tự động gửi thông báo Discord Embed chi tiết danh sách tất cả vật phẩm rơi (Loot Drops) nhận được vào kho đồ sau khi diệt Boss Yar'thul",
-})
-
-WebhookConfigGroup:AddToggle("NotifyOnHarvest", {
-    Text = "Send Alerts on Ingredient/Ore Harvest",
-    Default = false,
-    Tooltip = "Tự động gửi thông báo Discord mỗi khi nhặt được nguyên liệu / khoáng sản quý",
-})
-
-WebhookConfigGroup:AddToggle("CorruptPingRole", {
-    Text = "Webhook Ping @everyone on Corrupt Server",
-    Default = false,
-    Tooltip = "Gắn thẻ @everyone khi gửi thông báo tìm thấy Corrupt Server qua Discord",
-})
-
-WebhookActionsGroup:AddButton({
-    Text = "Send Test General Webhook",
-    Tooltip = "Bấm để gửi 1 tin nhắn kiểm tra tới Webhook Discord của bạn",
-    Func = function()
-        local wh = Options.DiscordWebhook and Options.DiscordWebhook.Value
-        if not wh or wh == "" then
-            wh = Options.YarthulWebhook and Options.YarthulWebhook.Value
-        end
-        if not wh or wh == "" then
-            Library:Notify({
-                Title = "Webhook Error",
-                Content = "Vui lòng nhập URL Discord Webhook trước khi kiểm tra!",
-                Type = "Error"
-            })
-            return
-        end
-        sendGeneralWebhook(
-            "Test Webhook Notification",
-            "Webhook Discord dang hoat dong hoan hao tren Arcane Lineage Hub!",
-            65280,
-            {
-                { name = "Nguoi choi", value = LocalPlayer.Name, inline = true },
-                { name = "User ID", value = tostring(LocalPlayer.UserId), inline = true },
-                { name = "Trang thai", value = "San sang hoat dong", inline = false }
-            }
-        )
-        Library:Notify({
-            Title = "Webhook Sent",
-            Content = "Da gui thong bao Test Webhook thanh cong!",
-            Type = "Success"
-        })
-    end,
-})
-
-WebhookActionsGroup:AddButton({
-    Text = "Send Test Yar'thul Boss Webhook",
-    Tooltip = "Gửi thử 1 thông báo Discord Webhook mô phỏng nhận Drop Boss Yar'thul",
-    Func = function()
-        local wh = Options.YarthulWebhook and Options.YarthulWebhook.Value
-        if not wh or wh == "" then
-            wh = Options.DiscordWebhook and Options.DiscordWebhook.Value
-        end
-        if not wh or wh == "" then
-            Library:Notify({
-                Title = "Webhook Error",
-                Content = "Vui lòng nhập URL Discord Webhook trước!",
-                Type = "Error"
-            })
-            return
-        end
-        AutoYarthul.sendWebhook("Test")
-        Library:Notify({
-            Title = "Webhook Sent",
-            Content = "Da gui thong bao Test Yar'thul Drop!",
-            Type = "Success"
-        })
-    end,
-})
-
-WebhookActionsGroup:AddButton({
-    Text = "Send Test Corrupt Server Webhook",
-    Tooltip = "Gửi thử 1 thông báo Discord Webhook mô phỏng tìm thấy Corrupt Server",
-    Func = function()
-        local evName = "Sandstorm (Desert)"
-        if Options.CorruptEvent and Options.CorruptEvent.Value then
-            evName = Options.CorruptEvent.Value
-        end
-        sendCorruptServerWebhook(evName)
-        Library:Notify({
-            Title = "Webhook Sent",
-            Content = "Da gui thong bao Test Corrupt Server!",
-            Type = "Success"
-        })
-    end,
-})
-
--- SETTINGS & CONFIGURATION ENGINE (ZEROLIB v2.7)
--- =============================================================================
-local ThemeGroup = Tabs.Settings:AddLeftGroupbox("Theme & Visual Appearance")
-
-ThemeGroup:AddDropdown("ThemeSelect", {
-    Text = "Select UI Color Theme",
-    Values = {"Cyber-Tactical Cyan", "Crimson Bloodline", "Midnight Violet", "Emerald Glass"},
-    Default = "Cyber-Tactical Cyan",
-    Callback = function(themeName)
-        if themeName == "Crimson Bloodline" then ZeroLib:SetTheme("Crimson")
-        elseif themeName == "Cyber-Tactical Cyan" then ZeroLib:SetTheme("CyberCyan")
-        elseif themeName == "Midnight Violet" then ZeroLib:SetTheme("MidnightViolet")
-        elseif themeName == "Emerald Glass" then ZeroLib:SetTheme("EmeraldGlass")
-        end
-        ZeroLib:Notify({
-            Title = "Theme Applied",
-            Content = "Đã áp dụng giao diện: " .. themeName,
-            Type = "Success"
-        })
-    end
-})
-
-local MenuGroup = Tabs.Settings:AddRightGroupbox("Menu Settings")
-
-local function unloadHub()
-    hubLog("[ArcaneHub]  Đang tiến hành Unload toàn bộ script và giải phóng tài nguyên...")
-    HubState.running = false
-    if Farmer then Farmer.running = false end
-    if AutoFight then AutoFight.stop() end
-    if AutoYarthul then AutoYarthul.stop(true) end
-    if LevelFarmer then LevelFarmer.running = false end
-    if Miner then Miner.running = false end
-    if FlightController then FlightController.active = false end
-    if EnemyPredictor then EnemyPredictor.stop() end
-    if CorruptHunter then CorruptHunter.stop() end
-    if ServerHopper then ServerHopper.isHopping = false end
-
-    for _, conn in ipairs(HubState.connections) do
-        pcall(function() conn:Disconnect() end)
-    end
-    HubState.connections = {}
-
-    if AntiAFK and AntiAFK.connections then
-        for _, conn in ipairs(AntiAFK.connections) do
-            pcall(function() conn:Disconnect() end)
-        end
-        AntiAFK.connections = {}
-    end
-
-    if activeESP then
-        for inst, data in pairs(activeESP) do
-            pcall(function() data.billboard:Destroy() end)
-        end
-        activeESP = {}
-    end
-
-    pcall(function()
-        local char = LocalPlayer.Character
-        if char then
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then part.CanCollide = true end
-            end
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            if hum then hum.PlatformStand = false; hum.WalkSpeed = 16 end
-        end
-    end)
-
-    pcall(function() Library:Unload() end)
-    shared.ArcaneHub = nil
-    globalEnv._ArcaneHubRunning = nil
-    globalEnv._ArcaneHubInitLock = nil
-    hubLog("[ArcaneHub] Da Unload sach se 100%!")
-end
-
-MenuGroup:AddButton("Unload Script", function()
-    unloadHub()
-end)
-
-MenuGroup:AddToggle("AutoLoadOnChangingServer", {
-    Text = "Auto Load on Changing Server",
-    Default = false,
-    Callback = function(Value)
-        if Value then
-            local queued = queueTeleportScript()
-            if queued then
-                Library:Notify({ Title = "Auto Load", Content = "Đã nạp Teleport Queue!", Type = "Success" })
-            else
-                Library:Notify({ Title = "Warning", Content = "Executor không hỗ trợ queue_on_teleport!", Type = "Warning" })
-            end
-        end
-    end
-})
-
-local menuBindLabel = MenuGroup:AddLabel("Menu Keybind")
-local menuKeybind = menuBindLabel:AddKeyPicker("MenuKeybind", {
-    Default = "End",
-    NoUI = true,
-    Text = "Menu keybind",
-    Callback = function(key)
-        ZeroLib:SetToggleKey(key)
-    end
-})
-if menuKeybind and menuKeybind.OnChanged then
-    menuKeybind:OnChanged(function(key)
-        ZeroLib:SetToggleKey(key)
-    end)
-end
-
-local ConfigGroup = Tabs.Settings:AddLeftGroupbox("Configuration Manager")
-
-local configDropdown = ConfigGroup:AddDropdown("ConfigList", {
-    Text = "Select Saved Config",
-    Values = ZeroLib.ConfigManager:GetConfigs(),
-    Default = 1,
-    Callback = function(selectedName)
-        if ZeroLib.Options.ConfigName then
-            ZeroLib.Options.ConfigName:SetValue(selectedName)
-        end
-    end
-})
-
-ConfigGroup:AddInput("ConfigName", {
-    Text = "Config Profile Name",
-    Placeholder = "my_profile",
-    Default = "default",
-    Callback = function(val) end
-})
-
-ConfigGroup:AddButton({
-    Text = "Save Configuration",
-    Func = function()
-        local name = ZeroLib.Options.ConfigName and ZeroLib.Options.ConfigName.Value or "default"
-        if name == "" then name = "default" end
-        ZeroLib.ConfigManager:Save(name)
-        configDropdown:SetValues(ZeroLib.ConfigManager:GetConfigs())
-    end
-})
-
-ConfigGroup:AddButton({
-    Text = "Load Configuration",
-    Func = function()
-        local name = ZeroLib.Options.ConfigName and ZeroLib.Options.ConfigName.Value or "default"
-        ZeroLib.ConfigManager:Load(name)
-    end
-})
-
-ConfigGroup:AddButton({
-    Text = "Refresh Configs List",
-    Func = function()
-        local fresh = ZeroLib.ConfigManager:GetConfigs()
-        configDropdown:SetValues(fresh)
-        ZeroLib:Notify({ Title = "Refreshed", Content = "Đã cập nhật danh sách configs (" .. #fresh .. " profiles)", Type = "Info" })
-    end
-})
-
-local AntiAFK = {
-    initialized = false,
-    connections = {},
-}
-
-local function initAntiAFK()
-    if AntiAFK.initialized then return end
-    AntiAFK.initialized = true
-
-    -- Lớp 1: Gỡ bỏ / Vô hiệu hóa kết nối Idled mặc định của Roblox CoreGui (nếu executor hỗ trợ getconnections)
-    pcall(function()
-        if getconnections then
-            for _, conn in ipairs(getconnections(LocalPlayer.Idled)) do
-                if conn.Disable then
-                    conn:Disable()
-                elseif conn.Disconnect then
-                    conn:Disconnect()
-                end
-            end
-        end
-    end)
-
-    -- Lớp 2: Lắng nghe sự kiện LocalPlayer.Idled và gửi tương tác ảo mô phỏng người dùng
-    local idledConn = registerConnection(LocalPlayer.Idled:Connect(function()
-        if HubState.running and Toggles.AntiAFK and Toggles.AntiAFK.Value then
-            pcall(function()
-                VirtualUser:CaptureController()
-                VirtualUser:ClickButton2(Vector2.new(0, 0))
-            end)
-        end
-    end))
-    table.insert(AntiAFK.connections, idledConn)
-
-    -- Lớp 3: Luồng nhịp tim (Heartbeat pulse) định kỳ mỗi 60 giây chủ động reset bộ đếm AFK
+-- 2. CLASS TRAINERS ESP ENGINE
     task.spawn(function()
         while HubState.running do
-            task.wait(60)
-            if HubState.running and Toggles.AntiAFK and Toggles.AntiAFK.Value then
-                pcall(function()
-                    VirtualUser:CaptureController()
-                    VirtualUser:ClickButton2(Vector2.new(0, 0))
-                end)
-                pcall(function()
-                    local vim = game:GetService("VirtualInputManager")
-                    if vim then
-                        -- Safe virtual user click
-                VirtualUser:CaptureController()
-                VirtualUser:ClickButton2(Vector2.new(0, 0))
-                        task.wait(0.05)
-                        -- Heartbeat pulse complete
+            task.wait(0.6)
+            if not HubState.running then break end
+
+            if Toggles.Trainer_ESP and Toggles.Trainer_ESP.Value then
+                local char = LocalPlayer.Character
+                local root = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
+                local maxDist = (Options.Trainer_ESPMaxDist and Options.Trainer_ESPMaxDist.Value) or 4000
+                local trainerColor = (Options.TrainerESPColor and Options.TrainerESPColor.Value) or Color3.fromRGB(168, 85, 247)
+
+                if root then
+                    local myPos = root.Position
+                    
+                    -- Quét Base Trainers
+                    for tName, tPos in pairs(BaseTrainers or {}) do
+                        local dist = (tPos - myPos).Magnitude
+                        if dist <= maxDist then
+                            local bb = espBillboards["Trainer_" .. tName]
+                            if not bb or not bb.Parent then
+                                bb = Instance.new("BillboardGui")
+                                bb.Name = "TrainerESP_" .. tName
+                                bb.Size = UDim2.new(0, 160, 0, 30)
+                                bb.AlwaysOnTop = true
+                                bb.MaxDistance = maxDist
+
+                                local lbl = Instance.new("TextLabel")
+                                lbl.Name = "Text"
+                                lbl.Size = UDim2.new(1, 0, 1, 0)
+                                lbl.BackgroundTransparency = 1
+                                lbl.TextColor3 = trainerColor
+                                lbl.Font = Enum.Font.GothamBold
+                                lbl.TextSize = 11
+                                lbl.TextStrokeTransparency = 0.3
+                                lbl.Parent = bb
+
+                                local anchor = Instance.new("Part")
+                                anchor.Size = Vector3.new(1, 1, 1)
+                                anchor.Position = tPos + Vector3.new(0, 4, 0)
+                                anchor.Anchored = true
+                                anchor.CanCollide = false
+                                anchor.Transparency = 1
+                                anchor.Parent = workspace
+                                bb.Adornee = anchor
+
+                                pcall(function() bb.Parent = game:GetService("CoreGui") end)
+                                if not bb.Parent then bb.Parent = PlayerGui end
+                                espBillboards["Trainer_" .. tName] = bb
+                            end
+
+                            local textLbl = bb:FindFirstChild("Text")
+                            if textLbl then
+                                textLbl.TextColor3 = trainerColor
+                                textLbl.Text = string.format("[%s] [%dm]", tName, math.floor(dist))
+                            end
+                        else
+                            if espBillboards["Trainer_" .. tName] then
+                                espBillboards["Trainer_" .. tName]:Destroy()
+                                espBillboards["Trainer_" .. tName] = nil
+                            end
+                        end
                     end
-                end)
+
+                    -- Quét Super Class Trainers
+                    for tName, tPos in pairs(SuperTrainers or {}) do
+                        local dist = (tPos - myPos).Magnitude
+                        if dist <= maxDist then
+                            local bb = espBillboards["Trainer_" .. tName]
+                            if not bb or not bb.Parent then
+                                bb = Instance.new("BillboardGui")
+                                bb.Name = "TrainerESP_" .. tName
+                                bb.Size = UDim2.new(0, 160, 0, 30)
+                                bb.AlwaysOnTop = true
+                                bb.MaxDistance = maxDist
+
+                                local lbl = Instance.new("TextLabel")
+                                lbl.Name = "Text"
+                                lbl.Size = UDim2.new(1, 0, 1, 0)
+                                lbl.BackgroundTransparency = 1
+                                lbl.TextColor3 = trainerColor
+                                lbl.Font = Enum.Font.GothamBold
+                                lbl.TextSize = 11
+                                lbl.TextStrokeTransparency = 0.3
+                                lbl.Parent = bb
+
+                                local anchor = Instance.new("Part")
+                                anchor.Size = Vector3.new(1, 1, 1)
+                                anchor.Position = tPos + Vector3.new(0, 4, 0)
+                                anchor.Anchored = true
+                                anchor.CanCollide = false
+                                anchor.Transparency = 1
+                                anchor.Parent = workspace
+                                bb.Adornee = anchor
+
+                                pcall(function() bb.Parent = game:GetService("CoreGui") end)
+                                if not bb.Parent then bb.Parent = PlayerGui end
+                                espBillboards["Trainer_" .. tName] = bb
+                            end
+
+                            local textLbl = bb:FindFirstChild("Text")
+                            if textLbl then
+                                textLbl.TextColor3 = trainerColor
+                                textLbl.Text = string.format("[%s] [%dm]", tName, math.floor(dist))
+                            end
+                        else
+                            if espBillboards["Trainer_" .. tName] then
+                                espBillboards["Trainer_" .. tName]:Destroy()
+                                espBillboards["Trainer_" .. tName] = nil
+                            end
+                        end
+                    end
+                end
+            else
+                for key, bb in pairs(espBillboards) do
+                    if key:find("Trainer_") then
+                        bb:Destroy()
+                        espBillboards[key] = nil
+                    end
+                end
             end
         end
     end)
 
-    hubLog("[AntiAFK] Built-in Anti-AFK Engine Initialized Successfully!")
-end
+    -- 3. GENERAL NPC & SERVICES ESP ENGINE
+    task.spawn(function()
+        while HubState.running do
+            task.wait(0.6)
+            if not HubState.running then break end
 
-initAntiAFK()
+            if Toggles.NPC_ESP and Toggles.NPC_ESP.Value then
+                local char = LocalPlayer.Character
+                local root = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
+                local maxDist = (Options.NPC_ESPMaxDist and Options.NPC_ESPMaxDist.Value) or 2500
+                local npcColor = (Options.NPCESPColor and Options.NPCESPColor.Value) or Color3.fromRGB(251, 191, 36)
 
--- =============================================================================
--- QOL: REAL HP/MANA REVEAL & UNIDENTIFIED ITEMS REVEALER
--- =============================================================================
-task.spawn(function()
-    local blueEnergyColor = Color3.fromRGB(106, 192, 242)
-    local RS = game:GetService("ReplicatedStorage")
-    local ItemModifiers = nil
-    pcall(function() ItemModifiers = require(RS.Libraries.ItemModifiers) end)
+                if root then
+                    local myPos = root.Position
+                    
+                    -- Quét Quest NPCs
+                    for qName, qPos in pairs(QuestNPCs or {}) do
+                        local dist = (qPos - myPos).Magnitude
+                        if dist <= maxDist then
+                            local bb = espBillboards["NPC_" .. qName]
+                            if not bb or not bb.Parent then
+                                bb = Instance.new("BillboardGui")
+                                bb.Name = "NPCESP_" .. qName
+                                bb.Size = UDim2.new(0, 160, 0, 30)
+                                bb.AlwaysOnTop = true
+                                bb.MaxDistance = maxDist
 
-    while HubState.running do
-        task.wait(0.25)
-        if not HubState.running then break end
+                                local lbl = Instance.new("TextLabel")
+                                lbl.Name = "Text"
+                                lbl.Size = UDim2.new(1, 0, 1, 0)
+                                lbl.BackgroundTransparency = 1
+                                lbl.TextColor3 = npcColor
+                                lbl.Font = Enum.Font.GothamBold
+                                lbl.TextSize = 11
+                                lbl.TextStrokeTransparency = 0.3
+                                lbl.Parent = bb
 
-        -- 1. GIẢI MÃ VÀ HIỆN TÊN THẬT + FULL STATS KHI GIÁM ĐỊNH (UNIDENTIFIED REVEALER WITH STATS)
-        if Toggles.RevealUnidentified and Toggles.RevealUnidentified.Value then
-            pcall(function()
-                local pgui = PlayerGui
-                local inv = pgui and pgui:FindFirstChild("Inventory")
-                if inv then
-                    local invScript = inv:FindFirstChildWhichIsA("LocalScript", true)
-                    local itemDict = nil
-                    if invScript and getsenv and getupvalues then
-                        pcall(function()
-                            local env = getsenv(invScript)
-                            if env and env.newTile then
-                                local uvs = getupvalues(env.newTile)
-                                itemDict = uvs[6]
+                                local anchor = Instance.new("Part")
+                                anchor.Size = Vector3.new(1, 1, 1)
+                                anchor.Position = qPos + Vector3.new(0, 4, 0)
+                                anchor.Anchored = true
+                                anchor.CanCollide = false
+                                anchor.Transparency = 1
+                                anchor.Parent = workspace
+                                bb.Adornee = anchor
+
+                                pcall(function() bb.Parent = game:GetService("CoreGui") end)
+                                if not bb.Parent then bb.Parent = PlayerGui end
+                                espBillboards["NPC_" .. qName] = bb
                             end
-                        end)
-                    end
 
-                    local ItemRegistry = nil
-                    pcall(function() ItemRegistry = require(RS.ItemRegistry) end)
-
-                    for _, btn in ipairs(inv:GetDescendants()) do
-                        if btn:IsA("TextButton") and itemDict and itemDict[btn.Name] then
-                            local itemObj = itemDict[btn.Name]
-                            local itemData = itemObj and (itemObj.ItemData or itemObj)
-                            if itemData and itemData.Config and itemData.Config.Unidentified then
-                                local realName = itemData.Name or itemData.Tool
-                                if realName then
-                                    local statList = {}
-                                    local cfg = itemData.Config
-
-                                    if cfg.Enchant and tostring(cfg.Enchant) ~= "" then
-                                        table.insert(statList, "Enchant: " .. tostring(cfg.Enchant))
-                                    end
-                                    if cfg.Tier then
-                                        table.insert(statList, "T" .. tostring(cfg.Tier))
-                                    end
-
-                                    -- Quét chỉ số rolled stats từ Config
-                                    for k, v in pairs(cfg) do
-                                        if type(v) == "number" and v ~= 0 and k ~= "Unidentified" and k ~= "Tier" and k ~= "Cost" and k ~= "ID" then
-                                            table.insert(statList, string.format("+%d %s", v, tostring(k):sub(1, 3)))
-                                        elseif type(v) == "table" and tostring(k):lower():find("stat") then
-                                            for sk, sv in pairs(v) do
-                                                if type(sv) == "number" and sv ~= 0 then
-                                                    table.insert(statList, string.format("+%d %s", sv, tostring(sk):sub(1, 3)))
-                                                end
-                                            end
-                                        end
-                                    end
-
-                                    -- Quét chỉ số BaseStats từ ItemRegistry nếu có
-                                    if ItemRegistry and ItemRegistry.GetItem then
-                                        local regData = ItemRegistry:GetItem(realName:gsub(" ", ""))
-                                        if regData then
-                                            if regData.Stats and type(regData.Stats) == "table" then
-                                                for sk, sv in pairs(regData.Stats) do
-                                                    if type(sv) == "number" and sv ~= 0 then
-                                                        table.insert(statList, string.format("+%d %s", sv, tostring(sk):sub(1, 3)))
-                                                    end
-                                                end
-                                            end
-                                            if regData.Damage then table.insert(statList, string.format("%d Dmg", regData.Damage)) end
-                                            if regData.Defense then table.insert(statList, string.format("%d Def", regData.Defense)) end
-                                        end
-                                    end
-
-                                    local statsStr = #statList > 0 and (" [" .. table.concat(statList, ", ") .. "]") or ""
-                                    btn.Text = realName .. statsStr
-                                end
+                            local textLbl = bb:FindFirstChild("Text")
+                            if textLbl then
+                                textLbl.TextColor3 = npcColor
+                                textLbl.Text = string.format("%s [%dm]", qName, math.floor(dist))
+                            end
+                        else
+                            if espBillboards["NPC_" .. qName] then
+                                espBillboards["NPC_" .. qName]:Destroy()
+                                espBillboards["NPC_" .. qName] = nil
                             end
                         end
                     end
 
-                    -- Giải mã luôn ToolTip khi di chuột vào món đồ chưa giám định
-                    local tooltip = inv:FindFirstChild("ToolTip", true)
-                    if tooltip and tooltip.Visible then
-                        local textLbl = tooltip:FindFirstChildWhichIsA("TextLabel", true)
-                        if textLbl and textLbl.Text:find("You have no idea what this does") then
-                            textLbl.Text = "[Real Item & Stats Revealed by Arcane Hub]"
-                        end
-                    end
+                    -- Quét General NPCs
+                    for nName, nPos in pairs(GeneralNPCs or {}) do
+                        local dist = (nPos - myPos).Magnitude
+                        if dist <= maxDist then
+                            local bb = espBillboards["NPC_" .. nName]
+                            if not bb or not bb.Parent then
+                                bb = Instance.new("BillboardGui")
+                                bb.Name = "NPCESP_" .. nName
+                                bb.Size = UDim2.new(0, 160, 0, 30)
+                                bb.AlwaysOnTop = true
+                                bb.MaxDistance = maxDist
 
-                    local advTooltip = inv:FindFirstChild("AdvancedTooltip", true)
-                    if advTooltip and advTooltip.Visible then
-                        local descLbl = advTooltip:FindFirstChild("Desc")
-                        if descLbl and descLbl:IsA("TextLabel") and descLbl.Text:find("You have no idea what this does") then
-                            local nameLbl = advTooltip:FindFirstChild("ItemName")
-                            local realItemName = nameLbl and nameLbl.Text:gsub(" ", "")
-                            if realItemName and ItemRegistry then
-                                local regData = ItemRegistry:GetItem(realItemName)
-                                if regData then
-                                    local descText = (regData.GearDesc and (regData.GearDesc .. " | ") or "") .. (regData.ToolTip or "")
-                                    descLbl.Text = "[Stats Revealed] " .. descText
-                                end
+                                local lbl = Instance.new("TextLabel")
+                                lbl.Name = "Text"
+                                lbl.Size = UDim2.new(1, 0, 1, 0)
+                                lbl.BackgroundTransparency = 1
+                                lbl.TextColor3 = npcColor
+                                lbl.Font = Enum.Font.GothamBold
+                                lbl.TextSize = 11
+                                lbl.TextStrokeTransparency = 0.3
+                                lbl.Parent = bb
+
+                                local anchor = Instance.new("Part")
+                                anchor.Size = Vector3.new(1, 1, 1)
+                                anchor.Position = nPos + Vector3.new(0, 4, 0)
+                                anchor.Anchored = true
+                                anchor.CanCollide = false
+                                anchor.Transparency = 1
+                                anchor.Parent = workspace
+                                bb.Adornee = anchor
+
+                                pcall(function() bb.Parent = game:GetService("CoreGui") end)
+                                if not bb.Parent then bb.Parent = PlayerGui end
+                                espBillboards["NPC_" .. nName] = bb
+                            end
+
+                            local textLbl = bb:FindFirstChild("Text")
+                            if textLbl then
+                                textLbl.TextColor3 = npcColor
+                                textLbl.Text = string.format("[%s] [%dm]", nName, math.floor(dist))
+                            end
+                        else
+                            if espBillboards["NPC_" .. nName] then
+                                espBillboards["NPC_" .. nName]:Destroy()
+                                espBillboards["NPC_" .. nName] = nil
                             end
                         end
                     end
                 end
-            end)
-        end
-
-        -- 2. GIẢI MÃ VÀ HIỆN MANA/ENERGY THẬT (REAL ENERGY / MANA)
-        pcall(function()
-            local char = LocalPlayer.Character
-            local pgui = PlayerGui
-            local combatGui = pgui and pgui:FindFirstChild("Combat")
-            local holder = combatGui and combatGui:FindFirstChild("Holder")
-            if char and holder then
-                local status = char:FindFirstChild("Status")
-                local energyVal = status and status:FindFirstChild("Energy")
-                if energyVal then
-                    local curEnergy = energyVal.Value
-                    local maxEnergy = energyVal.MaxValue or 6
-
-                    -- Cập nhật chữ CurrentEnergy.Amount (VD: 1/6 thay vì ???)
-                    local currentEnergyFrame = holder:FindFirstChild("CurrentEnergy")
-                    local energyAmountLabel = currentEnergyFrame and currentEnergyFrame:FindFirstChild("Amount")
-                    if energyAmountLabel and energyAmountLabel:IsA("TextLabel") then
-                        if energyAmountLabel.Text == "???" or energyAmountLabel.Text:find("%?") then
-                            energyAmountLabel.Text = string.format("%d/%d", curEnergy, maxEnergy)
-                        end
-                    end
-
-                    -- Cập nhật các ô vạch Energy xanh sáng
-                    local energyBarsContainer = holder:FindFirstChild("Energy")
-                    if energyBarsContainer then
-                        for i = 1, maxEnergy do
-                            local bar = energyBarsContainer:FindFirstChild(tostring(i))
-                            if bar and bar:IsA("GuiObject") then
-                                bar.BackgroundColor3 = blueEnergyColor
-                                if i <= curEnergy then
-                                    bar.Visible = true
-                                else
-                                    bar.Visible = false
-                                end
-                            end
-                        end
+            else
+                for key, bb in pairs(espBillboards) do
+                    if key:find("NPC_") then
+                        bb:Destroy()
+                        espBillboards[key] = nil
                     end
                 end
             end
-        end)
-    end
-end)
+        end
+    end)
 
--- KHỞI CHẠY CHU TRÌNH TỰ ĐỘNG & LƯU GLOBAL STATE
--- =============================================================================
-globalEnv._ArcaneHubRunning = true
-shared.ArcaneHub = {
-    Unload = unloadHub,
-    Library = Library,
-}
 
-if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then
-    Farmer.runCycle()
-end
-if Toggles.AutoMineOre and Toggles.AutoMineOre.Value then
-    Miner.runCycle()
-end
-if Toggles.AutoFarmLevel and Toggles.AutoFarmLevel.Value then
-    LevelFarmer.runCycle()
-end
-if AutoYarthul then
-    AutoYarthul.checkSessionOnBoot()
-end
