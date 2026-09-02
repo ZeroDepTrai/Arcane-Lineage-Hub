@@ -4591,62 +4591,78 @@ local function scanPlayerSkills()
         ["Debuff"] = true, ["Heal"] = true, ["Speed"] = true, ["Luck"] = true, ["Cost"] = true,
         ["Cooldown"] = true, ["Active"] = true, ["Passive"] = true, ["ACTIVE"] = true, ["PASSIVE"] = true,
         ["UNEQUIP"] = true, ["Label"] = true, ["N/A"] = true, ["Button"] = true, ["Example"] = true,
-        ["Info"] = true, ["Template"] = true, ["Return"] = true, ["Shadow Form"] = true,
+        ["Info"] = true, ["Template"] = true, ["Return"] = true, ["Shadow Form"] = true, ["SKILL NAME"] = true,
     }
 
-    -- 1. Quet truc tiep tu SkillDisplay GUI (interface View Skills khi an key B va open list skill)
-    local skillDisplay = pgui and pgui:FindFirstChild("SkillDisplay")
-    if skillDisplay then
-        local bodyContainer = skillDisplay:FindFirstChild("Body", true)
-        local skillsFolder = bodyContainer and bodyContainer:FindFirstChild("Skills", true)
-        if skillsFolder then
-            for _, child in ipairs(skillsFolder:GetChildren()) do
-                if (child:IsA("TextButton") or child:IsA("GuiButton") or child:IsA("TextLabel")) and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
-                    local name = child:IsA("TextButton") and child.Text or child.Name
-                    if #name > 1 and not blacklist[name] then
-                        skillSet[name] = true
+    -- 1. Scan from Combat AttacksPage ScrollingFrame (if in combat)
+    pcall(function()
+        local combatGui = pgui and pgui:FindFirstChild("Combat")
+        local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
+        local atkPage = actionBG and actionBG:FindFirstChild("AttacksPage")
+        local attackFrame = atkPage and atkPage:FindFirstChild("Attack")
+        local scrollFrame = attackFrame and attackFrame:FindFirstChild("ScrollingFrame")
+        if scrollFrame then
+            for _, btn in ipairs(scrollFrame:GetChildren()) do
+                if (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) and not blacklist[btn.Name] then
+                    local label = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
+                    local sName = (label and label.Text ~= "" and label.Text) or btn.Name
+                    if #sName > 1 and not blacklist[sName] then
+                        skillSet[sName] = true
                     end
                 end
             end
         end
-    end
+    end)
 
-    -- 2. Quet tu Inventory GUI (Category Skills)
-    local inv = pgui and pgui:FindFirstChild("Inventory")
-    if inv then
-        local invSkills = inv:FindFirstChild("Skills", true)
-        local toolCont = invSkills and invSkills:FindFirstChild("ToolContainer")
-        if toolCont then
-            for _, child in ipairs(toolCont:GetChildren()) do
-                if (child:IsA("TextButton") or child:IsA("GuiButton") or child:IsA("TextLabel")) and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
-                    local name = child:IsA("TextButton") and child.Text or child.Name
-                    if #name > 1 and not blacklist[name] then
-                        skillSet[name] = true
+    -- 2. Scan from SkillDisplay GUI (Passive and Active skills)
+    pcall(function()
+        local skillDisplay = pgui and pgui:FindFirstChild("SkillDisplay")
+        if skillDisplay then
+            for _, d in ipairs(skillDisplay:GetDescendants()) do
+                if (d:IsA("TextButton") or d:IsA("TextLabel")) and not blacklist[d.Name] and not blacklist[d.Text] then
+                    local parentName = d.Parent and d.Parent.Name
+                    if parentName == "Skills" or parentName == "Passives" or parentName == "ToolContainer" or parentName == "Container" then
+                        local txt = (d:IsA("TextButton") and d.Text) or d.Name
+                        if #txt > 1 and not blacklist[txt] then
+                            skillSet[txt] = true
+                        end
                     end
                 end
             end
         end
-    end
+    end)
 
-    -- 3. Quet tu Combat AttacksPage ScrollingFrame neu is trong tran chien
-    local combatGui = pgui and pgui:FindFirstChild("Combat")
-    local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
-    local atkPage = actionBG and actionBG:FindFirstChild("AttacksPage")
-    local attackFrame = atkPage and atkPage:FindFirstChild("Attack")
-    local scrollFrame = attackFrame and attackFrame:FindFirstChild("ScrollingFrame")
-    if scrollFrame then
-        for _, btn in ipairs(scrollFrame:GetChildren()) do
-            if (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) and not blacklist[btn.Name] then
-                local label = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
-                local name = (label and label.Text ~= "" and label.Text) or btn.Name
-                if #name > 1 and not blacklist[name] then
-                    skillSet[name] = true
+    -- 3. Scan from Inventory GUI (Category Skills)
+    pcall(function()
+        local inv = pgui and pgui:FindFirstChild("Inventory")
+        if inv then
+            local invSkills = inv:FindFirstChild("Skills", true)
+            local toolCont = invSkills and invSkills:FindFirstChild("ToolContainer")
+            if toolCont then
+                for _, child in ipairs(toolCont:GetChildren()) do
+                    if (child:IsA("TextButton") or child:IsA("GuiButton") or child:IsA("TextLabel")) and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+                        local name = child:IsA("TextButton") and child.Text or child.Name
+                        if #name > 1 and not blacklist[name] then
+                            skillSet[name] = true
+                        end
+                    end
                 end
             end
         end
-    end
+    end)
 
-    skillSet["Strike"] = true
+    -- 4. Complete with all Game Skills from Constants.Skills (Ensures all 300+ skills are available for selection in dropdowns)
+    pcall(function()
+        local rep = game:GetService("ReplicatedStorage")
+        local SkillsModule = require(rep.Constants.Skills)
+        if SkillsModule and type(SkillsModule) == "table" then
+            for sName, sData in pairs(SkillsModule) do
+                if type(sData) == "table" and not sData.NoShow and sName ~= "Summon" and sName ~= "Template" and not blacklist[sName] then
+                    skillSet[sName] = true
+                end
+            end
+        end
+    end)
 
     local list = {}
     for name, _ in pairs(skillSet) do
