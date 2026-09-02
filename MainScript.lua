@@ -3091,7 +3091,7 @@ local function isBlacklistedCrylight(obj)
         return true
     end
 
-    -- 4. test đường dẫn thư mục cha
+    -- 4. test duong dan thu muc cha
     local path = obj:GetFullName():lower()
     if path:find("vastic") or path:find("grave") or path:find("forgotten") or path:find("sanctum") or path:find("pyramid") or path:find("dungeon") or path:find("menu") then
         return true
@@ -3125,7 +3125,7 @@ local function saveVisitedServer(jobId)
     local count = 0
     for _ in pairs(visited) do count = count + 1 end
     if count >= 20 then
-        hubLog(string.format("[ServerHop] 🔄 has ghé qua %d server. is reset list để tái sử dụng server cũ!", count))
+        hubLog(string.format("[ServerHop] 🔄 has ghe qua %d server. is reset list de tai su dung server cu!", count))
         visited = { [jobId] = os.time() }
     end
     pcall(function()
@@ -3372,7 +3372,7 @@ function CorruptHunter.start()
                     break
                 end
             else
-                hubLog("[CorruptHunter] ⏳ Current server is not a Corrupted Server. is preparing switch server tiếp theo...")
+                hubLog("[CorruptHunter] ⏳ Current server is not a Corrupted Server. is preparing switch server tiep theo...")
                 Library:Notify("⏳ Not a Corrupted Server. Server hopping...", 3)
                 task.wait(1.5)
                 ServerHopper.hop()
@@ -3539,7 +3539,7 @@ local function getAccurateGroundPosition(targetPos)
     rayParams.FilterDescendantsInstances = char and { char } or {}
     rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
-    -- 1. Ưu tiên quét cục bộ từ targetPos.Y + 25 xuống -100 studs (bắt floor cave / indoors / mặt đất nearby)
+    -- 1. Uu tien quet cuc bo tu targetPos.Y + 25 xuong -100 studs (bat floor cave / indoors / mat dat nearby)
     local localOrigin = Vector3.new(targetPos.X, targetPos.Y + 25, targetPos.Z)
     local localHit = workspace:Raycast(localOrigin, Vector3.new(0, -120, 0), rayParams)
     if localHit then
@@ -3653,17 +3653,17 @@ function Farmer.runCycle()
             end
         end
 
-        hubLog(string.format("[AutoFarm]  Kết quả test tại Menu: Tìm thấy %d nguyên liệu hợp lệ.", #harvestList))
+        hubLog(string.format("[AutoFarm]  Ket qua test tai Menu: Tim thay %d nguyen lieu hop le.", #harvestList))
 
         if #harvestList > 0 then
-            hubLog("[AutoFarm]  detected nguyên liệu mục tiêu! is auto bấm Play để vào game thu hoạch...")
+            hubLog("[AutoFarm]  detected nguyen lieu muc tieu! is auto bam Play de vao game thu hoach...")
             handleAutoStart()
 
             local char = LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
             local curPos = root and root.Position or Vector3.zero
 
-            -- Sắp xếp Nearest Neighbor để gom cụm lụm clean các item nearby nhau before
+            -- Sap xep Nearest Neighbor de gom cum lum clean cac item nearby nhau before
             local sortedHarvestList = {}
             local remainingList = {}
             for _, itm in ipairs(harvestList) do table.insert(remainingList, itm) end
@@ -3723,7 +3723,7 @@ function Farmer.runCycle()
                 sendDiscordReport(harvestedCounts, totalHarvested)
             end
         else
-            hubLog("[AutoFarm]  Server not có nguyên liệu mục tiêu! is Server Hop now từ Main Menu...")
+            hubLog("[AutoFarm]  Server not co nguyen lieu muc tieu! is Server Hop now tu Main Menu...")
         end
 
         disableFlightState()
@@ -3908,7 +3908,7 @@ local function getActiveFarmSpot()
     elseif mode == "Level 30 - 50 (Desert Block)" then
         return LevelFarmer.farmSpotLv30_50, "Level 30 - 50 (Desert Block)"
     elseif mode:find("Auto") then
-        -- Auto detect player level (Lv < 30 fly về bãi underground Caldera, Lv >= 30 fly về khối safely Desert)
+        -- Auto detect player level (Lv < 30 fly ve bai underground Caldera, Lv >= 30 fly ve khoi safely Desert)
         local currentLvl = getCurrentLevel()
         if currentLvl >= 30 then
             return LevelFarmer.farmSpotLv30_50, string.format("Auto Detect (Lv %d -> Desert Block 30-50)", currentLvl)
@@ -3957,7 +3957,7 @@ local function flyToFarmSpot(targetSpot)
     local s2 = smoothTweenTo(CFrame.new(targetSpot.X, skyY, targetSpot.Z), 240, function() return LevelFarmer.running end)
     if not s2 or not LevelFarmer.running then return false end
 
-    -- Phase 3: landed straight đứng xuống bãi farm (xuyên khối / xuyên đất safely)
+    -- Phase 3: landed straight dung xuong bai farm (xuyen khoi / xuyen dat safely)
     local s3 = smoothTweenTo(targetCF, 180, function() return LevelFarmer.running end)
     if s3 then
         root.CFrame = targetCF
@@ -4077,7 +4077,7 @@ local function clearUserStatsCache()
         Luck = 0,
     }
     saveStatsCache(allCache)
-    hubLog(string.format("[AutoStats]  has clear clean cache points stats của tài khoản '%s'!", username))
+    hubLog(string.format("[AutoStats]  has clear clean cache points stats cua tai khoan '%s'!", username))
     Library:Notify(string.format(" Cleared stats cache for '%s'!", username), 4)
 end
 
@@ -4087,7 +4087,7 @@ local function allocateStats()
     local pgui = LocalPlayer:WaitForChild("PlayerGui")
     local lvlUpGui = pgui:FindFirstChild("LevelUp")
     
-    -- 1. Wait for LevelUp UI to appear and enable (server game có độ trễ ~2.5s khi open dialogue Aretim)
+    -- 1. Wait for LevelUp UI to appear and enable (server game co do tre ~2.5s khi open dialogue Aretim)
     local waitStart = os.clock()
     while os.clock() - waitStart < 8.0 do
         lvlUpGui = pgui:FindFirstChild("LevelUp")
@@ -4109,7 +4109,7 @@ local function allocateStats()
     local availPoints = tonumber(pointsText:match("(%d+)")) or 0
 
     local userStats, allCache, username = getUserStatsCache()
-    hubLog(string.format("[AutoFarmLevel]  [LevelUp GUI] Tài khoản '%s' có %d Stat Points not yet allocated.", username, availPoints))
+    hubLog(string.format("[AutoFarmLevel]  [LevelUp GUI] Tai khoan '%s' co %d Stat Points not yet allocated.", username, availPoints))
 
     if availPoints <= 0 then
         local finishBtn = lvlUpGui:FindFirstChild("Finish")
@@ -4132,7 +4132,7 @@ local function allocateStats()
     local spdSlider = Options.TargetSpeed and Options.TargetSpeed.Value or 10
     local lckSlider = Options.TargetLuck and Options.TargetLuck.Value or 10
 
-    -- Target manual stat investment = max(0, slider - 10) due to +10 free milestone points độ
+    -- Target manual stat investment = max(0, slider - 10) due to +10 free milestone points do
     local strMaxAdd = math.max(0, strSlider - 10)
     local arcMaxAdd = math.max(0, arcSlider - 10)
     local endMaxAdd = math.max(0, endSlider - 10)
@@ -4146,7 +4146,7 @@ local function allocateStats()
     local spdNeeded = math.max(0, spdMaxAdd - (userStats.Speed or 0))
     local lckNeeded = math.max(0, lckMaxAdd - (userStats.Luck or 0))
 
-    hubLog(string.format("[AutoStats]  Cache hiện tại của '%s': Str:%d/%d, End:%d/%d, Spd:%d/%d, Arc:%d/%d, Lck:%d/%d",
+    hubLog(string.format("[AutoStats]  Cache hien tai cua '%s': Str:%d/%d, End:%d/%d, Spd:%d/%d, Arc:%d/%d, Lck:%d/%d",
         username,
         userStats.Strength or 0, strMaxAdd,
         userStats.Endurance or 0, endMaxAdd,
@@ -4266,7 +4266,7 @@ local function allocateStats()
         elseif firesignal then
             firesignal(finishBtn.MouseButton1Click)
         end
-        hubLog(string.format("[AutoFarmLevel]  has allocated Stats cho '%s': Str+%d (total %d/%d), End+%d (total %d/%d), Spd+%d (total %d/%d), Arc+%d (total %d/%d), Luck+%d (total %d/%d) và bấm Finish!", 
+        hubLog(string.format("[AutoFarmLevel]  has allocated Stats cho '%s': Str+%d (total %d/%d), End+%d (total %d/%d), Spd+%d (total %d/%d), Arc+%d (total %d/%d), Luck+%d (total %d/%d) va bam Finish!", 
             username,
             strAdd, userStats.Strength, strMaxAdd,
             endAdd, userStats.Endurance, endMaxAdd,
@@ -4463,7 +4463,7 @@ local function humanoidMeditateAndLevelUp()
                         end
                     end
                 end
-                -- Nếu not enough Essence để increase: close dialogue bằng 'Not yet.'
+                -- Neu not enough Essence de increase: close dialogue bang 'Not yet.'
                 if not clicked then
                     for _, opt in ipairs(optionsFrame:GetChildren()) do
                         if opt:IsA("TextButton") and opt.Visible and opt.Text:lower():find("not yet") then
@@ -4527,14 +4527,14 @@ local function isPlayerTurn()
     local char = LocalPlayer and LocalPlayer.Character
     if not char then return false end
 
-    -- 1. required phải is trong trận chiến
+    -- 1. required phai is trong tran chien
     if not isInCombat() then return false end
 
     local pgui = PlayerGui
     local combatGui = pgui and pgui:FindFirstChild("Combat")
     if not combatGui or not combatGui.Enabled then return false end
 
-    -- 2. Nếu is có đối thủ khác is thinking (Deciding), not phải turn của mình
+    -- 2. Neu is co doi thu khac is thinking (Deciding), not phai turn cua minh
     local deciding = combatGui:FindFirstChild("Deciding")
     if deciding and deciding.Visible then
         local label = deciding:FindFirstChild("TextLabel")
@@ -4544,26 +4544,26 @@ local function isPlayerTurn()
         end
     end
 
-    -- 3. Nếu is trong giai đoạn QTE (Dodge/Block, Minigames), not phải turn ra lệnh
+    -- 3. Neu is trong giai doan QTE (Dodge/Block, Minigames), not phai turn ra lenh
     local dodge = combatGui:FindFirstChild("DodgeQTE")
     if dodge and dodge.Visible then return false end
 
-    -- 4. button Go xác receive is hiển thị
+    -- 4. button Go xac receive is hien thi
     local goBtn = combatGui:FindFirstChild("Go")
     if goBtn and goBtn.Visible then return true end
 
-    -- 5. ActionBG phải is Visible (Server set Visible = true khi tới turn, false khi out of turn)
+    -- 5. ActionBG phai is Visible (Server set Visible = true khi toi turn, false khi out of turn)
     local actionBG = combatGui:FindFirstChild("ActionBG")
     if not actionBG or not actionBG.Visible then return false end
 
-    -- 6. test Header.Title trên UI Combat (Turn 1, Turn 2, Turn 3...)
+    -- 6. test Header.Title tren UI Combat (Turn 1, Turn 2, Turn 3...)
     local header = actionBG:FindFirstChild("Header")
     local title = header and header:FindFirstChild("Title")
     if title and title.Text and title.Text:find("Turn") then
         return true
     end
 
-    -- 7. ContextPage hoặc AttacksPage is hiển thị bên trong ActionBG
+    -- 7. ContextPage hoac AttacksPage is hien thi ben trong ActionBG
     local ctx = actionBG:FindFirstChild("ContextPage")
     local atk = actionBG:FindFirstChild("AttacksPage")
     if (ctx and ctx.Visible) or (atk and atk.Visible) then
@@ -4586,7 +4586,7 @@ local function scanPlayerSkills()
         ["Info"] = true, ["Template"] = true, ["Return"] = true, ["Shadow Form"] = true,
     }
 
-    -- 1. Quét trực tiếp từ SkillDisplay GUI (interface View Skills khi ấn key B và open list skill)
+    -- 1. Quet truc tiep tu SkillDisplay GUI (interface View Skills khi an key B va open list skill)
     local skillDisplay = pgui and pgui:FindFirstChild("SkillDisplay")
     if skillDisplay then
         local bodyContainer = skillDisplay:FindFirstChild("Body", true)
@@ -4603,7 +4603,7 @@ local function scanPlayerSkills()
         end
     end
 
-    -- 2. Quét từ Inventory GUI (Category Skills)
+    -- 2. Quet tu Inventory GUI (Category Skills)
     local inv = pgui and pgui:FindFirstChild("Inventory")
     if inv then
         local invSkills = inv:FindFirstChild("Skills", true)
@@ -4620,7 +4620,7 @@ local function scanPlayerSkills()
         end
     end
 
-    -- 3. Quét từ Combat AttacksPage ScrollingFrame nếu is trong trận chiến
+    -- 3. Quet tu Combat AttacksPage ScrollingFrame neu is trong tran chien
     local combatGui = pgui and pgui:FindFirstChild("Combat")
     local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
     local atkPage = actionBG and actionBG:FindFirstChild("AttacksPage")
@@ -4652,7 +4652,7 @@ end
 -- AUTO FIGHT ENGINE (STANDALONE COMBAT TURN & SKILL EXECUTOR)
 -- =============================================================================
 
--- auto stop mọi instance AutoYarthul cũ is chạy underground before khi khởi tạo instance mới
+-- auto stop moi instance AutoYarthul cu is chay underground before khi khoi tao instance moi
 if shared.AutoYarthulInstance then
     pcall(function() shared.AutoYarthulInstance.stop(true) end)
     shared.AutoYarthulInstance = nil
@@ -4684,12 +4684,12 @@ local AutoYarthul = {
     lastUsedSkill = "",
     turnExecutionLock = false,
     inventoryBaseline = {},
-    lastDroppedSummary = "None drop mới",
+    lastDroppedSummary = "None drop moi",
 }
 
 shared.AutoYarthulInstance = AutoYarthul
 
--- 1. Instance & Area Detection Helper (receive biết chính xác vị trí trong Instance Yar'thul vs Main Game qua tọa độ trục X)
+-- 1. Instance & Area Detection Helper (receive biet chinh xac vi tri trong Instance Yar'thul vs Main Game qua toa do truc X)
 function AutoYarthul.isInsideInstance()
     if isInCombat() then
         return true
@@ -4698,8 +4698,8 @@ function AutoYarthul.isInsideInstance()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if root then
-        -- Yar'thul Boss arena located at coordinates X < -200 (khoảng X=-555, Y=645, Z=-4235)
-        -- While Overworld / Main Game is located at coordinates X > 0 (cửa Mount Thul X=40.5)
+        -- Yar'thul Boss arena located at coordinates X < -200 (khoang X=-555, Y=645, Z=-4235)
+        -- While Overworld / Main Game is located at coordinates X > 0 (cua Mount Thul X=40.5)
         if root.Position.X < -200 then
             return true
         end
@@ -4818,7 +4818,7 @@ function AutoYarthul.isSkillReady(skillName)
                 if cdFrame and cdFrame:IsA("GuiObject") and cdFrame.Visible then
                     return false
                 end
-                -- Skill ready dùng!
+                -- Skill ready dung!
                 return true
             end
         end
@@ -5128,24 +5128,24 @@ function AutoYarthul.isRefightActive()
 end
 
 function AutoYarthul.isBossDeadOrDown()
-    -- TUYỆT ĐỐI not CHECK BOSS DEAD NẾU is Ở MAINGAME / OVERWORLD (X > 0)
+    -- TUYET DOI not CHECK BOSS DEAD NEU is O MAINGAME / OVERWORLD (X > 0)
     if not AutoYarthul.isInsideInstance() and not AutoYarthul.hasFoughtBoss then
         return false, "Overworld", nil
     end
 
-    -- 1. Ưu tiên số 1: Nếu has có bảng Refight is HIỆN TRÊN MÀN HÌNH (Main.Visible == true)
+    -- 1. Uu tien so 1: Neu has co bang Refight is HIEN TREN MAN HINH (Main.Visible == true)
     local isRefight, yesBtn = AutoYarthul.isRefightActive()
     if isRefight and yesBtn then
         return true, "RefightPrompt", yesBtn
     end
 
-    -- 2. test máu Boss = 0
+    -- 2. test mau Boss = 0
     local hp, maxHp, bossModel = AutoYarthul.getBossHealth()
     if bossModel and hp <= 0 then
         return true, "ZeroHP", nil
     end
 
-    -- 3. test Boss ngã xuống (model nằm rạp trên floor: UpVector.Y < 0.6)
+    -- 3. test Boss nga xuong (model nam rap tren floor: UpVector.Y < 0.6)
     if bossModel then
         local hrp = bossModel:FindFirstChild("HumanoidRootPart") or bossModel:FindFirstChild("Torso") or bossModel.PrimaryPart
         if hrp then
@@ -5159,7 +5159,7 @@ function AutoYarthul.isBossDeadOrDown()
     return false, "Alive", nil
 end
 
--- 8. On-Screen Floating HUD Engine (Hiển thị status & button [STOP AUTO FARM] now trên màn hình)
+-- 8. On-Screen Floating HUD Engine (Hien thi status & button [STOP AUTO FARM] now tren man hinh)
 function AutoYarthul.createHUD()
     if AutoYarthul.floatingGui then
         pcall(function() AutoYarthul.floatingGui:Destroy() end)
@@ -5385,7 +5385,7 @@ function AutoYarthul.checkSessionOnBoot()
                         end
                         task.wait(1.2)
 
-                        -- Tắt triệt để các Tab Auto Farm khác để tránh xung đột
+                        -- Tat triet de cac Tab Auto Farm khac de tranh xung dot
                         if Toggles.AutoFarmLevel and Toggles.AutoFarmLevel.Value then Toggles.AutoFarmLevel:SetValue(false) end
                         if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then Toggles.AutoFarmCrylight:SetValue(false) end
                         if Toggles.AutoMineOre and Toggles.AutoMineOre.Value then Toggles.AutoMineOre:SetValue(false) end
@@ -5409,9 +5409,9 @@ function AutoYarthul.checkSessionOnBoot()
     end)
 end
 
--- 10. HỆ THỐNG AUTO LOOT items & SKIP INTRO
+-- 10. HE THONG AUTO LOOT items & SKIP INTRO
 function AutoYarthul.handleAutoLoot()
-    -- A. auto BẤM PLAY / START / LOAD SLOT / SKIP CUTSCENE KHI VÀO GAME
+    -- A. auto BAM PLAY / START / LOAD SLOT / SKIP CUTSCENE KHI VAO GAME
     pcall(function()
         local pgui = PlayerGui
         if pgui then
@@ -5434,7 +5434,7 @@ function AutoYarthul.handleAutoLoot()
                         local bname = btn.Name:lower()
                         local btext = btn:IsA("TextButton") and btn.Text:lower() or ""
                         if bname:find("play") or btext:find("play") or bname:find("start") or btext:find("start") or bname:find("load") or btext:find("load") or bname:find("slot") or bname:find("spawn") then
-                            hubLog(string.format("[AutoSkip] 🎮 auto bấm '%s' trên MainMenu để vào game!", btn.Name))
+                            hubLog(string.format("[AutoSkip] 🎮 auto bam '%s' tren MainMenu de vao game!", btn.Name))
                             safeClickButton(btn)
                         end
                     end
@@ -5453,7 +5453,7 @@ function AutoYarthul.handleAutoLoot()
         end
     end)
 
-    -- B. Quét & Thu hoạch các items dropped under floor (Ground Loot in SpawnedItems / Drops)
+    -- B. Quet & Thu hoach cac items dropped under floor (Ground Loot in SpawnedItems / Drops)
     pcall(function()
         local char = LocalPlayer.Character
         local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -5488,11 +5488,11 @@ function AutoYarthul.handleAutoLoot()
     end)
 end
 
--- 11. test CHÍNH XÁC 100% FLAME / MAGMA PILLAR (GEYSER) TRÊN SÂN ĐẤU
+-- 11. test CHINH XAC 100% FLAME / MAGMA PILLAR (GEYSER) TREN SAN DAU
 function AutoYarthul.hasFlamePillar()
     local foundPillar = false
 
-    -- A. test trực tiếp trong Boss.Effects (MPillar BoolValue hoặc LastUsedAttack)
+    -- A. test truc tiep trong Boss.Effects (MPillar BoolValue hoac LastUsedAttack)
     pcall(function()
         local living = workspace:FindFirstChild("Living")
         if living then
@@ -5502,13 +5502,13 @@ function AutoYarthul.hasFlamePillar()
                     if effects then
                         local mpillar = effects:FindFirstChild("MPillar") or effects:FindFirstChild("Pillar") or effects:FindFirstChild("FlamePillar") or effects:FindFirstChild("MagmaPillar")
                         if mpillar then
-                            hubLog(string.format("[AutoYarthul] 🔥 [Boss.Effects] detected Pillar '%s' trên Yar'thul -> Khóa Carnage!", mpillar.Name))
+                            hubLog(string.format("[AutoYarthul] 🔥 [Boss.Effects] detected Pillar '%s' tren Yar'thul -> Khoa Carnage!", mpillar.Name))
                             foundPillar = true
                             return
                         end
                         local lastAtk = effects:FindFirstChild("LastUsedAttack")
                         if lastAtk and typeof(lastAtk.Value) == "string" and lastAtk.Value:lower():find("pillar") then
-                            hubLog(string.format("[AutoYarthul] 🔥 [Boss LastUsedAttack] '%s' -> Khóa Carnage!", lastAtk.Value))
+                            hubLog(string.format("[AutoYarthul] 🔥 [Boss LastUsedAttack] '%s' -> Khoa Carnage!", lastAtk.Value))
                             foundPillar = true
                             return
                         end
@@ -5519,14 +5519,14 @@ function AutoYarthul.hasFlamePillar()
     end)
     if foundPillar then return true end
 
-    -- B. test trong Workspace.Effects (Geyser Part / Model với Sound Idle & Particle)
+    -- B. test trong Workspace.Effects (Geyser Part / Model voi Sound Idle & Particle)
     pcall(function()
         local effects = workspace:FindFirstChild("Effects")
         if effects then
             for _, ef in ipairs(effects:GetChildren()) do
                 local ename = ef.Name:lower()
                 if ename:find("geyser") or ename:find("pillar") or ename:find("flame") or ename:find("magma") or ename:find("lava") or ename:find("fire") then
-                    hubLog(string.format("[AutoYarthul] 🔥 [Workspace.Effects] detected Flame/Magma Pillar '%s' -> Khóa Carnage!", ef.Name))
+                    hubLog(string.format("[AutoYarthul] 🔥 [Workspace.Effects] detected Flame/Magma Pillar '%s' -> Khoa Carnage!", ef.Name))
                     foundPillar = true
                     return
                 end
@@ -5535,7 +5535,7 @@ function AutoYarthul.hasFlamePillar()
     end)
     if foundPillar then return true end
 
-    -- C. test GetOtherTeam remote (nếu Pillar được tính là 1 entity đối thủ riêng)
+    -- C. test GetOtherTeam remote (neu Pillar duoc tinh la 1 entity doi thu rieng)
     pcall(function()
         local char = LocalPlayer.Character
         local fip = char and char:FindFirstChild("FightInProgress")
@@ -5548,11 +5548,11 @@ function AutoYarthul.hasFlamePillar()
                         if enemy and enemy.Name then
                             local ename = enemy.Name:lower()
                             if ename:find("pillar") or ename:find("geyser") or ename:find("flame") or ename:find("fire") or ename:find("lava") or ename:find("magma") then
-                                hubLog(string.format("[AutoYarthul] 🔥 [GetOtherTeam] detected Flame Pillar: '%s' -> Khóa Carnage!", enemy.Name))
+                                hubLog(string.format("[AutoYarthul] 🔥 [GetOtherTeam] detected Flame Pillar: '%s' -> Khoa Carnage!", enemy.Name))
                                 foundPillar = true
                                 return
                             elseif not ename:find("yar") and not ename:find("thul") and not ename:find("dragon") then
-                                hubLog(string.format("[AutoYarthul] 🔥 [GetOtherTeam] detected mục tiêu phụ: '%s' -> Khóa Carnage!", enemy.Name))
+                                hubLog(string.format("[AutoYarthul] 🔥 [GetOtherTeam] detected muc tieu phu: '%s' -> Khoa Carnage!", enemy.Name))
                                 foundPillar = true
                                 return
                             end
@@ -5564,7 +5564,7 @@ function AutoYarthul.hasFlamePillar()
     end)
     if foundPillar then return true end
 
-    -- D. Quét toàn bộ các Part/Model nearby arena
+    -- D. Quet toan bo cac Part/Model nearby arena
     pcall(function()
         local char = LocalPlayer.Character
         local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -5578,7 +5578,7 @@ function AutoYarthul.hasFlamePillar()
                         if oname:find("geyser") or oname:find("flame pillar") or oname:find("flamepillar") or oname:find("magmapillar") or oname:find("magma pillar") then
                             local objPos = obj:IsA("BasePart") and obj.Position or (obj:IsA("Model") and obj:GetPivot().Position)
                             if objPos and (objPos - myPos).Magnitude <= 150 then
-                                hubLog(string.format("[AutoYarthul] 🔥 [Arena Scan] detected Pillar/Geyser '%s' cách %.1f studs -> Khóa Carnage!", obj.Name, (objPos - myPos).Magnitude))
+                                hubLog(string.format("[AutoYarthul] 🔥 [Arena Scan] detected Pillar/Geyser '%s' cach %.1f studs -> Khoa Carnage!", obj.Name, (objPos - myPos).Magnitude))
                                 foundPillar = true
                                 return
                             end
@@ -5592,7 +5592,7 @@ function AutoYarthul.hasFlamePillar()
     return foundPillar
 end
 
--- 12. Trích xuất năng lượng combat (Player Combat Energy)
+-- 12. Trich xuat nang luong combat (Player Combat Energy)
 function AutoYarthul.getPlayerEnergy()
     local char = LocalPlayer.Character
     local status = char and (char:FindFirstChild("Status") or char:FindFirstChild("Effects") or char:FindFirstChild("Values"))
@@ -5626,21 +5626,21 @@ function AutoYarthul.getPlayerEnergy()
     return 0
 end
 
--- 13. auto XỬ LÝ REFIGHT (BẤM button YES TRÊN BẢNG REFIGHT & TUA THOẠI after KHI DIỆT BOSS)
+-- 13. auto XU LY REFIGHT (BAM button YES TREN BANG REFIGHT & TUA THOAI after KHI DIET BOSS)
 function AutoYarthul.interactRefight()
     local pgui = PlayerGui
     if not pgui then return end
 
-    -- TUYỆT ĐỐI not CHẠY NẾU is Ở MAINGAME / OVERWORLD (X > 0)
+    -- TUYET DOI not CHAY NEU is O MAINGAME / OVERWORLD (X > 0)
     if not AutoYarthul.isInsideInstance() and not AutoYarthul.hasFoughtBoss then
         return
     end
 
-    -- A. Bấm trực tiếp button YES trên ScreenGui 'Refight' hoặc 'BossReplay'
+    -- A. Bam truc tiep button YES tren ScreenGui 'Refight' hoac 'BossReplay'
     pcall(function()
         local isRefight, yesBtn = AutoYarthul.isRefightActive()
         if isRefight and yesBtn then
-            hubLog(string.format("[AutoYarthul]  Bấm button YES trên bảng Refight: '%s'!", yesBtn.Name))
+            hubLog(string.format("[AutoYarthul]  Bam button YES tren bang Refight: '%s'!", yesBtn.Name))
             safeClickButton(yesBtn)
             task.wait(0.2)
             return
@@ -5657,7 +5657,7 @@ function AutoYarthul.interactRefight()
                                 local txt = (btn:IsA("TextButton") and btn.Text or btn.Name):lower()
                                 if txt == "yes" or txt:find("refight") or txt:find("again") or txt:find("solo") or txt:find("replay") then
                                     if not txt:find("no") and not txt:find("cancel") and not txt:find("decline") and not txt:find("leave") and not txt:find("lobby") then
-                                        hubLog(string.format("[AutoYarthul]  Bấm button Refight / Đánh tiếp: '%s' trên '%s'", btn.Name, gui.Name))
+                                        hubLog(string.format("[AutoYarthul]  Bam button Refight / Danh tiep: '%s' tren '%s'", btn.Name, gui.Name))
                                         safeClickButton(btn)
                                         task.wait(0.2)
                                     end
@@ -5670,7 +5670,7 @@ function AutoYarthul.interactRefight()
         end
     end)
 
-    -- B. Tua text thoại của Boss after trận đánh
+    -- B. Tua text thoai cua Boss after tran danh
     pcall(function()
         for _, gui in ipairs(pgui:GetChildren()) do
             if gui:IsA("ScreenGui") and gui.Enabled and gui.Name ~= "LinoriaGui" and gui.Name ~= "Arcane_Yarthul_HUD" then
@@ -5690,7 +5690,7 @@ function AutoYarthul.interactRefight()
     end)
 end
 
--- 14. TƯƠNG TÁC gate NGOÀI TRẬN (CHỈ CHẠY KHI is ĐỨNG nearby gate arena & not yet VÀO TRẬN)
+-- 14. TUONG TAC gate NGOAI TRAN (CHI CHAY KHI is DUNG nearby gate arena & not yet VAO TRAN)
 function AutoYarthul.interactGate()
     if tick() - AutoYarthul.lastGateInteractTime < 2.5 then return end
     AutoYarthul.lastGateInteractTime = tick()
@@ -5699,14 +5699,14 @@ function AutoYarthul.interactGate()
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then return end
 
-    -- A. Bấm ProximityPrompt tại gate nếu có
+    -- A. Bam ProximityPrompt tai gate neu co
     for _, desc in ipairs(workspace:GetDescendants()) do
         if desc:IsA("ProximityPrompt") and desc.Enabled then
             local part = desc.Parent:IsA("BasePart") and desc.Parent or (desc.Parent:FindFirstChildWhichIsA("BasePart", true))
             if part then
                 local dist = (part.Position - root.Position).Magnitude
                 if dist <= 30 then
-                    hubLog(string.format("[AutoYarthul]  Tìm thấy gate ProximityPrompt '%s' tại distance %.1f studs -> activate vào trận!", desc.ActionText or desc.Name, dist))
+                    hubLog(string.format("[AutoYarthul]  Tim thay gate ProximityPrompt '%s' tai distance %.1f studs -> activate vao tran!", desc.ActionText or desc.Name, dist))
                     AutoYarthul.updateHUD(" is activate gate Boss...")
                     if fireproximityprompt then
                         fireproximityprompt(desc, 0)
@@ -5718,7 +5718,7 @@ function AutoYarthul.interactGate()
         end
     end
 
-    -- B. Nếu có bảng select "Enter" / "Fight" / "Solo" khi vừa bấm gate -> Bấm 1 lần
+    -- B. Neu co bang select "Enter" / "Fight" / "Solo" khi vua bam gate -> Bam 1 lan
     pcall(function()
         local pgui = PlayerGui
         for _, gui in ipairs(pgui:GetChildren()) do
@@ -5730,7 +5730,7 @@ function AutoYarthul.interactGate()
                             local txt = (btn:IsA("TextButton") and btn.Text or btn.Name):lower()
                             if txt:find("enter") or txt:find("fight") or txt:find("solo") or txt:find("begin") or txt:find("yes") or txt:find("start") then
                                 if not txt:find("no") and not txt:find("cancel") and not txt:find("decline") and not txt:find("leave") then
-                                    hubLog(string.format("[AutoYarthul]  Bấm button vào gate: '%s' trên '%s'", btn.Name, gui.Name))
+                                    hubLog(string.format("[AutoYarthul]  Bam button vao gate: '%s' tren '%s'", btn.Name, gui.Name))
                                     safeClickButton(btn)
                                 end
                             end
@@ -5742,7 +5742,7 @@ function AutoYarthul.interactGate()
     end)
 end
 
--- 15. Vòng lặp chính điều phối Auto Farm, Auto Retry & Auto Loot Yar'thul (Endless Loop)
+-- 15. Vong lap chinh dieu phoi Auto Farm, Auto Retry & Auto Loot Yar'thul (Endless Loop)
 function AutoYarthul.start()
     if AutoYarthul.running then return end
     AutoYarthul.running = true
@@ -5752,7 +5752,7 @@ function AutoYarthul.start()
     AutoYarthul.turnExecutionLock = false
     AutoYarthul.inventoryBaseline = AutoYarthul.getInventorySnapshot()
 
-    -- Đảm bảo tắt tất cả các Auto Farm khác để tránh chạy song song gây xung đột
+    -- Dam bao tat tat ca cac Auto Farm khac de tranh chay song song gay xung dot
     if Toggles.AutoFarmLevel and Toggles.AutoFarmLevel.Value then Toggles.AutoFarmLevel:SetValue(false) end
     if Toggles.AutoFarmCrylight and Toggles.AutoFarmCrylight.Value then Toggles.AutoFarmCrylight:SetValue(false) end
     if Toggles.AutoMineOre and Toggles.AutoMineOre.Value then Toggles.AutoMineOre:SetValue(false) end
@@ -5760,12 +5760,12 @@ function AutoYarthul.start()
     if Farmer then Farmer.stop() end
     if Miner then Miner.stop() end
 
-    -- Đảm bảo bật AutoFight để activate Reactive Turn Hook lắng nghe Server Remotes
+    -- Dam bao bat AutoFight de activate Reactive Turn Hook lang nghe Server Remotes
     if AutoFight and not AutoFight.running then
         AutoFight.start()
     end
 
-    -- GẮN DIRECT REMOTE HOOKS now KHI BẬT AUTO FARM
+    -- GAN DIRECT REMOTE HOOKS now KHI BAT AUTO FARM
     AutoYarthul.hookLootRemote()
 
     AutoYarthul.saveSession()
@@ -5775,7 +5775,7 @@ function AutoYarthul.start()
         Toggles.AutoCombatQTE:SetValue(true)
     end
 
-    -- A. THIẾT LẬP LUỒNG AUTO LOOT ĐỒ under ĐẤT & SKIP INTRO
+    -- A. THIET LAP LUONG AUTO LOOT DO under DAT & SKIP INTRO
     if AutoYarthul.lootThread then
         pcall(function() task.cancel(AutoYarthul.lootThread) end)
         AutoYarthul.lootThread = nil
@@ -5790,11 +5790,11 @@ function AutoYarthul.start()
         end
     end)
 
-    -- B. auto theo dõi khi nhân vật respawn (Auto Retry on Respawn / Wipe)
+    -- B. auto theo doi khi nhan vat respawn (Auto Retry on Respawn / Wipe)
     if not AutoYarthul.charAddedConn then
         AutoYarthul.charAddedConn = LocalPlayer.CharacterAdded:Connect(function(newChar)
             if AutoYarthul.running then
-                hubLog("[AutoYarthul] 🔄 Nhân vật respawn / switch cảnh -> preparing auto Retry fly again gate Yar'thul!")
+                hubLog("[AutoYarthul] 🔄 Nhan vat respawn / switch canh -> preparing auto Retry fly again gate Yar'thul!")
                 AutoYarthul.deathCount = AutoYarthul.deathCount + 1
                 AutoYarthul.wasInCombat = false
                 AutoYarthul.hasFoughtBoss = false
@@ -5802,12 +5802,12 @@ function AutoYarthul.start()
                 AutoYarthul.turnExecutionLock = false
                 AutoYarthul.inventoryBaseline = AutoYarthul.getInventorySnapshot()
                 AutoYarthul.saveSession()
-                AutoYarthul.updateHUD("🔄 Nhân vật respawn -> preparing Retry...")
+                AutoYarthul.updateHUD("🔄 Nhan vat respawn -> preparing Retry...")
                 task.spawn(function()
                     task.wait(1.5)
                     local root = newChar:WaitForChild("HumanoidRootPart", 10)
                     if root and AutoYarthul.running then
-                        hubLog("[AutoYarthul]  Nhân vật has ready -> activate cycle fly!")
+                        hubLog("[AutoYarthul]  Nhan vat has ready -> activate cycle fly!")
                     end
                 end)
             end
@@ -5825,10 +5825,10 @@ function AutoYarthul.start()
 
         while AutoYarthul.running do
             pcall(function()
-                -- test status REFIGHT / BOSS has CHẾT HOẶC NGÃ TRÊN floor before TIÊN
+                -- test status REFIGHT / BOSS has CHET HOAC NGA TREN floor before TIEN
                 local isDeadOrDown, deadReason, refightYesBtn = AutoYarthul.isBossDeadOrDown()
 
-                -- 1. TRƯỜNG HỢP 1: BOSS has BỊ HẠ GỤC HOẶC BẢNG REFIGHT is HIỆN (CHỈ CHẠY KHI is TRONG INSTANCE)
+                -- 1. TRUONG HOP 1: BOSS has BI HA GUC HOAC BANG REFIGHT is HIEN (CHI CHAY KHI is TRONG INSTANCE)
                 if isDeadOrDown and AutoYarthul.isInsideInstance() then
                     AutoYarthul.wasInCombat = false
                     AutoYarthul.hasFoughtBoss = false
@@ -5837,38 +5837,38 @@ function AutoYarthul.start()
                     AutoYarthul.turnExecutionLock = false
                     AutoYarthul.saveSession()
 
-                    AutoYarthul.updateHUD(string.format(" has hạ gục Yar'thul! (Kills: %d) -> wait test Drop...", AutoYarthul.bossKillCount))
-                    hubLog(string.format("[AutoYarthul]  Yar'thul has bị hạ gục (Lý do: %s)! total số lần hạ gục: %d. is test Drop trong kho...", deadReason, AutoYarthul.bossKillCount))
+                    AutoYarthul.updateHUD(string.format(" has ha guc Yar'thul! (Kills: %d) -> wait test Drop...", AutoYarthul.bossKillCount))
+                    hubLog(string.format("[AutoYarthul]  Yar'thul has bi ha guc (Ly do: %s)! total so lan ha guc: %d. is test Drop trong kho...", deadReason, AutoYarthul.bossKillCount))
 
-                    -- Bấm now lập tức button YES trên bảng Refight nếu có
+                    -- Bam now lap tuc button YES tren bang Refight neu co
                     if refightYesBtn then
                         safeClickButton(refightYesBtn)
                     end
 
-                    -- wait 1.5s để server allocated toàn bộ Drop / Artifact vào inventory
+                    -- wait 1.5s de server allocated toan bo Drop / Artifact vao inventory
                     task.wait(1.5)
                     local detectedDrops = AutoYarthul.detectInventoryDrops()
                     local dropSummaryStr = ""
                     if #detectedDrops > 0 then
                         for _, item in ipairs(detectedDrops) do
                             dropSummaryStr = dropSummaryStr .. string.format("• **%s**: +%d\n", item.name, item.count)
-                            hubLog(string.format("[AutoYarthul Loot Detect]  receive được Drop: %s (x%d)!", item.name, item.count))
+                            hubLog(string.format("[AutoYarthul Loot Detect]  receive duoc Drop: %s (x%d)!", item.name, item.count))
                         end
                         AutoYarthul.lastDroppedSummary = string.format("%s (+%d)", detectedDrops[1].name, detectedDrops[1].count)
                         if #detectedDrops > 1 then
-                            AutoYarthul.lastDroppedSummary = AutoYarthul.lastDroppedSummary .. string.format(" +%d món khác", #detectedDrops - 1)
+                            AutoYarthul.lastDroppedSummary = AutoYarthul.lastDroppedSummary .. string.format(" +%d mon khac", #detectedDrops - 1)
                         end
-                        Library:Notify(string.format(" receive Drop mới: %s", detectedDrops[1].name), 6)
+                        Library:Notify(string.format(" receive Drop moi: %s", detectedDrops[1].name), 6)
                     else
-                        dropSummaryStr = "• not có items mới (hoặc has max stack)"
-                        AutoYarthul.lastDroppedSummary = "not có drop mới"
+                        dropSummaryStr = "• not co items moi (hoac has max stack)"
+                        AutoYarthul.lastDroppedSummary = "not co drop moi"
                     end
 
-                    -- GỬI DISCORD WEBHOOK CHI TIẾT TẤT CẢ DROPS ĐƯỢC THÊM VÀO inventory
+                    -- GUI DISCORD WEBHOOK CHI TIET TAT CA DROPS DUOC THEM VAO inventory
                     AutoYarthul.sendWebhook("Kill", { dropStr = dropSummaryStr, drops = detectedDrops })
-                    AutoYarthul.updateHUD(string.format(" Hạ gục #%d | Drop: %s", AutoYarthul.bossKillCount, AutoYarthul.lastDroppedSummary))
+                    AutoYarthul.updateHUD(string.format(" Ha guc #%d | Drop: %s", AutoYarthul.bossKillCount, AutoYarthul.lastDroppedSummary))
 
-                    -- Bấm Refight liên tục trong 3.5s
+                    -- Bam Refight lien tuc trong 3.5s
                     local postTimer = 0
                     while postTimer < 3.5 and AutoYarthul.running and AutoYarthul.isInsideInstance() do
                         AutoYarthul.interactRefight()
@@ -5876,10 +5876,10 @@ function AutoYarthul.start()
                         postTimer = postTimer + 0.2
                     end
 
-                -- 2. TRƯỜNG HỢP 2: is TRONG TRẬN CHIẾN (BOSS CÒN SỐNG & ĐỨNG TRÊN floor)
+                -- 2. TRUONG HOP 2: is TRONG TRAN CHIEN (BOSS CON SONG & DUNG TREN floor)
                 elseif isInCombat() then
                     if not AutoYarthul.wasInCombat then
-                        -- start trận chiến mới -> Chụp again snapshot inventory before trận
+                        -- start tran chien moi -> Chup again snapshot inventory before tran
                         AutoYarthul.inventoryBaseline = AutoYarthul.getInventorySnapshot()
                     end
                     AutoYarthul.wasInCombat = true
@@ -5888,9 +5888,9 @@ function AutoYarthul.start()
                     local bossHp, bossMaxHp, bossModel = AutoYarthul.getBossHealth()
                     if bossModel and bossMaxHp > 0 then
                         local hpPercent = math.clamp((bossHp / bossMaxHp) * 100, 0, 100)
-                        AutoYarthul.updateHUD(string.format(" is đánh Yar'thul [HP: %.0f/%.0f (%.0f%%)]", bossHp, bossMaxHp, hpPercent))
+                        AutoYarthul.updateHUD(string.format(" is danh Yar'thul [HP: %.0f/%.0f (%.0f%%)]", bossHp, bossMaxHp, hpPercent))
                     else
-                        AutoYarthul.updateHUD(" is trong trận đánh với Yar'thul...")
+                        AutoYarthul.updateHUD(" is trong tran danh voi Yar'thul...")
                     end
 
                     if isPlayerTurn() and not combatTurnLock and not AutoYarthul.turnExecutionLock then
@@ -5906,7 +5906,7 @@ function AutoYarthul.start()
                         task.wait(0.1)
                     end
 
-                -- 3. TRƯỜNG HỢP 3: NGOÀI TRẬN (DI switch, ĐỨNG gate & VÀO TRẬN - TUYỆT ĐỐI not BẤM REFIGHT)
+                -- 3. TRUONG HOP 3: NGOAI TRAN (DI switch, DUNG gate & VAO TRAN - TUYET DOI not BAM REFIGHT)
                 else
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
@@ -5916,22 +5916,22 @@ function AutoYarthul.start()
                         local distToGate = (root.Position - AutoYarthul.gatePosition).Magnitude
                         local distToSpawn = (root.Position - AutoYarthul.spawnPosition).Magnitude
 
-                        -- A. NẾU is Ở SÁT gate (<= 25 studs): activate gate vào trận
+                        -- A. NEU is O SAT gate (<= 25 studs): activate gate vao tran
                         if distToGate <= 25 then
-                            AutoYarthul.updateHUD(" is ở gate Boss -> activate vào trận...")
+                            AutoYarthul.updateHUD(" is o gate Boss -> activate vao tran...")
                             AutoYarthul.interactGate()
                             task.wait(1.0)
 
-                        -- B. NẾU is Ở points SPAWN TRONG INSTANCE (<= 45 studs): Tween tới gate nearby đó (~59 studs)
+                        -- B. NEU is O points SPAWN TRONG INSTANCE (<= 45 studs): Tween toi gate nearby do (~59 studs)
                         elseif distToSpawn <= 45 and root.Position.X < -200 then
-                            AutoYarthul.updateHUD(string.format(" Tween từ Spawn tới gate Boss (%.0f studs)...", distToGate))
+                            AutoYarthul.updateHUD(string.format(" Tween tu Spawn toi gate Boss (%.0f studs)...", distToGate))
                             smoothTweenTo(CFrame.new(AutoYarthul.gatePosition), 160, function() return AutoYarthul.running and not isInCombat() end, false)
                             disableFlightState()
                             task.wait(0.3)
 
-                        -- C. NẾU is Ở XA NGOÀI OVERWORLD (vừa Respawn ở làng hoặc chạy từ xa): Sky-Tween fly tới gate Mount Thul
+                        -- C. NEU is O XA NGOAI OVERWORLD (vua Respawn o lang hoac chay tu xa): Sky-Tween fly toi gate Mount Thul
                         else
-                            AutoYarthul.updateHUD(string.format(" fly tới gate Mount Thul (%.0f studs)...", distToGate))
+                            AutoYarthul.updateHUD(string.format(" fly toi gate Mount Thul (%.0f studs)...", distToGate))
                             local speed = (Options.YarthulTweenSpeed and Options.YarthulTweenSpeed.Value) or 220
                             local height = 1500
                             local currentPos = root.Position
@@ -5983,7 +5983,7 @@ function AutoYarthul.stop(explicit)
         pcall(function() AutoYarthul.charAddedConn:Disconnect() end)
         AutoYarthul.charAddedConn = nil
     end
-    -- Khi tắt Auto Yar'thul, auto tắt luôn Auto Combat nếu người dùng not tự bật toggle Auto Fight riêng
+    -- Khi tat Auto Yar'thul, auto tat luon Auto Combat neu nguoi dung not tu bat toggle Auto Fight rieng
     if AutoFight and not (Toggles.AutoFight and Toggles.AutoFight.Value) then
         AutoFight.stop()
     end
@@ -6005,7 +6005,7 @@ local function executeDirectRemoteTurn()
     local fip = char and char:FindFirstChild("FightInProgress")
     if not fip then return false end
 
-    -- 1. Tìm mobs mục tiêu từ GetOtherTeam
+    -- 1. Tim mobs muc tieu tu GetOtherTeam
     local targetEnemy = nil
     pcall(function()
         local otherTeam = game.ReplicatedStorage.Remotes.Data.GetOtherTeam:InvokeServer(fip.Value)
@@ -6029,7 +6029,7 @@ local function executeDirectRemoteTurn()
         end
     end)
 
-    -- 2. Đọc list skill ready từ ActionBG.AttacksPage hoặc UI
+    -- 2. Doc list skill ready tu ActionBG.AttacksPage hoac UI
     local pgui = PlayerGui
     local combatGui = pgui and pgui:FindFirstChild("Combat")
     local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
@@ -6059,7 +6059,7 @@ local function executeDirectRemoteTurn()
     local skillToUse = "Strike"
 
     -- =========================================================================
-    -- CHIẾN THUẬT AUTO BOSS YAR'THUL (TÍCH HỢP TRỰC TIẾP VÀO ENGINE COMBAT)
+    -- CHIEN THUAT AUTO BOSS YAR'THUL (TICH HOP TRUC TIEP VAO ENGINE COMBAT)
     -- =========================================================================
     if AutoYarthul and AutoYarthul.running then
         AutoYarthul.turnExecutionLock = true
@@ -6069,37 +6069,37 @@ local function executeDirectRemoteTurn()
         local isSenseReady = AutoYarthul.isSkillReady("Sense Expansion") and (AutoYarthul.lastUsedSkill ~= "Sense Expansion")
         local isCarnageReady = AutoYarthul.isSkillReady("Carnage")
 
-        -- 1. Ưu tiên số 1 TUYỆT ĐỐI: Sense Expansion (Chỉ cần đòn đánh before not PHẢI Sense Expansion & Sense has hồi CD là dùng)
+        -- 1. Uu tien so 1 TUYET DOI: Sense Expansion (Chi can don danh before not PHAI Sense Expansion & Sense has hoi CD la dung)
         if isSenseReady then
             skillToUse = "Sense Expansion"
             AutoYarthul.lastUsedSkill = "Sense Expansion"
-            hubLog("[AutoYarthul]  [Priority 1] activate SENSE EXPANSION (Đòn before not yet dùng Sense & ready)!")
+            hubLog("[AutoYarthul]  [Priority 1] activate SENSE EXPANSION (Don before not yet dung Sense & ready)!")
             AutoYarthul.updateHUD("Turn Action:  Sense Expansion")
 
-        -- 2. Ưu tiên số 2: Carnage (Chỉ dùng khi enough Energy >= 3 VÀ Carnage has HỒI CD VÀ HOÀN TOÀN not CÓ Flame Pillar trên sân, TUYỆT ĐỐI not MEDITATE)
+        -- 2. Uu tien so 2: Carnage (Chi dung khi enough Energy >= 3 VA Carnage has HOI CD VA HOAN TOAN not CO Flame Pillar tren san, TUYET DOI not MEDITATE)
         elseif curEnergy >= 3 and isCarnageReady and (not hasPillar) then
             skillToUse = "Carnage"
             AutoYarthul.lastUsedSkill = "Carnage"
-            hubLog(string.format("[AutoYarthul]  [Priority 2 - Energy: %d >= 3 | Carnage Ready | No Pillar] activate CARNAGE (Dứt khoát not Meditate)!", curEnergy))
+            hubLog(string.format("[AutoYarthul]  [Priority 2 - Energy: %d >= 3 | Carnage Ready | No Pillar] activate CARNAGE (Dut khoat not Meditate)!", curEnergy))
             AutoYarthul.updateHUD(string.format("Turn Action:  Carnage (Energy: %d)", curEnergy))
 
-        -- 3. Ưu tiên số 3 / Mặc định: Strike (Dùng STRIKE load Energy + Kèm Sub-Action Meditate cùng turn khi Carnage is CD hoặc có Pillar)
+        -- 3. Uu tien so 3 / Mac dinh: Strike (Dung STRIKE load Energy + Kem Sub-Action Meditate cung turn khi Carnage is CD hoac co Pillar)
         else
             skillToUse = "Strike"
             AutoYarthul.lastUsedSkill = "Strike"
             if not isCarnageReady then
-                hubLog(string.format("[AutoYarthul] ⏳ [Priority 3 - CARNAGE ON COOLDOWN | Energy: %d] Carnage is hồi CD -> Dùng STRIKE + Meditate để load & giảm CD!", curEnergy))
+                hubLog(string.format("[AutoYarthul] ⏳ [Priority 3 - CARNAGE ON COOLDOWN | Energy: %d] Carnage is hoi CD -> Dung STRIKE + Meditate de load & giam CD!", curEnergy))
                 AutoYarthul.updateHUD(string.format("Turn Action:  Meditate +  Strike (Carnage CD | E: %d)", curEnergy))
             elseif hasPillar then
-                hubLog(string.format("[AutoYarthul] 🔥 [Priority 3 - FLAME PILLAR ACTIVE | Energy: %d] is có Flame Pillar -> Dùng STRIKE + Meditate (Khóa Carnage)!", curEnergy))
+                hubLog(string.format("[AutoYarthul] 🔥 [Priority 3 - FLAME PILLAR ACTIVE | Energy: %d] is co Flame Pillar -> Dung STRIKE + Meditate (Khoa Carnage)!", curEnergy))
                 AutoYarthul.updateHUD("Turn Action:  Meditate +  Strike (Pillar Active)")
             else
-                hubLog(string.format("[AutoYarthul]  [Priority 3 - Building Energy: %d/3] Dùng STRIKE + Meditate!", curEnergy))
+                hubLog(string.format("[AutoYarthul]  [Priority 3 - Building Energy: %d/3] Dung STRIKE + Meditate!", curEnergy))
                 AutoYarthul.updateHUD(string.format("Turn Action:  Meditate +  Strike (Energy: %d/3)", curEnergy))
             end
         end
 
-        -- Tìm mục tiêu Yar'thul Boss
+        -- Tim muc tieu Yar'thul Boss
         if otherTeam and #otherTeam > 0 then
             for _, e in ipairs(otherTeam) do
                 if e and e.Parent then
@@ -6125,8 +6125,8 @@ local function executeDirectRemoteTurn()
             end
         end
 
-        -- BƯỚC 1: GỬI ĐÒN ĐÁNH CHÍNH (ATTACK) before TIÊN ĐỂ SERVER XÁC receive turn ĐÁNH
-        hubLog(string.format("[AutoYarthul]  [Direct Remote] Gửi đòn: '%s' -> Mục tiêu: %s", skillToUse, targetEnemy and targetEnemy.Name or "Boss"))
+        -- BUOC 1: GUI DON DANH CHINH (ATTACK) before TIEN DE SERVER XAC receive turn DANH
+        hubLog(string.format("[AutoYarthul]  [Direct Remote] Gui don: '%s' -> Muc tieu: %s", skillToUse, targetEnemy and targetEnemy.Name or "Boss"))
         task.spawn(function()
             pcall(function()
                 if targetEnemy then
@@ -6137,10 +6137,10 @@ local function executeDirectRemoteTurn()
             end)
         end)
 
-        -- BƯỚC 2: CHỈ GỬI SUB-ACTION MEDITATE KHI DÙNG STRIKE (Carnage và Sense Expansion TUYỆT ĐỐI not gửi Meditate)
+        -- BUOC 2: CHI GUI SUB-ACTION MEDITATE KHI DUNG STRIKE (Carnage va Sense Expansion TUYET DOI not gui Meditate)
         local useMed = (Toggles.YarthulMeditateSubAction == nil or Toggles.YarthulMeditateSubAction.Value)
         if useMed and skillToUse == "Strike" then
-            hubLog("[AutoYarthul]  [Sub-Action] Gửi Meditate đi kèm now after đòn Strike để tối ưu load Energy!")
+            hubLog("[AutoYarthul]  [Sub-Action] Gui Meditate di kem now after don Strike de toi uu load Energy!")
             task.spawn(function()
                 pcall(function()
                     pti:InvokeServer("Meditate", false)
@@ -6148,7 +6148,7 @@ local function executeDirectRemoteTurn()
             end)
         end
 
-        -- wait cho đến khi Server kết thúc turn đấu (ActionBG.Visible = false)
+        -- wait cho den khi Server ket thuc turn dau (ActionBG.Visible = false)
         local waitTurnElapsed = 0
         while isPlayerTurn() and waitTurnElapsed < 2.0 do
             task.wait(0.05)
@@ -6177,7 +6177,7 @@ local function executeDirectRemoteTurn()
             end
         end
         if not matched and shouldMeditateIfNoSkill then
-            hubLog("[DirectRemote]  not có skill available -> Gửi Remote Meditate...")
+            hubLog("[DirectRemote]  not co skill available -> Gui Remote Meditate...")
             task.spawn(function()
                 pcall(function() pti:InvokeServer("Meditate", false) end)
             end)
@@ -6202,9 +6202,9 @@ local function executeDirectRemoteTurn()
         end
     end
 
-    hubLog(string.format("[DirectRemote]  Gửi Remote chính: '%s' -> Mục tiêu: %s", skillToUse, targetEnemy and targetEnemy.Name or "None"))
+    hubLog(string.format("[DirectRemote]  Gui Remote chinh: '%s' -> Muc tieu: %s", skillToUse, targetEnemy and targetEnemy.Name or "None"))
 
-    -- 3. Gửi đòn đánh chính
+    -- 3. Gui don danh chinh
     task.spawn(function()
         pcall(function()
             if targetEnemy then
@@ -6215,17 +6215,17 @@ local function executeDirectRemoteTurn()
         end)
     end)
 
-    -- 4. SUB-ACTIONS (Gửi thêm Meditate / Guard now trong cùng turn!)
+    -- 4. SUB-ACTIONS (Gui them Meditate / Guard now trong cung turn!)
     local subAction = Options.CombatSubAction and Options.CombatSubAction.Value or "None"
     if subAction == "Auto Meditate (Recover Energy)" or subAction:find("Meditate") then
-        hubLog("[DirectRemote]  Gửi Sub-Action: Meditate now trong cùng turn!")
+        hubLog("[DirectRemote]  Gui Sub-Action: Meditate now trong cung turn!")
         task.spawn(function()
             pcall(function()
                 pti:InvokeServer("Meditate", false)
             end)
         end)
     elseif subAction == "Auto Guard (Defend)" or subAction:find("Guard") then
-        hubLog("[DirectRemote]  Gửi Sub-Action: Guard now trong cùng turn!")
+        hubLog("[DirectRemote]  Gui Sub-Action: Guard now trong cung turn!")
         task.spawn(function()
             pcall(function()
                 if targetEnemy then
@@ -6275,20 +6275,20 @@ local function executeCombatTurn()
         local atkPage = actionBG:FindFirstChild("AttacksPage")
         local header = actionBG:FindFirstChild("Header")
 
-        -- 1. Nếu is có button Go xác receive hiển thị sẵn (VD: has select skill/mục tiêu before đó)
+        -- 1. Neu is co button Go xac receive hien thi san (VD: has select skill/muc tieu before do)
         local goBtn = combatGui:FindFirstChild("Go")
         if goBtn and goBtn.Visible then
-            hubLog("[Combat]  detected button Go ready -> Bấm Go xác receive đòn đánh...")
+            hubLog("[Combat]  detected button Go ready -> Bam Go xac receive don danh...")
             safeClickButton(goBtn)
             task.wait(0.25)
             return
         end
 
-        -- 2. Hàm activate Meditate trong trận (recover Energy / Mana / Stamina)
+        -- 2. Ham activate Meditate trong tran (recover Energy / Mana / Stamina)
         local function doCombatMeditate()
-            hubLog("[Combat]  not có skill available -> is activate Meditate trong trận để recover Energy / Stamina...")
+            hubLog("[Combat]  not co skill available -> is activate Meditate trong tran de recover Energy / Stamina...")
 
-            -- 1. Nếu is ở AttacksPage hoặc bảng phụ, bấm Return về ContextPage
+            -- 1. Neu is o AttacksPage hoac bang phu, bam Return ve ContextPage
             local returnBtn = header and header:FindFirstChild("Return")
             if returnBtn and returnBtn.Visible then
                 safeClickButton(returnBtn)
@@ -6304,7 +6304,7 @@ local function executeCombatTurn()
                 end
             end
 
-            -- 2. Dự phòng remote trực tiếp của game
+            -- 2. Du phong remote truc tiep cua game
             pcall(function()
                 local pti = game.ReplicatedStorage:FindFirstChild("PlayerTurnInput")
                 if pti and pti:IsA("RemoteFunction") then
@@ -6314,7 +6314,7 @@ local function executeCombatTurn()
             task.wait(0.5)
         end
 
-        -- 3. switch sang AttacksPage nếu is ở ContextPage để đọc list skill
+        -- 3. switch sang AttacksPage neu is o ContextPage de doc list skill
         if ctxPage and ctxPage.Visible and not (atkPage and atkPage.Visible) then
             local atkBtn = ctxPage:FindFirstChild("AttackButton")
             if atkBtn and atkBtn.Visible then
@@ -6327,14 +6327,14 @@ local function executeCombatTurn()
             end
         end
 
-        -- 4. Lựa select skill thức trong AttacksPage
+        -- 4. Lua select skill thuc trong AttacksPage
         local attackFrame = atkPage and atkPage:FindFirstChild("Attack")
         local scrollFrame = attackFrame and attackFrame:FindFirstChild("ScrollingFrame")
 
         if scrollFrame and scrollFrame.Visible then
             local selectedSkillBtn = nil
 
-            -- test xem 1 button skill có is ready sử dụng (not bị CD, not bị Sealed, enough Energy)
+            -- test xem 1 button skill co is ready su dung (not bi CD, not bi Sealed, enough Energy)
             local function isSkillReady(btn)
                 if not btn or not btn.Parent then return false end
                 if not btn:IsA("GuiButton") and not btn:IsA("TextButton") and not btn:IsA("ImageButton") then return false end
@@ -6344,7 +6344,7 @@ local function executeCombatTurn()
                 local cd = btn:FindFirstChild("CD", true) or btn:FindFirstChild("Cooldown", true)
                 if cd and cd.Visible == true then
                     if cd:IsA("TextLabel") and (cd.Text == "" or cd.Text == "0" or cd.Text == "0s") then
-                        -- not bị CD
+                        -- not bi CD
                     else
                         return false
                     end
@@ -6366,14 +6366,14 @@ local function executeCombatTurn()
                     local costText = costLabel and costLabel.Text or (costObj and costObj.Name) or ""
                     local costNum = tonumber(costText:match("%d+"))
                     if costNum and costNum > curEnergy then
-                        return false -- not enough Energy để xuất skill
+                        return false -- not enough Energy de xuat skill
                     end
                 end
 
                 return true
             end
 
-            -- Hàm tìm button Basic Attack (Strike / Magic Missile / Slash...)
+            -- Ham tim button Basic Attack (Strike / Magic Missile / Slash...)
             local function findBasicAttackBtn()
                 local basicNames = {"Strike", "Magic Missile", "Basic Attack", "Slash", "Punch", "Shoot"}
                 for _, name in ipairs(basicNames) do
@@ -6394,13 +6394,13 @@ local function executeCombatTurn()
                 return nil
             end
 
-            -- Hàm tìm button skill theo name với cơ chế STRICT EXACT MATCH
+            -- Ham tim button skill theo name voi co che STRICT EXACT MATCH
             local function findSkillByName(targetName)
                 if not targetName or targetName == "" or targetName == "None" then return nil end
                 local cleanTarget = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
                 if cleanTarget == "" or cleanTarget == "none" then return nil end
 
-                -- 1. Exact Match Pass (Ưu tiên tuyệt đối name khớp 100%)
+                -- 1. Exact Match Pass (Uu tien tuyet doi name khop 100%)
                 for _, btn in ipairs(scrollFrame:GetChildren()) do
                     if isSkillReady(btn) then
                         local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
@@ -6412,7 +6412,7 @@ local function executeCombatTurn()
                     end
                 end
 
-                -- 2. Whole Word / Prefix Pass (Nếu not có exact match)
+                -- 2. Whole Word / Prefix Pass (Neu not co exact match)
                 for _, btn in ipairs(scrollFrame:GetChildren()) do
                     if isSkillReady(btn) then
                         local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
@@ -6450,21 +6450,21 @@ local function executeCombatTurn()
                     end
                 end
 
-                -- STRICT RULE: Nếu toàn bộ 4 slot has select not ready (is CD, missing Energy, Sealed...)
+                -- STRICT RULE: Neu toan bo 4 slot has select not ready (is CD, missing Energy, Sealed...)
                 if not selectedSkillBtn then
                     if shouldMeditateIfNoSkill then
-                        hubLog("[Combat]  Toàn bộ Custom Skill is CD/missing Energy -> auto Meditate theo cấu hình.")
+                        hubLog("[Combat]  Toan bo Custom Skill is CD/missing Energy -> auto Meditate theo cau hinh.")
                         doCombatMeditate()
                         return
                     else
-                        -- STRICT FALLBACK: Chỉ đánh thường (Strike / Basic Attack), TUYỆT ĐỐI not dùng skill khác!
-                        hubLog("[Combat]  Toàn bộ Custom Skill not available -> Strict Fallback về đánh thường (Basic Attack).")
+                        -- STRICT FALLBACK: Chi danh thuong (Strike / Basic Attack), TUYET DOI not dung skill khac!
+                        hubLog("[Combat]  Toan bo Custom Skill not available -> Strict Fallback ve danh thuong (Basic Attack).")
                         selectedSkillBtn = findBasicAttackBtn()
                     end
                 end
 
             -- =========================================================================
-            -- B. mode 2: AUTO SMART (select SKILL MẠNH NHẤT is READY)
+            -- B. mode 2: AUTO SMART (select SKILL MANH NHAT is READY)
             -- =========================================================================
             elseif actionChoice:find("Auto Smart") then
                 local bestSkill = nil
@@ -6498,7 +6498,7 @@ local function executeCombatTurn()
                 selectedSkillBtn = findBasicAttackBtn()
             end
 
-            -- Fallback safely cuối cùng:
+            -- Fallback safely cuoi cung:
             if not selectedSkillBtn then
                 if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
                     if shouldMeditateIfNoSkill then
@@ -6522,7 +6522,7 @@ local function executeCombatTurn()
 
             if selectedSkillBtn then
                 local skillName = selectedSkillBtn.Name
-                hubLog(string.format("[Combat]  is activate đòn đánh: '%s'", skillName))
+                hubLog(string.format("[Combat]  is activate don danh: '%s'", skillName))
                 safeClickButton(selectedSkillBtn)
                 local waitSkill = os.clock()
                 local enemiesFrame = atkPage and atkPage:FindFirstChild("Enemies")
@@ -6536,7 +6536,7 @@ local function executeCombatTurn()
             end
         end
 
-        -- 5. select mục tiêu mobs (nếu là skill đánh mobs open bảng Enemies)
+        -- 5. select muc tieu mobs (neu la skill danh mobs open bang Enemies)
         local enemiesFrame = atkPage and atkPage:FindFirstChild("Enemies")
         local enemiesScroll = enemiesFrame and (enemiesFrame:FindFirstChild("ScrollingFrame") or enemiesFrame)
 
@@ -6557,7 +6557,7 @@ local function executeCombatTurn()
                 end
 
                 if chosenEnemy then
-                    hubLog(string.format("[Combat]  has select mục tiêu mobs: '%s'", chosenEnemy.Name))
+                    hubLog(string.format("[Combat]  has select muc tieu mobs: '%s'", chosenEnemy.Name))
                     safeClickButton(chosenEnemy)
                     local waitEnemy = os.clock()
                     while (not (goBtn and goBtn.Visible)) and isPlayerTurn() and os.clock() - waitEnemy < 0.5 do
@@ -6568,15 +6568,15 @@ local function executeCombatTurn()
             end
         end
 
-        -- 6. Click Go confirmation button nếu appear
+        -- 6. Click Go confirmation button neu appear
         goBtn = combatGui:FindFirstChild("Go")
         if goBtn and goBtn.Visible then
-            hubLog("[Combat]  Bấm button Go xác receive completed turn...")
+            hubLog("[Combat]  Bam button Go xac receive completed turn...")
             safeClickButton(goBtn)
             task.wait(0.25)
         end
 
-        -- 7. wait switch turn completed (ActionBG close hoặc TurnTimer biến mất)
+        -- 7. wait switch turn completed (ActionBG close hoac TurnTimer bien mat)
         local endWait = os.clock()
         while isPlayerTurn() and os.clock() - endWait < 1.5 do
             task.wait(0.05)
@@ -6584,7 +6584,7 @@ local function executeCombatTurn()
     end)
 
     if not ok then
-        warn("[Combat]  Lỗi trong executeCombatTurn:", tostring(err))
+        warn("[Combat]  Loi trong executeCombatTurn:", tostring(err))
     end
 
     combatTurnLock = false
@@ -6599,9 +6599,9 @@ function AutoFight.start()
     end
 
     AutoFight.thread = task.spawn(function()
-        hubLog("[AutoFight]  has bật Auto Fight (auto đánh / tung skill khi đến turn trong trận)!")
+        hubLog("[AutoFight]  has bat Auto Fight (auto danh / tung skill khi den turn trong tran)!")
         
-        -- Hook phản hồi tức thì qua PropertyChangedSignal của ActionBG, Title.Text, Go và Remote Events
+        -- Hook phan hoi tuc thi qua PropertyChangedSignal cua ActionBG, Title.Text, Go va Remote Events
         local function onCombatStateChanged()
             if HubState.running and AutoFight.running and isInCombat() and isPlayerTurn() and not combatTurnLock then
                 local combatDelay = Options.CombatDelay and Options.CombatDelay.Value or 0.05
@@ -6712,12 +6712,12 @@ local function handleDeeprootNightSafe(targetSpot, targetDesc)
         if root then
             local skyPos = Vector3.new(targetSpot.X, 1200, targetSpot.Z)
             if (root.Position.Y < 1000) then
-                hubLog(string.format("[AutoFarmLevel]  detected trời tối (ClockTime: %.1fh) tại Deeproot Forest -> fly lên tầng mây (Y: 1200) đứng né Sentinel of Darkness...", Lighting.ClockTime))
+                hubLog(string.format("[AutoFarmLevel]  detected troi toi (ClockTime: %.1fh) tai Deeproot Forest -> fly len tang may (Y: 1200) dung ne Sentinel of Darkness...", Lighting.ClockTime))
                 flyToFarmSpot(skyPos)
                 enableLevelFarmerNoclip()
             end
 
-            -- Đứng lơ lửng safely trên mây cho đến khi trời sáng hoặc bị kéo vào trận
+            -- Dung lo lung safely tren may cho den khi troi sang hoac bi keo vao tran
             while HubState.running and LevelFarmer.running and isNightTime() and not isInCombat() do
                 local curRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if curRoot and curRoot.Position.Y < 1000 then
@@ -6727,7 +6727,7 @@ local function handleDeeprootNightSafe(targetSpot, targetDesc)
             end
 
             if HubState.running and LevelFarmer.running and not isNightTime() and not isInCombat() then
-                hubLog(string.format("[AutoFarmLevel]  Trời has sáng trở again (ClockTime: %.1fh) -> fly xuống bãi farm Deeproot Forest tiếp tục combat...", Lighting.ClockTime))
+                hubLog(string.format("[AutoFarmLevel]  Troi has sang tro again (ClockTime: %.1fh) -> fly xuong bai farm Deeproot Forest tiep tuc combat...", Lighting.ClockTime))
                 flyToFarmSpot(targetSpot)
                 enableLevelFarmerNoclip()
             end
@@ -6747,11 +6747,11 @@ function LevelFarmer.runCycle()
 
     task.spawn(function()
         local spot, spotDesc = getActiveFarmSpot()
-        hubLog(string.format("[AutoFarmLevel]  start Auto Farm Level - Vị trí: %s", tostring(spotDesc)))
+        hubLog(string.format("[AutoFarmLevel]  start Auto Farm Level - Vi tri: %s", tostring(spotDesc)))
 
-        -- test né ban đêm tại Deeproot Forest nếu is là ban đêm
+        -- test ne ban dem tai Deeproot Forest neu is la ban dem
         if not handleDeeprootNightSafe(spot, spotDesc) then
-            -- fly tới bãi farm safely bằng Sky-Tween & bật Noclip liên tục
+            -- fly toi bai farm safely bang Sky-Tween & bat Noclip lien tuc
             flyToFarmSpot(spot)
             enableLevelFarmerNoclip()
         end
@@ -6763,7 +6763,7 @@ function LevelFarmer.runCycle()
                 if not LevelFarmer.wasInCombat then
                     LevelFarmer.wasInCombat = true
                     LevelFarmer.essenceBeforeCombat = getCurrentEssence()
-                    hubLog(string.format("[AutoFarmLevel]  has vào trận đánh mới! (Essence đầu trận: %d)", LevelFarmer.essenceBeforeCombat))
+                    hubLog(string.format("[AutoFarmLevel]  has vao tran danh moi! (Essence dau tran: %d)", LevelFarmer.essenceBeforeCombat))
                 end
 
                 if isPlayerTurn() and not combatTurnLock then
@@ -6780,13 +6780,13 @@ function LevelFarmer.runCycle()
             else
                 if LevelFarmer.wasInCombat then
                     LevelFarmer.wasInCombat = false
-                    hubLog("[AutoFarmLevel]  battle kết thúc! is wait server load thưởng Essence...")
+                    hubLog("[AutoFarmLevel]  battle ket thuc! is wait server load thuong Essence...")
 
                     local initialEssence = LevelFarmer.essenceBeforeCombat
                     local newEssence = getCurrentEssence()
                     local startWait = os.clock()
 
-                    -- wait thông minh maximum 4.0 giây: Nếu server load Essence sớm thì tiếp tục now
+                    -- wait thong minh maximum 4.0 giay: Neu server load Essence som thi tiep tuc now
                     while os.clock() - startWait < 4.0 do
                         newEssence = getCurrentEssence()
                         if newEssence > initialEssence then
@@ -6795,16 +6795,16 @@ function LevelFarmer.runCycle()
                         task.wait(0.3)
                     end
 
-                    hubLog(string.format("[AutoFarmLevel]  Essence before trận: %d | Essence after trận: %d", initialEssence, newEssence))
+                    hubLog(string.format("[AutoFarmLevel]  Essence before tran: %d | Essence after tran: %d", initialEssence, newEssence))
 
                     if newEssence > initialEssence then
-                        -- has receive thêm Essence -> not yet chạm Cap -> Tiếp tục farm
+                        -- has receive them Essence -> not yet cham Cap -> Tiep tuc farm
                         LevelFarmer.essenceBeforeCombat = newEssence
-                        hubLog(string.format("[AutoFarmLevel]  has receive thưởng (+%d Essence, total: %d) -> Tiếp tục farm trận mới...", newEssence - initialEssence, newEssence))
+                        hubLog(string.format("[AutoFarmLevel]  has receive thuong (+%d Essence, total: %d) -> Tiep tuc farm tran moi...", newEssence - initialEssence, newEssence))
                     elseif newEssence == initialEssence and newEssence >= 10 then
-                        -- after 4.0s polling xác receive not receive thêm Essence -> has chạm Cap maximum!
+                        -- after 4.0s polling xac receive not receive them Essence -> has cham Cap maximum!
                         if Toggles.AutoMeditate and Toggles.AutoMeditate.Value then
-                            hubLog(string.format("[AutoFarmLevel]  Xác receive Essence has chạm Cap maximum (%d Essence) -> start process đi thiền...", newEssence))
+                            hubLog(string.format("[AutoFarmLevel]  Xac receive Essence has cham Cap maximum (%d Essence) -> start process di thien...", newEssence))
                             humanoidMeditateAndLevelUp()
                         end
                     else
@@ -6813,7 +6813,7 @@ function LevelFarmer.runCycle()
                     end
                 end
 
-                -- auto test vị trí bãi farm và level khi đứng wait ngoài trận
+                -- auto test vi tri bai farm va level khi dung wait ngoai tran
                 if not isInSoulCorridor() then
                     local targetSpot, targetDesc = getActiveFarmSpot()
                     if not handleDeeprootNightSafe(targetSpot, targetDesc) then
@@ -6825,10 +6825,10 @@ function LevelFarmer.runCycle()
                             local dist = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(targetSpot.X, 0, targetSpot.Z)).Magnitude
                             local yDiff = math.abs(root.Position.Y - checkY)
 
-                            -- Nếu level thay đổi khiến đổi bãi farm hoặc bị văng ra xa -> Sky-Tween fly tới bãi mới
+                            -- Neu level thay doi khien doi bai farm hoac bi vang ra xa -> Sky-Tween fly toi bai moi
                             if targetSpot ~= currentAssignedSpot or dist > 15 or yDiff > 10 then
                                 currentAssignedSpot = targetSpot
-                                hubLog(string.format("[AutoFarmLevel] 🔄 Cập nhật bãi farm (%s) -> Tiến hành Sky-Tween...", targetDesc))
+                                hubLog(string.format("[AutoFarmLevel] 🔄 Cap nhat bai farm (%s) -> Tien hanh Sky-Tween...", targetDesc))
                                 flyToFarmSpot(targetSpot)
                                 enableLevelFarmerNoclip()
                             end
@@ -6859,7 +6859,7 @@ local Miner = {
     lastGainedOreName = "",
 }
 
--- Lắng nghe trực tiếp Remote InventorySync của Server để receive diện quặng vào kho now lập tức (0ms)
+-- Lang nghe truc tiep Remote InventorySync cua Server de receive dien quang vao kho now lap tuc (0ms)
 pcall(function()
     local RS = game:GetService("ReplicatedStorage")
     local invSync = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Data") and RS.Remotes.Data:FindFirstChild("InventorySync")
@@ -6872,7 +6872,7 @@ pcall(function()
                     if itmName:lower():find("ore") then
                         Miner.gainedOreThisNode = true
                         Miner.lastGainedOreName = itmName
-                        hubLog(string.format("[AutoMine]  [Server Remote] has receive successfully quặng: %s (Số lượng: %s) vào inventory!", itmName, tostring(itm.Count or 1)))
+                        hubLog(string.format("[AutoMine]  [Server Remote] has receive successfully quang: %s (So luong: %s) vao inventory!", itmName, tostring(itm.Count or 1)))
                     end
                 end
             end
@@ -6930,12 +6930,12 @@ local function equipPickaxe()
     local char = LocalPlayer.Character
     if not char then return false end
 
-    -- NẾU has CẦM TRÊN TAY RỒI THÌ RETURN now, TRÁNH GỬI LỆNH again GÂY TOGGLE UNEQUIP!
+    -- NEU has CAM TREN TAY ROI THI RETURN now, TRANH GUI LENH again GAY TOGGLE UNEQUIP!
     if hasPickaxeEquipped() then
         return true
     end
 
-    -- 1. ƯU TIÊN GỌI HÀM :Equip() CHÍNH THỨC TỪ ENVIRONMENT CỦA INVENTORY SCRIPT
+    -- 1. UU TIEN GOI HAM :Equip() CHINH THUC TU ENVIRONMENT CUA INVENTORY SCRIPT
     local pgui = PlayerGui
     local inv = pgui and pgui:FindFirstChild("Inventory")
     local invScript = inv and inv:FindFirstChildWhichIsA("LocalScript", true)
@@ -6961,7 +6961,7 @@ local function equipPickaxe()
 
     if hasPickaxeEquipped() then return true end
 
-    -- 2. DỰ PHÒNG: Gửi Remote InventoryManage Equip & Use
+    -- 2. DU PHONG: Gui Remote InventoryManage Equip & Use
     local RS = game:GetService("ReplicatedStorage")
     local invManage = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Information") and RS.Remotes.Information:FindFirstChild("InventoryManage")
 
@@ -6982,7 +6982,7 @@ local function equipPickaxe()
         end
     end
 
-    -- 3. DỰ PHÒNG: Kéo Tool từ Backpack
+    -- 3. DU PHONG: Keo Tool tu Backpack
     local bp = LocalPlayer:FindFirstChild("Backpack")
     local hum = char:FindFirstChildOfClass("Humanoid")
     if bp and hum then
@@ -7019,7 +7019,7 @@ local function buyPickaxe()
         end
         task.wait(0.4)
 
-        -- Bấm button Confirm buy hàng trong PlayerGui.Chat hoặc Prompt Dialog
+        -- Bam button Confirm buy hang trong PlayerGui.Chat hoac Prompt Dialog
         local pgui = PlayerGui
         for _, desc in ipairs(pgui:GetDescendants()) do
             if desc:IsA("TextButton") and (desc.Text == "Confirm" or desc.Text == "Buy" or desc.Text == "Yes" or desc.Text == "YES") then
@@ -7028,7 +7028,7 @@ local function buyPickaxe()
                     pcall(function() firesignal(desc.MouseButton1Down) end)
                 end
                 safeClickButton(desc)
-                hubLog("[AutoMine]  has bấm button Confirm buy pickaxe successfully!")
+                hubLog("[AutoMine]  has bam button Confirm buy pickaxe successfully!")
                 break
             end
         end
@@ -7084,11 +7084,11 @@ local function mineOreNode(oreModel)
     local timeout = Options.MineTimeout and Options.MineTimeout.Value or 15
     local swingDelay = (Options.MineSwingDelay and Options.MineSwingDelay.Value) or 0.18
 
-    -- 1. Reset cờ receive quặng của Server và lưu số lượng quặng ban đầu
+    -- 1. Reset co receive quang cua Server va luu so luong quang ban dau
     Miner.gainedOreThisNode = false
     local initialOreCount = getInventoryOreCount()
 
-    -- 2. Đảm bảo pickaxe được gear từ Inventory
+    -- 2. Dam bao pickaxe duoc gear tu Inventory
     equipPickaxe()
 
     local char = LocalPlayer.Character
@@ -7096,40 +7096,40 @@ local function mineOreNode(oreModel)
     local orePart = oreModel:FindFirstChild("Ore") or oreModel:FindFirstChildWhichIsA("BasePart")
     if not orePart then return false end
 
-    hubLog(string.format("[AutoMine]  start vung pickaxe đập mỏ %s (Quặng trong kho: %d, speed: %.2fs/hit)...", oreModel.Name, initialOreCount, swingDelay))
+    hubLog(string.format("[AutoMine]  start vung pickaxe dap mo %s (Quang trong kho: %d, speed: %.2fs/hit)...", oreModel.Name, initialOreCount, swingDelay))
 
     while HubState.running and (os.clock() - startTime < timeout) and Miner.running do
-        -- A. test ĐIỀU KIỆN 1: SERVER has BẮN EVENT INVENTORYSYNC BÁO QUẶNG VÀO inventory (0ms)
+        -- A. test DIEU KIEN 1: SERVER has BAN EVENT INVENTORYSYNC BAO QUANG VAO inventory (0ms)
         if Miner.gainedOreThisNode then
-            hubLog(string.format("[AutoMine]  Server xác receive receive %s vào inventory! Đào mỏ %s successfully!", Miner.lastGainedOreName, oreModel.Name))
+            hubLog(string.format("[AutoMine]  Server xac receive receive %s vao inventory! Dao mo %s successfully!", Miner.lastGainedOreName, oreModel.Name))
             break
         end
 
-        -- B. test ĐIỀU KIỆN 2: inventory increase SỐ LƯỢNG mineral
+        -- B. test DIEU KIEN 2: inventory increase SO LUONG mineral
         local currentOreCount = getInventoryOreCount()
         if currentOreCount > initialOreCount then
-            hubLog(string.format("[AutoMine]  inventory receive thêm %d quặng (Từ %d -> %d)! Đào xong mỏ %s!", currentOreCount - initialOreCount, initialOreCount, currentOreCount, oreModel.Name))
+            hubLog(string.format("[AutoMine]  inventory receive them %d quang (Tu %d -> %d)! Dao xong mo %s!", currentOreCount - initialOreCount, initialOreCount, currentOreCount, oreModel.Name))
             break
         end
 
-        -- C. test ĐIỀU KIỆN 3: ore node has BỊ PHÁ HỦY HOÀN TOÀN
+        -- C. test DIEU KIEN 3: ore node has BI PHA HUY HOAN TOAN
         if not oreModel or not oreModel.Parent or not oreModel:IsDescendantOf(workspace) then
-            hubLog(string.format("[AutoMine]  Mỏ %s has bị phá hủy hoàn toàn!", oreModel and oreModel.Name or "Ore"))
+            hubLog(string.format("[AutoMine]  Mo %s has bi pha huy hoan toan!", oreModel and oreModel.Name or "Ore"))
             break
         end
 
         local currentOrePart = oreModel:FindFirstChild("Ore") or oreModel:FindFirstChildWhichIsA("BasePart")
         if not currentOrePart or not currentOrePart.Parent or not currentOrePart:IsDescendantOf(workspace) then
-            hubLog(string.format("[AutoMine]  Quặng trong mỏ %s has được mine xong!", oreModel.Name))
+            hubLog(string.format("[AutoMine]  Quang trong mo %s has duoc mine xong!", oreModel.Name))
             break
         end
 
-        -- D. Đảm bảo luôn cầm pickaxe trên tay
+        -- D. Dam bao luon cam pickaxe tren tay
         if not hasPickaxeEquipped() then
             equipPickaxe()
         end
 
-        -- E. Giữ vị trí đứng accurate 3.5 studs đối diện quặng, triệt tiêu gia tốc vật lý
+        -- E. Giu vi tri dung accurate 3.5 studs doi dien quang, triet tieu gia toc vat ly
         if root and currentOrePart then
             local orePos = currentOrePart.Position
             local flatDir = Vector3.new(root.Position.X - orePos.X, 0, root.Position.Z - orePos.Z)
@@ -7141,7 +7141,7 @@ local function mineOreNode(oreModel)
             root.CFrame = CFrame.lookAt(standPos, Vector3.new(orePos.X, standPos.Y, orePos.Z))
         end
 
-        -- F. activate Pickaxe Tool swing & Chuột vật lý
+        -- F. activate Pickaxe Tool swing & Chuot vat ly
         local tool = char and (char:FindFirstChild("Pickaxe") or char:FindFirstChildWhichIsA("Tool"))
         if tool and tool:IsA("Tool") then
             pcall(function() tool:Activate() end)
@@ -7163,7 +7163,7 @@ function Miner.runCycle()
     Miner.running = true
 
     task.spawn(function()
-        hubLog("[AutoMine]  [BƯỚC 1]: test gear Pickaxe...")
+        hubLog("[AutoMine]  [BUOC 1]: test gear Pickaxe...")
         handleAutoStart()
 
         if not hasPickaxe() then
@@ -7181,7 +7181,7 @@ function Miner.runCycle()
             end
         end
 
-        hubLog("[AutoMine]  [BƯỚC 2]: is quét ore node trên map...")
+        hubLog("[AutoMine]  [BUOC 2]: is quet ore node tren map...")
         local selectedOres = (Options.MineOresWhitelist and Options.MineOresWhitelist.Value) or { ["Ferrus"] = true, ["Aestic"] = true, ["Laneus"] = true }
 
         local oreList = {}
@@ -7202,14 +7202,14 @@ function Miner.runCycle()
             end
         end
 
-        hubLog(string.format("[AutoMine]  Tìm thấy %d ore node hợp lệ.", #oreList))
+        hubLog(string.format("[AutoMine]  Tim thay %d ore node hop le.", #oreList))
 
         if #oreList > 0 then
             local char = LocalPlayer.Character
             local root = char and char:FindFirstChild("HumanoidRootPart")
             local curPos = root and root.Position or Vector3.zero
 
-            -- Sắp xếp Nearest Neighbor gom ore node nearby nhau
+            -- Sap xep Nearest Neighbor gom ore node nearby nhau
             local sortedOreList = {}
             local remainingOres = {}
             for _, o in ipairs(oreList) do table.insert(remainingOres, o) end
@@ -7242,14 +7242,14 @@ function Miner.runCycle()
                 local oreName = oreData.name
                 if ore and ore.Parent then
                     local targetPos = ore:GetPivot().Position
-                    hubLog(string.format("[AutoMine]  [%d/%d] is fly tới mỏ %s tại (%.1f, %.1f, %.1f)...", i, #oreList, oreName, targetPos.X, targetPos.Y, targetPos.Z))
+                    hubLog(string.format("[AutoMine]  [%d/%d] is fly toi mo %s tai (%.1f, %.1f, %.1f)...", i, #oreList, oreName, targetPos.X, targetPos.Y, targetPos.Z))
 
                     local flew = flyToItem(targetPos, function() return Miner.running end)
                     if flew and ore and ore.Parent then
                         local done = mineOreNode(ore)
                         if done then
                             minedCount = minedCount + 1
-                            hubLog(string.format("[AutoMine]  has đào xong mỏ %s!", oreName))
+                            hubLog(string.format("[AutoMine]  has dao xong mo %s!", oreName))
                         end
                         task.wait(0.4)
                     end
@@ -7264,7 +7264,7 @@ function Miner.runCycle()
                 smoothTweenTo(CFrame.new(root.Position.X, skyHeight, root.Position.Z), ascendSpeed, function() return Miner.running end)
             end
         else
-            hubLog("[AutoMine]  Server not có quặng mục tiêu!")
+            hubLog("[AutoMine]  Server not co quang muc tieu!")
         end
 
         disableFlightState()
@@ -7372,10 +7372,10 @@ local function handleSwordQTE(swordQTE)
     local window = inset:FindFirstChild("Window")
     if not window or not window.Visible then return end
 
-    -- Tìm Indicator is hoạt động theo stats tuần tự của game (1, 2, 3, 4...)
+    -- Tim Indicator is hoat dong theo stats tuan tu cua game (1, 2, 3, 4...)
     local targetInd = inset:FindFirstChild(tostring(AutoQTE.currentSwordIndex))
     if not targetInd or not targetInd.Visible or AutoQTE.swordHitTable[targetInd] then
-        -- Fallback: Tìm indicator có stats nhỏ nhất not yet bấm và is hiển thị
+        -- Fallback: Tim indicator co stats nho nhat not yet bam va is hien thi
         local lowestIdx = math.huge
         targetInd = nil
         for _, child in ipairs(inset:GetChildren()) do
@@ -7401,7 +7401,7 @@ local function handleSwordQTE(swordQTE)
     local winWidth = window.AbsoluteSize.X
     local winRight = winLeft + winWidth
 
-    -- Tính toán vùng center trúng chuẩn (Sweet Spot) safely bên trong Window
+    -- Tinh toan vung center trung chuan (Sweet Spot) safely ben trong Window
     local sweetSpotMin = winLeft + (winWidth * 0.25)
     local sweetSpotMax = winRight - (winWidth * 0.15)
 
@@ -7412,7 +7412,7 @@ local function handleSwordQTE(swordQTE)
         end)
     end
 
-    -- Chỉ bấm khi Indicator has actually tiến vào vùng center của Window (Tránh bấm sớm ở các super class như Berserker)
+    -- Chi bam khi Indicator has actually tien vao vung center cua Window (Tranh bam som o cac super class nhu Berserker)
     if (indCenter >= sweetSpotMin and indCenter <= sweetSpotMax) or (isColliding and indLeft >= winLeft and indRight <= winRight + 5) then
         AutoQTE.lastSwordHit = os.clock()
         AutoQTE.swordHitTable[targetInd] = true
@@ -7524,8 +7524,8 @@ local function handleAxeQTE(axeQTE)
     local targetWidth = threshold.AbsoluteSize.X / gaugeWidth
     local currentFill = fill.AbsoluteSize.X / gaugeWidth
 
-    -- points activate safely: Chỉ bấm khi thanh tuột xuống under đáy hoặc dropped vào 15% phần under của vùng Threshold
-    -- Giúp ngăn chặn tuyệt đối việc nhảy lố (overshoot) ở các độ khó cao khi vùng Threshold bị thu hẹp
+    -- points activate safely: Chi bam khi thanh tuot xuong under day hoac dropped vao 15% phan under cua vung Threshold
+    -- Giup ngan chan tuyet doi viec nhay lo (overshoot) o cac do kho cao khi vung Threshold bi thu hep
     local targetBottomSafeZone = targetStart + (targetWidth * 0.15)
 
     if currentFill <= targetBottomSafeZone then
@@ -7565,7 +7565,7 @@ local function handleMagicQTE(magicQTE)
         if rune:IsA("GuiObject") and rune.Visible and rune.Name ~= "Slotted" and rune.ImageTransparency < 0.9 and not AutoQTE.magicSlottedTable[rune] then
             local runeName = rune.Name
 
-            -- Tìm ô Slot mục tiêu tương ứng not yet được sử dụng trong round này
+            -- Tim o Slot muc tieu tuong ung not yet duoc su dung trong round nay
             local matchingSlot = nil
             for _, slot in ipairs(slotChildren) do
                 if slot:IsA("GuiObject") and slot.Name == runeName and slot.Name ~= "Slotted" and not usedSlots[slot] then
@@ -7583,7 +7583,7 @@ local function handleMagicQTE(magicQTE)
 
                     local slotted = false
 
-                    -- Phương pháp 1: Native Closure Injection trực tiếp vào closure InputEnded
+                    -- Phuong phap 1: Native Closure Injection truc tiep vao closure InputEnded
                     if getconns and setuv then
                         local conns = getconns(rune.InputEnded)
                         if conns and #conns > 0 then
@@ -7607,7 +7607,7 @@ local function handleMagicQTE(magicQTE)
                         end
                     end
 
-                    -- Cập nhật trực quan và phát âm thanh slot
+                    -- Cap nhat truc quan va phat am thanh slot
                     rune.Name = "Slotted"
                     rune.ImageTransparency = 1
                     rune.Visible = false
@@ -7618,7 +7618,7 @@ local function handleMagicQTE(magicQTE)
                         pcall(function() magicQTE.RuneSlotIn:Play() end)
                     end
 
-                    -- Phương pháp 2: Fallback chuột simulate nếu closure not available
+                    -- Phuong phap 2: Fallback chuot simulate neu closure not available
                     if not slotted then
                         local runePos = rune.AbsolutePosition + (rune.AbsoluteSize / 2)
                         local slotPos = matchingSlot.AbsolutePosition + (matchingSlot.AbsoluteSize / 2)
@@ -7744,7 +7744,7 @@ local function handleSpearQTE(spearQTE)
 
                     local resolved = false
 
-                    -- Phương pháp 1: Native Closure Resolution (Giải trực tiếp Tap, Line slider và Curve slider)
+                    -- Phuong phap 1: Native Closure Resolution (Giai truc tiep Tap, Line slider va Curve slider)
                     if getconns and getuvs then
                         local connsAct = getconns(btn.Activated)
                         local connsBeg = getconns(btn.InputBegan)
@@ -7784,7 +7784,7 @@ local function handleSpearQTE(spearQTE)
                         end
                     end
 
-                    -- Phương pháp 2: Hardware & Software Signal Fallback
+                    -- Phuong phap 2: Hardware & Software Signal Fallback
                     if not resolved then
                         local btnCenterX = btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2
                         local btnCenterY = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2
@@ -8544,7 +8544,7 @@ local YarthulGroup = Tabs.AutoFarm:AddRightGroupbox("Auto Boss: Yar'thul (Blazin
 YarthulGroup:AddToggle("AutoFarmYarthul", {
     Text = "Enable Auto Farm & Retry Yar'thul",
     Default = false,
-    Tooltip = "auto test vị trí Spawn trong Instance -> Tween tới gate Boss để Begin Fight -> auto đánh theo chiến thuật chuẩn (Ưu tiên 1: Sense Expansion xen kẽ dứt khoát not Meditate -> Ưu tiên 2: Carnage khi E>=3 & Carnage has hồi CD & not có Flame Pillar dứt khoát not Meditate -> Ưu tiên 3: Strike kèm Meditate Sub-Action để load Energy) -> auto collect đồ, Hook SetCore Callback auto Accept vào Roll Pool (0ms) & auto quét toàn bộ Drop mới vào inventory -> auto Retry lặp again vô tận",
+    Tooltip = "auto test vi tri Spawn trong Instance -> Tween toi gate Boss de Begin Fight -> auto danh theo chien thuat chuan (Uu tien 1: Sense Expansion xen ke dut khoat not Meditate -> Uu tien 2: Carnage khi E>=3 & Carnage has hoi CD & not co Flame Pillar dut khoat not Meditate -> Uu tien 3: Strike kem Meditate Sub-Action de load Energy) -> auto collect do, Hook SetCore Callback auto Accept vao Roll Pool (0ms) & auto quet toan bo Drop moi vao inventory -> auto Retry lap again vo tan",
     Callback = function(Value)
         if Value then
             AutoYarthul.start()
@@ -8561,13 +8561,13 @@ YarthulGroup:AddLabel(" Strat: Sense (Alternating) > Carnage > Strike + Med")
 YarthulGroup:AddToggle("YarthulMeditateSubAction", {
     Text = "Use Meditate Sub-Action on Strike",
     Default = false,
-    Tooltip = "auto activate Sub-Action Meditate kèm after đòn Strike để load nhanh Energy (Carnage và Sense Expansion được tung đòn dứt khoát not kèm Meditate để tránh kết thúc turn sớm hoặc trúng Flame Pillar)",
+    Tooltip = "auto activate Sub-Action Meditate kem after don Strike de load nhanh Energy (Carnage va Sense Expansion duoc tung don dut khoat not kem Meditate de tranh ket thuc turn som hoac trung Flame Pillar)",
 })
 
 YarthulGroup:AddToggle("YarthulAutoLoot", {
     Text = "Auto Loot & Roll Pool (Direct Hook)",
     Default = false,
-    Tooltip = "auto Hook SetCore Notification Callback để Accept tức thì vào Roll Pool khi dropped Artifact, hoàn toàn not chiếm chuột của player",
+    Tooltip = "auto Hook SetCore Notification Callback de Accept tuc thi vao Roll Pool khi dropped Artifact, hoan toan not chiem chuot cua player",
 })
 
 YarthulGroup:AddSlider("YarthulTweenSpeed", {
@@ -8576,7 +8576,7 @@ YarthulGroup:AddSlider("YarthulTweenSpeed", {
     Min = 120,
     Max = 350,
     Rounding = 0,
-    Tooltip = "speed fly Sky-Tween tới gate Mount Thul (mặc định 220 studs/s)",
+    Tooltip = "speed fly Sky-Tween toi gate Mount Thul (mac dinh 220 studs/s)",
 })
 
 YarthulGroup:AddButton({
@@ -8601,7 +8601,7 @@ local HopGroup   = Tabs.AutoFarm:AddLeftGroupbox("Server Hop & Navigation")
 FarmGroup:AddToggle("AutoFarmCrylight", {
     Text = "Enable Ingredient Auto Farm",
     Default = false,
-    Tooltip = "auto quét Menu -> Vào game -> fly Sky-Tween -> Thu hoạch nguyên liệu -> Đổi Server",
+    Tooltip = "auto quet Menu -> Vao game -> fly Sky-Tween -> Thu hoach nguyen lieu -> Doi Server",
     Callback = function(Value)
         if Value then Farmer.runCycle() else Farmer.stop() end
     end
@@ -8631,7 +8631,7 @@ FarmGroup:AddToggle("AutoSkipIntro", {
 FarmGroup:AddToggle("BlacklistDesert", {
     Text = "Ignore Desert Fake Crylights (Vastic Grave & Sanctum)",
     Default = false,
-    Tooltip = "Types bỏ hoàn toàn toàn bộ Crylight giả trong area Sa mạc (Vastic Grave) & Forgotten Sanctum",
+    Tooltip = "Types bo hoan toan toan bo Crylight gia trong area Sa mac (Vastic Grave) & Forgotten Sanctum",
 })
 
 FarmGroup:AddSlider("SkyHeight", {
@@ -8677,7 +8677,7 @@ FarmGroup:AddSlider("PickupTimeout", {
 MineGroup:AddToggle("AutoMineOre", {
     Text = "Enable Auto Mine Ores",
     Default = false,
-    Tooltip = "auto test Pickaxe -> buy nếu missing -> fly tới mỏ -> Tự đào khoáng",
+    Tooltip = "auto test Pickaxe -> buy neu missing -> fly toi mo -> Tu dao khoang",
     Callback = function(Value)
         if Value then Miner.runCycle() else Miner.stop() end
     end
@@ -8693,7 +8693,7 @@ MineGroup:AddDropdown("MineOresWhitelist", {
 MineGroup:AddToggle("AutoBuyPickaxe", {
     Text = "Auto Buy Pickaxe if Missing (50g)",
     Default = false,
-    Tooltip = "Nếu trong túi/balo not yet có pickaxe, sẽ auto fly tới Caldera để buy pickaxe (50 Gold)",
+    Tooltip = "Neu trong tui/balo not yet co pickaxe, se auto fly toi Caldera de buy pickaxe (50 Gold)",
 })
 
 MineGroup:AddSlider("MineTimeout", {
@@ -8710,7 +8710,7 @@ MineGroup:AddSlider("MineSwingDelay", {
     Min = 0.08,
     Max = 0.5,
     Rounding = 2,
-    Tooltip = "time nghỉ giữa mỗi lần vung pickaxe đập ore node (mặc định 0.18s siêu nhanh)",
+    Tooltip = "time nghi giua moi lan vung pickaxe dap ore node (mac dinh 0.18s sieu nhanh)",
 })
 
 MineGroup:AddButton({
@@ -8721,7 +8721,7 @@ MineGroup:AddButton({
 LevelGroup:AddToggle("AutoFarmLevel", {
     Text = "Enable Auto Farm Level",
     Default = false,
-    Tooltip = "auto tween tới bãi farm (under ground với Lv 1-20) và auto combat / giải QTE khi vào trận",
+    Tooltip = "auto tween toi bai farm (under ground voi Lv 1-20) va auto combat / giai QTE khi vao tran",
     Callback = function(Value)
         if Value then LevelFarmer.runCycle() else LevelFarmer.stop() end
     end
@@ -8741,25 +8741,25 @@ LevelGroup:AddDropdown("FarmLevelMode", {
     Default = 1,
     Multi = false,
     Text = "Mode",
-    Tooltip = "select mode hoặc area mobs để farm safely under ground (player khác not thể nhìn thấy):\n• Auto (Detect Level 1 - 50): auto detected level (Lv < 30 fly về bãi underground Caldera, Lv >= 30 fly về khối safely Desert)\n• Level 1 - 30 (Underground): Bãi underground safely Caldera\n• Level 30 - 50 (Desert Block): Bãi safely trong khối Desert\n• The Crossing: mobs tân thủ nearby Caldera (Slime, Bandits, Goblins)\n• Deeproot Canopy: mobs rừng Westwood (Plants, Wolves, Spiders)\n• Waving Sands: mobs sa mạc (Desert Scorpions, Mummies, Bandits)\n• Withered Grove: mobs hắc ám / Cursed Undead\n• Mount Thul: mobs băng tuyết / Yeti / Golem",
+    Tooltip = "select mode hoac area mobs de farm safely under ground (player khac not the nhin thay):\n• Auto (Detect Level 1 - 50): auto detected level (Lv < 30 fly ve bai underground Caldera, Lv >= 30 fly ve khoi safely Desert)\n• Level 1 - 30 (Underground): Bai underground safely Caldera\n• Level 30 - 50 (Desert Block): Bai safely trong khoi Desert\n• The Crossing: mobs tan thu nearby Caldera (Slime, Bandits, Goblins)\n• Deeproot Canopy: mobs rung Westwood (Plants, Wolves, Spiders)\n• Waving Sands: mobs sa mac (Desert Scorpions, Mummies, Bandits)\n• Withered Grove: mobs hac am / Cursed Undead\n• Mount Thul: mobs bang tuyet / Yeti / Golem",
 })
 
 LevelGroup:AddToggle("AutoMeditate", {
     Text = "Auto Meditate & Level Up (Auto Cap Detect)",
     Default = false,
-    Tooltip = "auto detected khi Essence stop increase (đạt Cap level) -> auto đi thiền mô phỏng key M meet Aretim để level up rồi trở về",
+    Tooltip = "auto detected khi Essence stop increase (dat Cap level) -> auto di thien mo phong key M meet Aretim de level up roi tro ve",
 })
 
 LevelGroup:AddToggle("DeeprootNightFailsafe", {
     Text = "Deeproot Night Safe Hover (Avoid Sentinel)",
     Default = false,
-    Tooltip = "Khi farm tại Deeproot Forest / Westwood: Nếu trời tối (17:30 - 06:30), auto fly lên tầng mây (Y: 1200) đứng đợi trời sáng để tránh meet siêu mobs Sentinel of Darkness.",
+    Tooltip = "Khi farm tai Deeproot Forest / Westwood: Neu troi toi (17:30 - 06:30), auto fly len tang may (Y: 1200) dung doi troi sang de tranh meet sieu mobs Sentinel of Darkness.",
 })
 
 StatsGroup:AddToggle("AutoAllocateStats", {
     Text = "Enable Auto Stats Build",
     Default = false,
-    Tooltip = "auto upgraded points StatPoints theo mốc Target Stats và lưu cache theo name nhân vật (+10 mỗi cycle)",
+    Tooltip = "auto upgraded points StatPoints theo moc Target Stats va luu cache theo name nhan vat (+10 moi cycle)",
 })
 
 StatsGroup:AddSlider("TargetStrength", {
@@ -8826,7 +8826,7 @@ StatsGroup:AddButton({
 HopGroup:AddToggle("AutoServerHop", {
     Text = "Auto Server Hop (Farm Items)",
     Default = false,
-    Tooltip = "auto đổi server khi lụm xong hoặc khi server not có nguyên liệu",
+    Tooltip = "auto doi server khi lum xong hoac khi server not co nguyen lieu",
 })
 
 HopGroup:AddDivider()
@@ -8834,7 +8834,7 @@ HopGroup:AddDivider()
 HopGroup:AddToggle("HuntCorruptServer", {
     Text = "Auto Hop Hunt Corrupt Server",
     Default = false,
-    Tooltip = "auto đổi server liên tục cho đến khi tìm thấy Corrupted Server (Event Server)!",
+    Tooltip = "auto doi server lien tuc cho den khi tim thay Corrupted Server (Event Server)!",
 })
 
 Toggles.HuntCorruptServer:OnChanged(function()
@@ -8848,7 +8848,7 @@ end)
 HopGroup:AddToggle("StayInCorruptServer", {
     Text = "Stay In Corrupt Server When Found",
     Default = false,
-    Tooltip = "auto stop hop khi has tìm thấy Corrupt Server",
+    Tooltip = "auto stop hop khi has tim thay Corrupt Server",
 })
 
 
@@ -8857,10 +8857,10 @@ HopGroup:AddButton({
     Func = function()
         local isCorrupt, evName = checkIsCorruptServer()
         if isCorrupt then
-            Library:Notify(string.format(" is LÀ CORRUPT SERVER: %s!", evName), 6)
+            Library:Notify(string.format(" is LA CORRUPT SERVER: %s!", evName), 6)
             sendCorruptServerWebhook(evName)
         else
-            Library:Notify(" Server hiện tại potion thường (not có Event Corrupt).", 4)
+            Library:Notify(" Server hien tai potion thuong (not co Event Corrupt).", 4)
         end
     end,
     DoubleClick = false,
@@ -8902,7 +8902,7 @@ local FightGroup  = Tabs.AutoQTE:AddRightGroupbox("Auto Fight & Skill Priority")
 CombatGroup:AddToggle("MasterQTE", {
     Text = "Enable Auto Combat QTE",
     Default = false,
-    Tooltip = "auto giải và finished toàn bộ QTE khi combat / open rương",
+    Tooltip = "auto giai va finished toan bo QTE khi combat / open ruong",
 })
 
 CombatGroup:AddDropdown("EnabledQTEList", {
@@ -8925,7 +8925,7 @@ CombatGroup:AddDropdown("EnabledQTEList", {
 CombatGroup:AddToggle("PreferPerfectDodge", {
     Text = "Prefer Perfect Dodge (100% Invuln)",
     Default = false,
-    Tooltip = "Ưu tiên canh chuẩn ô Dodge (Né hoàn hảo 100% not mất máu), dự phòng Block",
+    Tooltip = "Uu tien canh chuan o Dodge (Ne hoan hao 100% not mat mau), du phong Block",
 })
 
 CombatGroup:AddSlider("ReactionDelayMs", {
@@ -8934,13 +8934,13 @@ CombatGroup:AddSlider("ReactionDelayMs", {
     Min = 0,
     Max = 150,
     Rounding = 0,
-    Tooltip = "Độ trễ mô phỏng phản xạ player (0 = accurate tức thì)",
+    Tooltip = "Do tre mo phong phan xa player (0 = accurate tuc thi)",
 })
 
 FightGroup:AddToggle("AutoFight", {
     Text = "Enable Auto Fight (Auto Attack)",
     Default = false,
-    Tooltip = "auto tung skill / đánh thường / thiền khi đến turn trong battle. Hoạt động độc lập (not cần bật Auto Farm Level).",
+    Tooltip = "auto tung skill / danh thuong / thien khi den turn trong battle. Hoat dong doc lap (not can bat Auto Farm Level).",
     Callback = function(Value)
         if Value then AutoFight.start() else AutoFight.stop() end
     end
@@ -8955,7 +8955,7 @@ FightGroup:AddDropdown("SelectedCombatAction", {
     Default = 1,
     Multi = false,
     Text = "Combat Attack / Skill Action",
-    Tooltip = "Lựa select mode tung skill khi đến turn:\n• Strike: Basic Attack\n• Auto Smart: Tự select skill mạnh nhất\n• Custom Skill: Ưu tiên theo 4 slot bên under",
+    Tooltip = "Lua select mode tung skill khi den turn:\n• Strike: Basic Attack\n• Auto Smart: Tu select skill manh nhat\n• Custom Skill: Uu tien theo 4 slot ben under",
 })
 
 local customSkillUIElements = {}
@@ -8972,7 +8972,7 @@ end
 recordCustomSkillElement(function()
     return FightGroup:AddButton({
         Text = "🔄 Scan / Refresh My Skills",
-        Tooltip = "Quét again list skill thức is gear từ interface UI của bạn",
+        Tooltip = "Quet again list skill thuc is gear tu interface UI cua ban",
         Func = function()
             local skills = scanPlayerSkills()
             table.insert(skills, 1, "None")
@@ -8980,7 +8980,7 @@ recordCustomSkillElement(function()
             if Options.CustomSkillSlot2 then Options.CustomSkillSlot2:SetValues(skills) end
             if Options.CustomSkillSlot3 then Options.CustomSkillSlot3:SetValues(skills) end
             if Options.CustomSkillSlot4 then Options.CustomSkillSlot4:SetValues(skills) end
-            Library:Notify(string.format(" has quét thấy %d skill thức!", #skills - 1), 3)
+            Library:Notify(string.format(" has quet thay %d skill thuc!", #skills - 1), 3)
         end
     })
 end)
@@ -8993,8 +8993,8 @@ recordCustomSkillElement(function()
         Values = initialSkills,
         Default = #initialSkills > 1 and 2 or 1,
         Multi = false,
-        Text = "Priority 1 (Ưu tiên cao nhất)",
-        Tooltip = "skill thức được ưu tiên tung ra đầu tiên khi ready",
+        Text = "Priority 1 (Uu tien cao nhat)",
+        Tooltip = "skill thuc duoc uu tien tung ra dau tien khi ready",
     })
 end)
 
@@ -9004,7 +9004,7 @@ recordCustomSkillElement(function()
         Default = 1,
         Multi = false,
         Text = "Priority 2",
-        Tooltip = "skill thức được sử dụng nếu Priority 1 is hồi skill (CD)",
+        Tooltip = "skill thuc duoc su dung neu Priority 1 is hoi skill (CD)",
     })
 end)
 
@@ -9014,7 +9014,7 @@ recordCustomSkillElement(function()
         Default = 1,
         Multi = false,
         Text = "Priority 3",
-        Tooltip = "skill thức được sử dụng nếu Priority 1 & 2 is hồi skill",
+        Tooltip = "skill thuc duoc su dung neu Priority 1 & 2 is hoi skill",
     })
 end)
 
@@ -9024,7 +9024,7 @@ recordCustomSkillElement(function()
         Default = 1,
         Multi = false,
         Text = "Priority 4",
-        Tooltip = "skill thức dự phòng cuối cùng",
+        Tooltip = "skill thuc du phong cuoi cung",
     })
 end)
 
@@ -9032,7 +9032,7 @@ recordCustomSkillElement(function()
     return FightGroup:AddToggle("AutoMeditateInCombat", {
         Text = "Auto Meditate if Cannot Use Skill",
         Default = false,
-        Tooltip = "BẬT: Nếu toàn bộ skill ưu tiên is hồi skill hoặc missing Energy/Stamina -> auto select Meditate để hồi thể lực / mana. TẮT: auto fallback về đánh thường (Strike).",
+        Tooltip = "BAT: Neu toan bo skill uu tien is hoi skill hoac missing Energy/Stamina -> auto select Meditate de hoi the luc / mana. TAT: auto fallback ve danh thuong (Strike).",
     })
 end)
 
@@ -9069,7 +9069,7 @@ FightGroup:AddDropdown("CombatExecutionMode", {
     Default = 1,
     Multi = false,
     Text = "Combat Execution Method",
-    Tooltip = "• Direct Remote: Bỏ qua interface UI, gửi trực tiếp Remote packet tới Server trong 0ms và support Sub-actions.\n• UI Emulation: simulate thao tác click chuột trên interface như player real.",
+    Tooltip = "• Direct Remote: Bo qua interface UI, gui truc tiep Remote packet toi Server trong 0ms va support Sub-actions.\n• UI Emulation: simulate thao tac click chuot tren interface nhu player real.",
 })
 
 FightGroup:AddDropdown("CombatSubAction", {
@@ -9081,7 +9081,7 @@ FightGroup:AddDropdown("CombatSubAction", {
     Default = 2,
     Multi = false,
     Text = "Sub-Action (Same-Turn Action)",
-    Tooltip = "Gửi thêm hành động phụ (Hồi Energy hoặc Bật thủ) now trong cùng 1 turn đánh chính!",
+    Tooltip = "Gui them hanh dong phu (Hoi Energy hoac Bat thu) now trong cung 1 turn danh chinh!",
 })
 
 FightGroup:AddSlider("CombatDelay", {
@@ -9090,7 +9090,7 @@ FightGroup:AddSlider("CombatDelay", {
     Min = 0.0,
     Max = 2.0,
     Rounding = 2,
-    Tooltip = "Độ trễ phản xạ before khi ra skill (0.0s = tức thì 0ms, 0.05s = mượt mà)",
+    Tooltip = "Do tre phan xa before khi ra skill (0.0s = tuc thi 0ms, 0.05s = muot ma)",
 })
 
 -- -----------------------------------------------------------------------------
@@ -9102,7 +9102,7 @@ local SpeedGroup = Tabs.Movement:AddRightGroupbox("Speed & Jump")
 FlyGroup:AddToggle("Fly", {
     Text = "Enable Fly Hack",
     Default = false,
-    Tooltip = "fly tự do theo hướng Camera (W/A/S/D + Space / Shift)",
+    Tooltip = "fly tu do theo huong Camera (W/A/S/D + Space / Shift)",
 }):AddKeyPicker("FlyKeybind", {
     Default = "None",
     SyncToggleState = true,
@@ -9527,7 +9527,7 @@ local OptGroup = Tabs.Visuals:AddRightGroupbox("Optimization & RAM")
 QOLGroup:AddToggle("EnemyAttackPredictor", {
     Text = "Enemy Skill Predictor & Combat HUD",
     Default = false,
-    Tooltip = "Hiển thị bảng phân tích dự đoán skill thức tiếp theo của mobs, thanh Energy time thực và bắt skill now khi mobs vung đòn",
+    Tooltip = "Hien thi bang phan tich du doan skill thuc tiep theo cua mobs, thanh Energy time thuc va bat skill now khi mobs vung don",
 })
 
 Toggles.EnemyAttackPredictor:OnChanged(function()
@@ -9541,13 +9541,13 @@ end)
 QOLGroup:AddToggle("PredictorWorldESP", {
     Text = "Show Predictor On Enemy Heads (ESP)",
     Default = false,
-    Tooltip = "Hiển thị thanh Energy & skill dự đoán trực tiếp dạng Billboard overhead monster",
+    Tooltip = "Hien thi thanh Energy & skill du doan truc tiep dang Billboard overhead monster",
 })
 
 QOLGroup:AddToggle("PredictorSoundAlert", {
     Text = "Sound Alert On Danger Skills",
     Default = false,
-    Tooltip = "Phát chuông cảnh báo âm thanh khi boss/mobs start tung skill nguy hiểm (Magma Pillar, Inferno, v.v.)",
+    Tooltip = "Phat chuong canh bao am thanh khi boss/mobs start tung skill nguy hiem (Magma Pillar, Inferno, v.v.)",
 })
 
 QOLGroup:AddDivider()
@@ -9583,7 +9583,7 @@ local OptimizationState = {
     removeTreesConnection = nil,
 }
 
--- 1. XỬ LÝ hidden CÂY CỐI & THẢM THỰC VẬT (REMOVE TREES / FOLIAGE / GRASS)
+-- 1. XU LY hidden CAY COI & THAM THUC VAT (REMOVE TREES / FOLIAGE / GRASS)
 local function applyPartTreeRemoval(obj, hideTrees)
     if not obj then return end
     local name = obj.Name:lower()
@@ -9612,7 +9612,7 @@ local function applyTreeRemoval()
             local hideTrees = Toggles.RemoveTrees and Toggles.RemoveTrees.Value or false
             OptimizationState.removeTreesActive = hideTrees
 
-            -- Quét thư mục rác MapGarbage & toàn bộ workspace
+            -- Quet thu muc rac MapGarbage & toan bo workspace
             local mapGarbage = workspace:FindFirstChild("MapGarbage")
             if mapGarbage then
                 local treeGarb = mapGarbage:FindFirstChild("TreeGarbage")
@@ -9651,7 +9651,7 @@ local function applyTreeRemoval()
     end)
 end
 
--- 2. XỬ LÝ ĐỒ HỌA MƯỢT & TẮT PARTICLE (LOW GRAPHICS)
+-- 2. XU LY DO HOA MUOT & TAT PARTICLE (LOW GRAPHICS)
 local function applyPartLowGraphics(p, isLow)
     if not p then return end
     if LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character) then return end
@@ -9727,7 +9727,7 @@ local function applyLowGraphics()
     end)
 end
 
--- 3. XỬ LÝ MASTER FPS BOOST (clear SƯƠNG MÙ / HIỆU ỨNG ÁNH SÁNG)
+-- 3. XU LY MASTER FPS BOOST (clear SUONG MU / HIEU UNG ANH SANG)
 local function applyFPSBoost()
     task.spawn(function()
         pcall(function()
@@ -9772,7 +9772,7 @@ local function applyFPSBoost()
     end)
 end
 
--- 4. XỬ LÝ EXTREME FPS BOOSTER (POTATO MODE TOÀN DIỆN - not TẮT 3D RENDER)
+-- 4. XU LY EXTREME FPS BOOSTER (POTATO MODE TOAN DIEN - not TAT 3D RENDER)
 local function applyExtremePart(p)
     if not p then return end
     if p:IsA("BasePart") then
@@ -9806,11 +9806,11 @@ local function applyExtremeFPSBoost()
             OptimizationState.extremeActive = isExtreme
 
             if isExtreme then
-                -- A. Cấu hình Engine Renderer & GPU Settings thấp nhất tuyệt đối
+                -- A. Cau hinh Engine Renderer & GPU Settings thap nhat tuyet doi
                 pcall(function() settings().Rendering.QualityLevel = 1 end)
                 pcall(function() sethiddenproperty(Lighting, "Technology", Enum.Technology.Compatibility) end)
 
-                -- B. Triệt tiêu toàn bộ hiệu ứng ánh sáng / sương mù / bóng đổ
+                -- B. Triet tieu toan bo hieu ung anh sang / suong mu / bong do
                 Lighting.GlobalShadows = false
                 Lighting.FogEnd = 9e9
                 Lighting.FogStart = 9e9
@@ -9826,7 +9826,7 @@ local function applyExtremeFPSBoost()
                     end
                 end
 
-                -- C. Triệt tiêu toàn bộ thảm thực vật & cây cối
+                -- C. Triet tieu toan bo tham thuc vat & cay coi
                 local mapGarbage = workspace:FindFirstChild("MapGarbage")
                 if mapGarbage then
                     local treeGarb = mapGarbage:FindFirstChild("TreeGarbage")
@@ -9841,7 +9841,7 @@ local function applyExtremeFPSBoost()
                     end
                 end
 
-                -- D. Triệt tiêu Terrain Water & Decorations
+                -- D. Triet tieu Terrain Water & Decorations
                 local terrain = workspace:FindFirstChildOfClass("Terrain")
                 if terrain then
                     terrain.Decoration = false
@@ -9851,13 +9851,13 @@ local function applyExtremeFPSBoost()
                     terrain.WaterTransparency = 0
                 end
 
-                -- E. Quét toàn bộ vật thể trong Workspace
+                -- E. Quet toan bo vat the trong Workspace
                 for _, obj in ipairs(workspace:GetDescendants()) do
                     applyExtremePart(obj)
                     applyPartTreeRemoval(obj, true)
                 end
 
-                -- F. Lắng nghe vật thể mới sinh ra và lập tức ép về dạng Potato
+                -- F. Lang nghe vat the moi sinh ra va lap tuc ep ve dang Potato
                 if not OptimizationState.extremeConnection then
                     OptimizationState.extremeConnection = workspace.DescendantAdded:Connect(function(child)
                         if OptimizationState.extremeActive then
@@ -9870,7 +9870,7 @@ local function applyExtremeFPSBoost()
                     registerConnection(OptimizationState.extremeConnection)
                 end
 
-                -- G. Dọn dẹp bộ nhớ RAM
+                -- G. Don dep bo nho RAM
                 collectgarbage("collect")
                 Library:Notify("🔥 Extreme Potato FPS Mode (Max FPS) Activated!", 3)
             else
@@ -9933,7 +9933,7 @@ FilterGroup:AddDropdown("ESPWhitelist", {
 FPSGroup:AddToggle("FPSBoost", {
     Text = "🔥 FPS Boost (Potato Mode)",
     Default = false,
-    Tooltip = " maximum hóa FPS kịch khung: Ép Smooth Plastic, clear Decal/Texture/Light, hidden cây cối thảm thực vật, tắt Particles/Shadows/Fog (not tắt 3D Render).",
+    Tooltip = " maximum hoa FPS kich khung: Ep Smooth Plastic, clear Decal/Texture/Light, hidden cay coi tham thuc vat, tat Particles/Shadows/Fog (not tat 3D Render).",
     Callback = function(val)
         applyExtremeFPSBoost()
     end,
@@ -9955,7 +9955,7 @@ FPSGroup:AddSlider("FPSCap", {
 OptGroup:AddToggle("AntiAFK", {
     Text = "Built-in Anti-AFK (20m Kick Bypass)",
     Default = false,
-    Tooltip = "auto gửi tín hiệu prevent disconnect connect khi anti-afk AFK 24/7",
+    Tooltip = "auto gui tin hieu prevent disconnect connect khi anti-afk AFK 24/7",
 })
 
 OptGroup:AddButton(" Instant Clean RAM / Garbage", function()
@@ -10035,7 +10035,7 @@ ThemeGroup:AddDropdown("ThemeSelect", {
         end
         ZeroLib:Notify({
             Title = "Theme Applied",
-            Content = "has áp dụng interface: " .. themeName,
+            Content = "has ap dung interface: " .. themeName,
             Type = "Success"
         })
     end
@@ -10044,7 +10044,7 @@ ThemeGroup:AddDropdown("ThemeSelect", {
 local MenuGroup = Tabs.Settings:AddRightGroupbox("Menu Settings")
 
 local function unloadHub()
-    hubLog("[ArcaneHub]  is tiến hành Unload toàn bộ script và giải phóng tài nguyên...")
+    hubLog("[ArcaneHub]  is tien hanh Unload toan bo script va giai phong tai nguyen...")
     HubState.running = false
     if Farmer then Farmer.running = false end
     if AutoFight then AutoFight.stop() end
@@ -10139,7 +10139,7 @@ local function initAntiAFK()
     if AntiAFK.initialized then return end
     AntiAFK.initialized = true
 
-    -- Lớp 1: Gỡ bỏ / Vô hiệu hóa connect Idled mặc định của Roblox CoreGui (nếu executor support getconnections)
+    -- Lop 1: Go bo / Vo hieu hoa connect Idled mac dinh cua Roblox CoreGui (neu executor support getconnections)
     pcall(function()
         if getconnections then
             for _, conn in ipairs(getconnections(LocalPlayer.Idled)) do
@@ -10152,7 +10152,7 @@ local function initAntiAFK()
         end
     end)
 
-    -- Lớp 2: Lắng nghe sự kiện LocalPlayer.Idled và gửi tương tác ảo mô phỏng người dùng
+    -- Lop 2: Lang nghe su kien LocalPlayer.Idled va gui tuong tac ao mo phong nguoi dung
     local idledConn = registerConnection(LocalPlayer.Idled:Connect(function()
         if HubState.running and Toggles.AntiAFK and Toggles.AntiAFK.Value then
             pcall(function()
@@ -10163,7 +10163,7 @@ local function initAntiAFK()
     end))
     table.insert(AntiAFK.connections, idledConn)
 
-    -- Lớp 3: Luồng nhịp tim (Heartbeat pulse) định kỳ mỗi 60 giây chủ động reset counter AFK
+    -- Lop 3: Luong nhip tim (Heartbeat pulse) dinh ky moi 60 giay chu dong reset counter AFK
     task.spawn(function()
         while HubState.running do
             task.wait(60)
@@ -10204,7 +10204,7 @@ task.spawn(function()
         task.wait(0.25)
         if not HubState.running then break end
 
-        -- 1. solve VÀ HIỆN name real + FULL STATS KHI identify (UNIDENTIFIED REVEALER WITH STATS)
+        -- 1. solve VA HIEN name real + FULL STATS KHI identify (UNIDENTIFIED REVEALER WITH STATS)
         if Toggles.RevealUnidentified and Toggles.RevealUnidentified.Value then
             pcall(function()
                 local pgui = PlayerGui
@@ -10242,7 +10242,7 @@ task.spawn(function()
                                         table.insert(statList, "T" .. tostring(cfg.Tier))
                                     end
 
-                                    -- Quét stats rolled stats từ Config
+                                    -- Quet stats rolled stats tu Config
                                     for k, v in pairs(cfg) do
                                         if type(v) == "number" and v ~= 0 and k ~= "Unidentified" and k ~= "Tier" and k ~= "Cost" and k ~= "ID" then
                                             table.insert(statList, string.format("+%d %s", v, tostring(k):sub(1, 3)))
@@ -10255,7 +10255,7 @@ task.spawn(function()
                                         end
                                     end
 
-                                    -- Quét stats BaseStats từ ItemRegistry nếu có
+                                    -- Quet stats BaseStats tu ItemRegistry neu co
                                     if ItemRegistry and ItemRegistry.GetItem then
                                         local regData = ItemRegistry:GetItem(realName:gsub(" ", ""))
                                         if regData then
@@ -10278,7 +10278,7 @@ task.spawn(function()
                         end
                     end
 
-                    -- solve luôn ToolTip khi di chuột vào món đồ not yet identify
+                    -- solve luon ToolTip khi di chuot vao mon do not yet identify
                     local tooltip = inv:FindFirstChild("ToolTip", true)
                     if tooltip and tooltip.Visible then
                         local textLbl = tooltip:FindFirstChildWhichIsA("TextLabel", true)
@@ -10306,7 +10306,7 @@ task.spawn(function()
             end)
         end
 
-        -- 2. solve VÀ HIỆN MANA/ENERGY real (REAL ENERGY / MANA)
+        -- 2. solve VA HIEN MANA/ENERGY real (REAL ENERGY / MANA)
         pcall(function()
             local char = LocalPlayer.Character
             local pgui = PlayerGui
@@ -10319,7 +10319,7 @@ task.spawn(function()
                     local curEnergy = energyVal.Value
                     local maxEnergy = energyVal.MaxValue or 6
 
-                    -- Cập nhật chữ CurrentEnergy.Amount (VD: 1/6 instead of ???)
+                    -- Cap nhat chu CurrentEnergy.Amount (VD: 1/6 instead of ???)
                     local currentEnergyFrame = holder:FindFirstChild("CurrentEnergy")
                     local energyAmountLabel = currentEnergyFrame and currentEnergyFrame:FindFirstChild("Amount")
                     if energyAmountLabel and energyAmountLabel:IsA("TextLabel") then
@@ -10328,7 +10328,7 @@ task.spawn(function()
                         end
                     end
 
-                    -- Cập nhật các ô vạch Energy xanh sáng
+                    -- Cap nhat cac o vach Energy xanh sang
                     local energyBarsContainer = holder:FindFirstChild("Energy")
                     if energyBarsContainer then
                         for i = 1, maxEnergy do
@@ -10349,7 +10349,7 @@ task.spawn(function()
     end
 end)
 
--- KHỞI CHẠY cycle auto & LƯU GLOBAL STATE
+-- KHOI CHAY cycle auto & LUU GLOBAL STATE
 -- =============================================================================
 globalEnv._ArcaneHubRunning = true
 shared.ArcaneHub = {
