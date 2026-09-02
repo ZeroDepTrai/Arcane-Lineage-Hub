@@ -2771,7 +2771,6 @@ ZeroLib.ConfigManager = ConfigManager
 
 return ZeroLib
 
-    return ZeroLib
 end)()
 
 local Library = ZeroLib
