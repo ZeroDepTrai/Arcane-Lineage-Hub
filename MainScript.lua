@@ -10755,7 +10755,7 @@ function EnemyStatusEngine.start()
                                     bb = Instance.new("BillboardGui")
                                     bb.Name = "EnemyStatusBB"
                                     bb.Size = UDim2.new(0, 230, 0, 68)
-                                    bb.StudsOffset = Vector3.new(0, 6.2, 0) -- Elevated above in-game HP bar
+                                    bb.StudsOffset = Vector3.new(0, 14, 0) -- Elevated to 14 studs above in-game HP bar
                                     bb.AlwaysOnTop = true
                                     bb.Adornee = head
                                     bb.MaxDistance = 150
@@ -10795,7 +10795,7 @@ function EnemyStatusEngine.start()
                                     EnemyStatusEngine.billboards[enemyModel] = bb
                                 end
 
-                                bb.StudsOffset = Vector3.new(0, 6.2, 0) -- Ensure 6.2 studs elevation
+                                bb.StudsOffset = Vector3.new(0, 14, 0) -- Ensure 14 studs elevation
 
                                 local infoLbl = bb:FindFirstChild("Info", true)
                                 if infoLbl then
