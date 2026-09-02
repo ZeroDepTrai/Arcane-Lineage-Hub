@@ -10357,8 +10357,9 @@ local EnemyStatusEngine = {
 }
 
 local function initEnemyStatusData()
+    local rep = game:GetService("ReplicatedStorage")
     pcall(function()
-        local skillsMod = ReplicatedStorage:FindFirstChild("Constants") and ReplicatedStorage.Constants:FindFirstChild("Skills")
+        local skillsMod = rep:FindFirstChild("Constants") and rep.Constants:FindFirstChild("Skills")
         if skillsMod and skillsMod:IsA("ModuleScript") then
             local ok, data = pcall(require, skillsMod)
             if ok and type(data) == "table" then
@@ -10382,8 +10383,8 @@ local function initEnemyStatusData()
         end
     end
 
-    pcall(function() scanNPCFolder(ReplicatedStorage:FindFirstChild("NPCs")) end)
-    pcall(function() scanNPCFolder(ReplicatedStorage:FindFirstChild("NPCs_Extra")) end)
+    pcall(function() scanNPCFolder(rep:FindFirstChild("NPCs")) end)
+    pcall(function() scanNPCFolder(rep:FindFirstChild("NPCs_Extra")) end)
 end
 initEnemyStatusData()
 
