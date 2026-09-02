@@ -256,7 +256,7 @@ end
 local ZeroLib
 pcall(function()
     if game and game.HttpGet then
-        local src = game:HttpGet("https://raw.githubusercontent.com/ZeroDepTrai/ZeroLib-UI/main/ZeroLib.lua")
+        local src = game:HttpGet("https://raw.githubusercontent.com/ZeroDepTrai/ZeroLib-UI/main/ZeroLib.lua?nocache=" .. tostring(os.clock()))
         if src and #src > 100 then
             ZeroLib = loadstring(src)()
         end
