@@ -6341,10 +6341,6 @@ SpeedGroup:AddSlider("InfiniteJumpBoost", {
 })
 
 -- -----------------------------------------------------------------------------
--- TAB 4: TELEPORT SUITE (BASE TRAINERS, SUPER TRAINERS, MAJOR BOSSES, TOWNS & WARPS)
--- -----------------------------------------------------------------------------
-local BaseGroup = 
--- -----------------------------------------------------------------------------
 -- TAB: TELEPORTATION SUITE (ORGANIZED TRAINERS, QUESTS, NPCS & LANDMARKS)
 -- -----------------------------------------------------------------------------
 local TrainerGroup = Tabs.Teleport:AddLeftGroupbox("Class Trainers (Base & Super & Sub)")
