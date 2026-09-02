@@ -3214,23 +3214,22 @@ local function sendDiscordReport(harvestedMap, totalHarvested)
     task.spawn(function()
         local itemListStr = ""
         for name, count in pairs(harvestedMap) do
-            itemListStr = itemListStr .. string.format("• **%s**: x%d\n", name, count)
+            itemListStr = itemListStr .. string.format("• **%s**: `x%d`\n", name, count)
         end
-        if #itemListStr == 0 then itemListStr = string.format("• **Item**: x%d\n", totalHarvested) end
+        if #itemListStr == 0 then itemListStr = string.format("• **Item**: `x%d`\n", totalHarvested) end
 
         local payload = {
-            username = "Arcane Lineage Master Farmer",
+            username = "Arcane Lineage • Master Hub",
             avatar_url = "https://cdn-icons-png.flaticon.com/512/3655/3655581.png",
             embeds = {{
-                title = " THU HOẠCH NGUYÊN LIỆU THÀNH CÔNG! ",
-                description = string.format("Nhân vật vừa hoàn thành thu hoạch **%d** nguyên liệu và đang chuyển server!", totalHarvested),
-                color = 0x00FF88,
+                title = "🌿 HARVEST REPORT",
+                description = string.format("Nhân vật vừa hoàn thành thu hoạch **%d** tài nguyên!", totalHarvested),
+                color = 0x10B981, -- Emerald Green
                 fields = {
-                    { name = " Danh Sách Thu Hoạch", value = itemListStr, inline = false },
-                    { name = " Nhân vật", value = string.format("`%s` (%s)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true },
-                    { name = "🆔 Server JobId", value = string.format("`%s`", game.JobId), inline = false }
+                    { name = "📦 Danh Sách Thu Hoạch", value = itemListStr, inline = false },
+                    { name = "👤 Người Chơi", value = string.format("||%s|| (||%s||)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true }
                 },
-                footer = { text = "Arcane Lineage • Master Hub" },
+                footer = { text = "Arcane Lineage • Automated Intelligence System" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
             }}
         }
@@ -3320,22 +3319,20 @@ local function sendCorruptServerWebhook(eventName)
         local pMax = Players.MaxPlayers or 20
 
         local payload = {
-            username = "Arcane Lineage • Corrupt Server Alert",
+            username = "Arcane Lineage • Event Hunter",
             avatar_url = "https://cdn-icons-png.flaticon.com/512/1042/1042340.png",
             content = pingContent,
             embeds = {{
-                title = " PHÁT HIỆN CORRUPT SERVER (EVENT SERVER)! ",
-                description = string.format("Đã tìm thấy Server có sự kiện đặc biệt: **%s**!", eventName),
-                color = 0x9B59B6,
+                title = "🔮 CORRUPTED SERVER DETECTED",
+                description = string.format("Đã phát hiện Server có sự kiện đặc biệt: **%s**!", eventName),
+                color = 0x8B5CF6, -- Neon Purple
                 fields = {
-                    { name = " Sự Kiện (Event)", value = string.format("**%s**", eventName), inline = true },
-                    { name = " Người Chơi", value = string.format("%d / %d", pCount, pMax), inline = true },
+                    { name = "⚡ Sự Kiện (Event)", value = string.format("**%s**", eventName), inline = true },
+                    { name = "👥 Người Chơi", value = string.format("%d / %d", pCount, pMax), inline = true },
                     { name = "🌍 Khu Vực (Region)", value = string.format("`%s`", reg), inline = true },
-                    { name = "🆔 Server JobId", value = string.format("```%s```", game.JobId), inline = false },
-                    { name = " Script Teleport Vào Server", value = string.format("```lua\ngame:GetService('TeleportService'):TeleportToPlaceInstance(%d, '%s', game.Players.LocalPlayer)\n```", game.PlaceId, game.JobId), inline = false },
-                    { name = " Phát Hiện Bởi", value = string.format("`%s` (%s)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true }
+                    { name = "👤 Phát Hiện Bởi", value = string.format("||%s||", LocalPlayer.Name), inline = true }
                 },
-                footer = { text = "Arcane Lineage Master Hub • Corrupt Hunter" },
+                footer = { text = "Arcane Lineage • Automated Intelligence System" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
             }}
         }
@@ -4835,12 +4832,12 @@ function AutoYarthul.isSkillReady(skillName)
     return true
 end
 
--- 5. DISCORD WEBHOOK NOTIFIER CHO YAR'THUL BOSS FARM (TỰ ĐỘNG BÁO TẤT CẢ DROPS VÀO KHO ĐỒ)
+-- 5. DISCORD WEBHOOK NOTIFIER (PREMIUM DESIGN & PRIVACY SPOILERS)
 function AutoYarthul.sendWebhook(eventType, extraData)
-    local webhookUrl = (Options.YarthulWebhook and Options.YarthulWebhook.Value) or (Options.DiscordWebhook and Options.DiscordWebhook.Value) or ""
+    local webhookUrl = Options.DiscordWebhook and Options.DiscordWebhook.Value or ""
     if #webhookUrl < 10 or not HttpRequest then
         if eventType == "Test" then
-            Library:Notify(" Vui lòng nhập Discord Webhook URL hợp lệ trước!", 4)
+            ZeroLib:Notify({ Title = "Webhook", Content = "Vui lòng nhập Discord Webhook URL trước!", Type = "Warning" })
         end
         return
     end
@@ -4857,34 +4854,32 @@ function AutoYarthul.sendWebhook(eventType, extraData)
         if eventType == "Kill" then
             local dropStr = extraData and extraData.dropStr or "• Không có vật phẩm mới nhận vào kho"
             embed = {
-                title = " YAR'THUL, THE BLAZING DRAGON ĐÃ BỊ HẠ GỤC! ",
-                description = string.format("Nhân vật vừa hạ gục thành công Boss **Yar'thul (Mount Thul)** và hoàn tất kiểm tra kho đồ!", AutoYarthul.bossKillCount),
-                color = 0xFF5500, -- Fiery Dragon Orange
+                title = "🔥 YAR'THUL BOSS SLAIN",
+                description = "Nhân vật vừa hạ gục thành công Boss **Yar'thul (Mount Thul)** và hoàn tất kiểm tra kho đồ!",
+                color = 0xF97316, -- Fiery Amber Orange
                 fields = {
-                    { name = " Vật Phẩm / Drop Nhận Được (Kho Đồ)", value = dropStr, inline = false },
-                    { name = " Tổng số lần hạ gục (Kills)", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
-                    { name = "🔄 Số lần Retry/Wipe", value = string.format("`%d` Retries", AutoYarthul.deathCount), inline = true },
-                    { name = "️ Máu người chơi", value = string.format("`%.0f / %.0f`", health, maxHealth), inline = true },
-                    { name = " Nhân vật", value = string.format("`%s` (%s)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true },
-                    { name = "🆔 Server JobId", value = string.format("`%s`", game.JobId), inline = false }
+                    { name = "🎁 Vật Phẩm Nhận Được", value = dropStr, inline = false },
+                    { name = "🏆 Tổng Số Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
+                    { name = "❤️ Máu Nhân Vật", value = string.format("`%.0f / %.0f`", health, maxHealth), inline = true },
+                    { name = "👤 Người Chơi", value = string.format("||%s|| (||%s||)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true }
                 },
-                footer = { text = "Arcane Lineage • Auto Boss Farm Yar'thul" },
+                footer = { text = "Arcane Lineage • Automated Intelligence System" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
             }
         elseif eventType == "Loot" then
             local itemName = extraData and extraData.itemName or "Rare Artifact"
             local droppedBy = extraData and extraData.droppedBy or "Yar'thul, the Blazing Dragon"
             embed = {
-                title = " ARTIFACT ROLL POOL ACCEPTED! ",
-                description = string.format("Nhân vật đã tự động chấp nhận (Accept) vào Roll Pool khi nhận được **%s**!", itemName),
-                color = 0xFFD700, -- Shiny Gold
+                title = "🎁 ITEM DROP RECEIVED",
+                description = string.format("Nhân vật vừa tự động nhận thành công vật phẩm **%s**!", itemName),
+                color = 0x06B6D4, -- Cyber Cyan
                 fields = {
-                    { name = " Vật phẩm rơi (Item Drop)", value = string.format("**%s**", itemName), inline = true },
-                    { name = " Rơi từ (Source)", value = string.format("`%s`", droppedBy), inline = true },
-                    { name = " Tổng Boss Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
-                    { name = " Nhân vật", value = string.format("`%s` (%s)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true }
+                    { name = "📦 Vật Phẩm (Item Drop)", value = string.format("**%s**", itemName), inline = true },
+                    { name = "⚔️ Nguồn Rơi (Source)", value = string.format("`%s`", droppedBy), inline = true },
+                    { name = "🏆 Tổng Boss Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
+                    { name = "👤 Người Chơi", value = string.format("||%s||", LocalPlayer.Name), inline = true }
                 },
-                footer = { text = "Arcane Lineage • Auto Loot Roll Pool" },
+                footer = { text = "Arcane Lineage • Automated Intelligence System" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
             }
         elseif eventType == "Test" then
@@ -4892,23 +4887,23 @@ function AutoYarthul.sendWebhook(eventType, extraData)
             local snapCount = 0
             for _ in pairs(snap) do snapCount = snapCount + 1 end
             embed = {
-                title = " [TEST] YAR'THUL DISCORD WEBHOOK HOẠT ĐỘNG TỐT! ",
-                description = "Kết nối Discord Webhook của Auto Farm Boss Yar'thul đã được kiểm tra và hoạt động hoàn hảo!",
-                color = 0x00FF88, -- Bright Emerald Green
+                title = "⚡ WEBHOOK VERIFICATION TEST",
+                description = "Discord Webhook connection verified and operating flawlessly with Arcane Lineage Hub!",
+                color = 0x06B6D4, -- Cyber Cyan
                 fields = {
-                    { name = " Boss Target", value = "`Yar'thul, the Blazing Dragon (Mount Thul)`", inline = true },
-                    { name = " Số Kill hiện tại", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
-                    { name = " Tổng loại Item trong kho", value = string.format("`%d` Loại vật phẩm", snapCount), inline = true },
-                    { name = " Nhân vật", value = string.format("`%s` (%s)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true },
-                    { name = "🆔 Place / JobId", value = string.format("Place: `%d`\nJobId: `%s`", game.PlaceId, game.JobId), inline = false }
+                    { name = "👤 Người Chơi", value = string.format("||%s|| (ID: ||%s||)", LocalPlayer.Name, tostring(LocalPlayer.UserId)), inline = true },
+                    { name = "🟢 Trạng Thái", value = "`Active & Operational`", inline = true },
+                    { name = "🏆 Boss Kills Hiện Tại", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
+                    { name = "📦 Loại Item Trong Túi", value = string.format("`%d` Loại", snapCount), inline = true },
+                    { name = "🎮 Game Target", value = "`Arcane Lineage`", inline = true }
                 },
-                footer = { text = "Arcane Lineage • Webhook Test System" },
+                footer = { text = "Arcane Lineage • Automated Intelligence System" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
             }
         end
 
         local payload = {
-            username = "Yar'thul Dragon Slayer",
+            username = "Arcane Lineage • Intelligence Alert",
             avatar_url = "https://cdn-icons-png.flaticon.com/512/1415/1415438.png",
             embeds = { embed }
         }
@@ -4924,11 +4919,9 @@ function AutoYarthul.sendWebhook(eventType, extraData)
 
         if eventType == "Test" then
             if ok then
-                hubLog("[AutoYarthul Webhook]  Gửi Test Webhook thành công tới Discord!")
-                Library:Notify(" Gửi Test Webhook thành công tới Discord!", 5)
+                ZeroLib:Notify({ Title = "Webhook Sent", Content = "Đã gửi Test Webhook thành công tới Discord!", Type = "Success", Duration = 4 })
             else
-                hubLog("[AutoYarthul Webhook]  Lỗi gửi Test Webhook:", tostring(res))
-                Library:Notify(" Gửi Test Webhook thất bại! Kiểm tra URL.", 5)
+                ZeroLib:Notify({ Title = "Webhook Error", Content = "Gửi Test Webhook thất bại! Kiểm tra URL.", Type = "Error", Duration = 4 })
             end
         end
     end)
@@ -5182,99 +5175,114 @@ function AutoYarthul.createHUD()
 
         local mainCard = Instance.new("Frame")
         mainCard.Name = "MainCard"
-        mainCard.Size = UDim2.new(0, 320, 0, 180)
+        mainCard.Size = UDim2.new(0, 300, 0, 160)
         mainCard.Position = UDim2.new(0.02, 0, 0.48, 0)
-        mainCard.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
+        mainCard.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
+        mainCard.BackgroundTransparency = 0.08
         mainCard.BorderSizePixel = 0
         mainCard.Active = true
         mainCard.Draggable = true
         mainCard.Parent = screenGui
 
         local cardCorner = Instance.new("UICorner")
-        cardCorner.CornerRadius = UDim.new(0, 10)
+        cardCorner.CornerRadius = UDim.new(0, 8)
         cardCorner.Parent = mainCard
 
         local cardStroke = Instance.new("UIStroke")
-        cardStroke.Color = Color3.fromRGB(255, 110, 30) -- Glowing Dragon Orange
+        cardStroke.Color = Color3.fromRGB(6, 182, 212) -- Cyber Cyan Glow
         cardStroke.Thickness = 1.5
         cardStroke.Parent = mainCard
 
-        -- Title Header
+        -- Topbar Header Badge
+        local headerFrame = Instance.new("Frame")
+        headerFrame.Name = "Header"
+        headerFrame.Size = UDim2.new(1, -16, 0, 24)
+        headerFrame.Position = UDim2.new(0, 8, 0, 6)
+        headerFrame.BackgroundTransparency = 1
+        headerFrame.Parent = mainCard
+
         local title = Instance.new("TextLabel")
         title.Name = "Title"
-        title.Size = UDim2.new(1, -20, 0, 26)
-        title.Position = UDim2.new(0, 10, 0, 8)
+        title.Size = UDim2.new(1, 0, 1, 0)
         title.BackgroundTransparency = 1
         title.Font = Enum.Font.GothamBold
-        title.Text = "AUTO YAR'THUL (AUTO RETRY)"
-        title.TextColor3 = Color3.fromRGB(255, 150, 50)
-        title.TextSize = 14
+        title.Text = "ARCANE HUB • FARM CONTROLLER"
+        title.TextColor3 = Color3.fromRGB(240, 245, 255)
+        title.TextSize = 11.5
         title.TextXAlignment = Enum.TextXAlignment.Left
-        title.Parent = mainCard
+        title.Parent = headerFrame
+
+        local divider = Instance.new("Frame")
+        divider.Name = "Div"
+        divider.Size = UDim2.new(1, -16, 0, 1)
+        divider.Position = UDim2.new(0, 8, 0, 32)
+        divider.BackgroundColor3 = Color3.fromRGB(35, 40, 55)
+        divider.BorderSizePixel = 0
+        divider.Parent = mainCard
 
         -- Status Indicator
         local statusLabel = Instance.new("TextLabel")
         statusLabel.Name = "StatusLabel"
-        statusLabel.Size = UDim2.new(1, -20, 0, 20)
-        statusLabel.Position = UDim2.new(0, 10, 0, 34)
+        statusLabel.Size = UDim2.new(1, -20, 0, 18)
+        statusLabel.Position = UDim2.new(0, 10, 0, 38)
         statusLabel.BackgroundTransparency = 1
         statusLabel.Font = Enum.Font.GothamMedium
-        statusLabel.Text = "Status:  Khởi động chu trình..."
-        statusLabel.TextColor3 = Color3.fromRGB(220, 220, 230)
-        statusLabel.TextSize = 12
+        statusLabel.Text = "Status: ⚡ Đang chuẩn bị..."
+        statusLabel.TextColor3 = Color3.fromRGB(6, 182, 212)
+        statusLabel.TextSize = 11
         statusLabel.TextXAlignment = Enum.TextXAlignment.Left
         statusLabel.Parent = mainCard
 
-        -- Strategy Indicator
-        local stratLabel = Instance.new("TextLabel")
-        stratLabel.Name = "StratLabel"
-        stratLabel.Size = UDim2.new(1, -20, 0, 18)
-        stratLabel.Position = UDim2.new(0, 10, 0, 54)
-        stratLabel.BackgroundTransparency = 1
-        stratLabel.Font = Enum.Font.Gotham
-        stratLabel.Text = "Strat: Sense (Alternating) > Carnage > Strike + Med"
-        stratLabel.TextColor3 = Color3.fromRGB(160, 200, 255)
-        stratLabel.TextSize = 11
-        stratLabel.TextXAlignment = Enum.TextXAlignment.Left
-        stratLabel.Parent = mainCard
+        -- Target Indicator
+        local targetLabel = Instance.new("TextLabel")
+        targetLabel.Name = "TargetLabel"
+        targetLabel.Size = UDim2.new(1, -20, 0, 16)
+        targetLabel.Position = UDim2.new(0, 10, 0, 58)
+        targetLabel.BackgroundTransparency = 1
+        targetLabel.Font = Enum.Font.Gotham
+        targetLabel.Text = "Target: 🐉 Yar'thul, the Blazing Dragon"
+        targetLabel.TextColor3 = Color3.fromRGB(180, 190, 210)
+        targetLabel.TextSize = 10.5
+        targetLabel.TextXAlignment = Enum.TextXAlignment.Left
+        targetLabel.Parent = mainCard
 
-        -- Kill & Retry Counter
+        -- Kill Counter (Clean, No Retries/Wipes)
         local killLabel = Instance.new("TextLabel")
         killLabel.Name = "KillLabel"
         killLabel.Size = UDim2.new(1, -20, 0, 18)
-        killLabel.Position = UDim2.new(0, 10, 0, 72)
+        killLabel.Position = UDim2.new(0, 10, 0, 76)
         killLabel.BackgroundTransparency = 1
         killLabel.Font = Enum.Font.GothamBold
-        killLabel.Text = string.format(" Kills: %d | 🔄 Retries: %d", AutoYarthul.bossKillCount, AutoYarthul.deathCount)
-        killLabel.TextColor3 = Color3.fromRGB(100, 255, 140)
-        killLabel.TextSize = 12
+        killLabel.Text = string.format("🏆 Boss Kills: %d", AutoYarthul.bossKillCount)
+        killLabel.TextColor3 = Color3.fromRGB(16, 185, 129) -- Emerald Green
+        killLabel.TextSize = 11.5
         killLabel.TextXAlignment = Enum.TextXAlignment.Left
         killLabel.Parent = mainCard
 
         -- Last Drop Info
         local dropLabel = Instance.new("TextLabel")
         dropLabel.Name = "DropLabel"
-        dropLabel.Size = UDim2.new(1, -20, 0, 18)
-        dropLabel.Position = UDim2.new(0, 10, 0, 92)
+        dropLabel.Size = UDim2.new(1, -20, 0, 16)
+        dropLabel.Position = UDim2.new(0, 10, 0, 96)
         dropLabel.BackgroundTransparency = 1
         dropLabel.Font = Enum.Font.GothamMedium
         dropLabel.Text = "Drops: " .. tostring(AutoYarthul.lastDroppedSummary)
-        dropLabel.TextColor3 = Color3.fromRGB(255, 220, 100)
-        dropLabel.TextSize = 11
+        dropLabel.TextColor3 = Color3.fromRGB(245, 158, 11) -- Amber
+        dropLabel.TextSize = 10.5
         dropLabel.TextXAlignment = Enum.TextXAlignment.Left
         dropLabel.Parent = mainCard
 
-        -- STOP AUTO FARM BUTTON
+        -- STOP AUTO FARM BUTTON (Sleek Crimson Pill)
         local stopBtn = Instance.new("TextButton")
         stopBtn.Name = "StopButton"
-        stopBtn.Size = UDim2.new(1, -20, 0, 32)
-        stopBtn.Position = UDim2.new(0, 10, 0, 126)
-        stopBtn.BackgroundColor3 = Color3.fromRGB(190, 35, 45)
+        stopBtn.Size = UDim2.new(1, -20, 0, 28)
+        stopBtn.Position = UDim2.new(0, 10, 0, 122)
+        stopBtn.BackgroundColor3 = Color3.fromRGB(225, 29, 72) -- Rose / Crimson
         stopBtn.BorderSizePixel = 0
         stopBtn.Font = Enum.Font.GothamBold
-        stopBtn.Text = "STOP AUTO FARM YAR'THUL"
+        stopBtn.Text = "■ STOP AUTO FARM"
         stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        stopBtn.TextSize = 13
+        stopBtn.TextSize = 11.5
         stopBtn.AutoButtonColor = true
         stopBtn.Parent = mainCard
 
@@ -5283,7 +5291,7 @@ function AutoYarthul.createHUD()
         btnCorner.Parent = stopBtn
 
         stopBtn.MouseButton1Click:Connect(function()
-            hubLog("[AutoYarthul]  Người dùng ấn [STOP AUTO FARM] trên màn hình -> Dừng vĩnh viễn và xoá Session!")
+            hubLog("[AutoYarthul] 🛑 Người dùng ấn [STOP AUTO FARM] trên màn hình -> Dừng chu trình!")
             AutoYarthul.stop(true)
             if Toggles.AutoFarmYarthul then
                 Toggles.AutoFarmYarthul:SetValue(false)
@@ -5313,7 +5321,7 @@ function AutoYarthul.updateHUD(statusText)
         end
         local kl = card:FindFirstChild("KillLabel")
         if kl then
-            kl.Text = string.format(" Kills: %d | 🔄 Retries: %d", AutoYarthul.bossKillCount, AutoYarthul.deathCount)
+            kl.Text = string.format("🏆 Boss Kills: %d", AutoYarthul.bossKillCount)
         end
         local dl = card:FindFirstChild("DropLabel")
         if dl then
@@ -5322,7 +5330,6 @@ function AutoYarthul.updateHUD(statusText)
     end)
 end
 
--- 9. Persistence / Auto-Rejoin Session Handler (Sử dụng duy nhất 1 queue teleport script của Hub)
 function AutoYarthul.saveSession()
     pcall(function()
         if writefile then
@@ -9980,118 +9987,40 @@ WebhookConfigGroup:AddInput("DiscordWebhook", {
     Default = "",
     Numeric = false,
     Finished = false,
-    Text = "Primary Discord Webhook URL",
-    Tooltip = "Nhập URL Webhook Discord để nhận thông báo tự động khi tìm thấy Server Corrupt, Boss Drops hoặc nhặt nguyên liệu",
-    Placeholder = "https://discord.com/api/webhooks/...",
-})
-
-WebhookConfigGroup:AddInput("YarthulWebhook", {
-    Default = "",
-    Numeric = false,
-    Finished = false,
-    Text = "Yar'thul Boss Webhook (Optional)",
-    Tooltip = "Link Webhook riêng cho Boss Yar'thul (để trống sẽ dùng Primary Webhook URL)",
+    Text = "Discord Webhook URL",
+    Tooltip = "URL Webhook Discord chung nhận tất cả thông báo: Boss Yar'thul, Thu hoạch Thảo dược/Quặng, Corrupt Server",
     Placeholder = "https://discord.com/api/webhooks/...",
 })
 
 WebhookConfigGroup:AddDivider()
 
 WebhookConfigGroup:AddToggle("YarthulSendWebhook", {
-    Text = "Enable Yar'thul Boss Drop Alerts",
+    Text = "Enable Boss & Loot Alerts",
     Default = false,
-    Tooltip = "Tự động gửi thông báo Discord Embed chi tiết danh sách tất cả vật phẩm rơi (Loot Drops) nhận được vào kho đồ sau khi diệt Boss Yar'thul",
+    Tooltip = "Gửi thông báo Discord Embed chi tiết khi hạ gục Boss hoặc nhận được vật phẩm mới",
 })
 
 WebhookConfigGroup:AddToggle("NotifyOnHarvest", {
-    Text = "Send Alerts on Ingredient/Ore Harvest",
+    Text = "Enable Herb & Ore Alerts",
     Default = false,
-    Tooltip = "Tự động gửi thông báo Discord mỗi khi nhặt được nguyên liệu / khoáng sản quý",
+    Tooltip = "Gửi thông báo Discord khi hoàn thành thu hoạch tài nguyên",
 })
 
 WebhookConfigGroup:AddToggle("CorruptPingRole", {
-    Text = "Webhook Ping @everyone on Corrupt Server",
+    Text = "Ping @everyone on Corrupt Server",
     Default = false,
-    Tooltip = "Gắn thẻ @everyone khi gửi thông báo tìm thấy Corrupt Server qua Discord",
+    Tooltip = "Gắn thẻ @everyone khi phát hiện Corrupt Server",
 })
 
 WebhookActionsGroup:AddButton({
-    Text = "Send Test General Webhook",
-    Tooltip = "Bấm để gửi 1 tin nhắn kiểm tra tới Webhook Discord của bạn",
+    Text = "Send Test Webhook",
+    Tooltip = "Gửi một Embed kiểm tra kết nối với giao diện Luxury Dark-Tech tới Webhook Discord của bạn",
     Func = function()
-        local wh = Options.DiscordWebhook and Options.DiscordWebhook.Value
-        if not wh or wh == "" then
-            wh = Options.YarthulWebhook and Options.YarthulWebhook.Value
-        end
-        if not wh or wh == "" then
-            Library:Notify({
-                Title = "Webhook Error",
-                Content = "Vui lòng nhập URL Discord Webhook trước khi kiểm tra!",
-                Type = "Error"
-            })
-            return
-        end
-        sendGeneralWebhook(
-            "Test Webhook Notification",
-            "Webhook Discord dang hoat dong hoan hao tren Arcane Lineage Hub!",
-            65280,
-            {
-                { name = "Nguoi choi", value = LocalPlayer.Name, inline = true },
-                { name = "User ID", value = tostring(LocalPlayer.UserId), inline = true },
-                { name = "Trang thai", value = "San sang hoat dong", inline = false }
-            }
-        )
-        Library:Notify({
-            Title = "Webhook Sent",
-            Content = "Da gui thong bao Test Webhook thanh cong!",
-            Type = "Success"
-        })
-    end,
-})
-
-WebhookActionsGroup:AddButton({
-    Text = "Send Test Yar'thul Boss Webhook",
-    Tooltip = "Gửi thử 1 thông báo Discord Webhook mô phỏng nhận Drop Boss Yar'thul",
-    Func = function()
-        local wh = Options.YarthulWebhook and Options.YarthulWebhook.Value
-        if not wh or wh == "" then
-            wh = Options.DiscordWebhook and Options.DiscordWebhook.Value
-        end
-        if not wh or wh == "" then
-            Library:Notify({
-                Title = "Webhook Error",
-                Content = "Vui lòng nhập URL Discord Webhook trước!",
-                Type = "Error"
-            })
-            return
-        end
         AutoYarthul.sendWebhook("Test")
-        Library:Notify({
-            Title = "Webhook Sent",
-            Content = "Da gui thong bao Test Yar'thul Drop!",
-            Type = "Success"
-        })
     end,
 })
 
-WebhookActionsGroup:AddButton({
-    Text = "Send Test Corrupt Server Webhook",
-    Tooltip = "Gửi thử 1 thông báo Discord Webhook mô phỏng tìm thấy Corrupt Server",
-    Func = function()
-        local evName = "Sandstorm (Desert)"
-        if Options.CorruptEvent and Options.CorruptEvent.Value then
-            evName = Options.CorruptEvent.Value
-        end
-        sendCorruptServerWebhook(evName)
-        Library:Notify({
-            Title = "Webhook Sent",
-            Content = "Da gui thong bao Test Corrupt Server!",
-            Type = "Success"
-        })
-    end,
-})
 
--- SETTINGS & CONFIGURATION ENGINE (ZEROLIB v2.7)
--- =============================================================================
 local ThemeGroup = Tabs.Settings:AddLeftGroupbox("Theme & Visual Appearance")
 
 ThemeGroup:AddDropdown("ThemeSelect", {
