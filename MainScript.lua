@@ -4576,11 +4576,6 @@ local function scanPlayerSkills()
     if not HubState.knownPlayerSkills then
         HubState.knownPlayerSkills = {
             ["Strike"] = true,
-            ["Magic Missile"] = true,
-            ["Call Skeleton"] = true,
-            ["Raise Dead"] = true,
-            ["Darklight Drain"] = true,
-            ["Call Sylph"] = true,
         }
     end
 
@@ -4596,7 +4591,7 @@ local function scanPlayerSkills()
         ["Info"] = true, ["Template"] = true, ["Return"] = true, ["Shadow Form"] = true, ["SKILL NAME"] = true,
     }
 
-    local summonMovesWhitelist = {
+    local summonOnlyMoves = {
         ["Smack"] = true,
         ["Bone Spray"] = true,
         ["Self Destruct"] = true,
@@ -4608,7 +4603,7 @@ local function scanPlayerSkills()
         ["Sylph's Prayer"] = true,
     }
 
-    -- 1. Scan from live SkillDisplay
+    -- 1. Scan from live SkillDisplay (Active Class/Player Skills)
     pcall(function()
         local skillDisplay = pgui and pgui:FindFirstChild("SkillDisplay")
         if skillDisplay then
@@ -4618,7 +4613,7 @@ local function scanPlayerSkills()
                     if (c:IsA("TextButton") or c:IsA("GuiButton") or c:IsA("TextLabel")) and not blacklist[c.Name] then
                         local name = c:IsA("TextButton") and c.Text or c.Name
                         if #name > 1 and not blacklist[name] then
-                            if summonMovesWhitelist[name] then
+                            if summonOnlyMoves[name] then
                                 skillSet[string.format("[Summon] %s", name)] = true
                             else
                                 skillSet[name] = true
@@ -4644,7 +4639,7 @@ local function scanPlayerSkills()
                     local label = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
                     local sName = (label and label.Text ~= "" and label.Text) or btn.Name
                     if #sName > 1 and not blacklist[sName] then
-                        if summonMovesWhitelist[sName] then
+                        if summonOnlyMoves[sName] then
                             skillSet[string.format("[Summon] %s", sName)] = true
                         else
                             skillSet[sName] = true
@@ -4656,7 +4651,7 @@ local function scanPlayerSkills()
         end
     end)
 
-    -- 3. Summon Skills Integration (Detect summon moves based on spells / active summons)
+    -- 3. Dynamic Summon Skills Integration (ONLY if summon spells are learned by this character)
     local summonSpells = {
         ["Call Skeleton"] = {"Smack", "Bone Spray", "Self Destruct"},
         ["Raise Dead"] = {"Rotten Swipe", "Shriek", "Double Slam", "Smack"},
@@ -4671,15 +4666,14 @@ local function scanPlayerSkills()
     end
 
     -- Clean up any bare summon moves that might have leaked into skillSet without [Summon] prefix
-    for sMove in pairs(summonMovesWhitelist) do
+    for sMove in pairs(summonOnlyMoves) do
         if skillSet[sMove] and not HubState.knownPlayerSkills[sMove] then
             skillSet[sMove] = nil
         end
     end
 
-    -- Always include basic attacks
+    -- Always include basic attack
     skillSet["Strike"] = true
-    skillSet["Magic Missile"] = true
 
     local list = {}
     for name in pairs(skillSet) do
