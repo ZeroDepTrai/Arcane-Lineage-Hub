@@ -8023,27 +8023,78 @@ local function removeESP(instance)
     end
 end
 
--- 5. MASTER ESP UPDATE LOOP
+-- 5. MASTER ESP UPDATE & RENDER LOOP
+local activeTrainerESP = {}
+
+local function createTrainerESP(name, pos, color)
+    if activeTrainerESP[name] then return end
+    local bb = Instance.new("BillboardGui")
+    bb.Name = "TrainerESP_" .. name
+    bb.Size = UDim2.new(0, 160, 0, 30)
+    bb.AlwaysOnTop = true
+    bb.Enabled = false
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Name = "Text"
+    lbl.Size = UDim2.new(1, 0, 1, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = color
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 11
+    lbl.TextStrokeTransparency = 0.3
+    lbl.Parent = bb
+
+    local anchor = Instance.new("Part")
+    anchor.Size = Vector3.new(1, 1, 1)
+    anchor.Position = pos + Vector3.new(0, 4, 0)
+    anchor.Anchored = true
+    anchor.CanCollide = false
+    anchor.Transparency = 1
+    anchor.Parent = workspace
+    bb.Adornee = anchor
+
+    pcall(function() bb.Parent = game:GetService("CoreGui") end)
+    if not bb.Parent then bb.Parent = PlayerGui end
+    activeTrainerESP[name] = { billboard = bb, label = lbl, pos = pos, anchor = anchor }
+end
+
+-- Pre-register trainers
+task.spawn(function()
+    task.wait(1)
+    for tName, tPos in pairs(BaseTrainers or {}) do
+        createTrainerESP("[Base Trainer] " .. tName, tPos, Color3.fromRGB(168, 85, 247))
+    end
+    for tName, tPos in pairs(SuperTrainers or {}) do
+        createTrainerESP("[Super Trainer] " .. tName, tPos, Color3.fromRGB(168, 85, 247))
+    end
+    for tName, tPos in pairs(SubclassTrainers or {}) do
+        createTrainerESP("[Subclass] " .. tName, tPos, Color3.fromRGB(168, 85, 247))
+    end
+end)
+
 registerConnection(RunService.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
-    local localRoot = char and char:FindFirstChild("HumanoidRootPart")
+    local localRoot = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
     if not localRoot then return end
+    local localPos = localRoot.Position
 
     -- A. Player ESP Updates
     local pEspEnabled = Toggles.PlayerESP and Toggles.PlayerESP.Value
     local pMaxDist = Options.PlayerESPMaxDist and Options.PlayerESPMaxDist.Value or 3500
+    local pColor = (Options.PlayerESPColor and Options.PlayerESPColor.Value) or Color3.fromRGB(6, 182, 212)
     for p, data in pairs(activePlayerESP) do
         if data.Billboard then
             local pChar = p.Character
-            local pRoot = pChar and pChar:FindFirstChild("HumanoidRootPart")
+            local pRoot = pChar and (pChar:FindFirstChild("HumanoidRootPart") or pChar:FindFirstChild("Torso"))
             local pHum = pChar and pChar:FindFirstChildOfClass("Humanoid")
             if pEspEnabled and pRoot and pHum and pHum.Health > 0 then
-                local dist = (localRoot.Position - pRoot.Position).Magnitude
+                local dist = (localPos - pRoot.Position).Magnitude
                 if dist <= pMaxDist then
                     local hpPct = math.clamp(pHum.Health / math.max(1, pHum.MaxHealth), 0, 1)
                     local hpColor = hpPct > 0.5 and Color3.fromRGB(80, 255, 120) or (hpPct > 0.25 and Color3.fromRGB(255, 200, 50) or Color3.fromRGB(255, 70, 70))
                     data.InfoLabel.Text = string.format("%d%% HP [%d/%d] • %dm", math.floor(hpPct * 100), math.floor(pHum.Health), math.floor(pHum.MaxHealth), math.floor(dist))
                     data.InfoLabel.TextColor3 = hpColor
+                    if data.NameLabel then data.NameLabel.TextColor3 = pColor end
                     data.Billboard.Enabled = true
                 else
                     data.Billboard.Enabled = false
@@ -8054,14 +8105,37 @@ registerConnection(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- B. NPC ESP Updates
+    -- B. Class Trainer ESP Updates
+    local trainerEspEnabled = Toggles.Trainer_ESP and Toggles.Trainer_ESP.Value
+    local trainerMaxDist = Options.Trainer_ESPMaxDist and Options.Trainer_ESPMaxDist.Value or 4000
+    local trainerColor = (Options.TrainerESPColor and Options.TrainerESPColor.Value) or Color3.fromRGB(168, 85, 247)
+    for name, data in pairs(activeTrainerESP) do
+        if data.billboard then
+            if trainerEspEnabled then
+                local dist = (localPos - data.pos).Magnitude
+                if dist <= trainerMaxDist then
+                    data.label.TextColor3 = trainerColor
+                    data.label.Text = string.format("%s [%dm]", name, math.floor(dist))
+                    data.billboard.Enabled = true
+                else
+                    data.billboard.Enabled = false
+                end
+            else
+                data.billboard.Enabled = false
+            end
+        end
+    end
+
+    -- C. General NPC ESP Updates
     local npcEspEnabled = Toggles.NPC_ESP and Toggles.NPC_ESP.Value
     local npcMaxDist = Options.NPC_ESPMaxDist and Options.NPC_ESPMaxDist.Value or 2500
+    local npcColor = (Options.NPCESPColor and Options.NPCESPColor.Value) or Color3.fromRGB(251, 191, 36)
     for m, data in pairs(activeNpcESP) do
         if data.billboard and data.head and data.head.Parent then
             if npcEspEnabled then
-                local dist = (localRoot.Position - data.head.Position).Magnitude
+                local dist = (localPos - data.head.Position).Magnitude
                 if dist <= npcMaxDist then
+                    data.label.TextColor3 = npcColor
                     data.label.Text = string.format("[NPC] %s [%dm]", data.name, math.floor(dist))
                     data.billboard.Enabled = true
                 else
@@ -8073,14 +8147,16 @@ registerConnection(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- C. Location ESP Updates
+    -- D. Location / Waypoint ESP Updates
     local locEspEnabled = Toggles.Location_ESP and Toggles.Location_ESP.Value
     local locMaxDist = Options.Location_ESPMaxDist and Options.Location_ESPMaxDist.Value or 6000
+    local locColor = (Options.LocationESPColor and Options.LocationESPColor.Value) or Color3.fromRGB(34, 197, 94)
     for name, data in pairs(activeLocationESP) do
         if data.billboard then
             if locEspEnabled then
-                local dist = (localRoot.Position - data.pos).Magnitude
+                local dist = (localPos - data.pos).Magnitude
                 if dist <= locMaxDist then
+                    data.label.TextColor3 = locColor
                     data.label.Text = string.format("[POI] %s [%dm]", data.name, math.floor(dist))
                     data.billboard.Enabled = true
                 else
@@ -8092,11 +8168,12 @@ registerConnection(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- D. Ingredient & Ore ESP Updates
-    local espEnabled = Toggles.MasterESP and Toggles.MasterESP.Value
-    local filterMode = Options.ESPFilterMode and Options.ESPFilterMode.Value or "All"
-    local showDist = Toggles.ESPShowDistance and Toggles.ESPShowDistance.Value
-    local maxDist = Options.ESPMaxDistance and Options.ESPMaxDistance.Value or 10000
+    -- E. Ingredient & Ore ESP Updates
+    local crylightEnabled = Toggles.ESP_Crylight and Toggles.ESP_Crylight.Value
+    local oreEnabled = Toggles.ESP_Ore and Toggles.ESP_Ore.Value
+    local cryColor = (Options.CrylightESPColor and Options.CrylightESPColor.Value) or Color3.fromRGB(56, 189, 248)
+    local oreColor = (Options.OreESPColor and Options.OreESPColor.Value) or Color3.fromRGB(245, 158, 11)
+    local maxDist = Options.ESP_MaxDistance and Options.ESP_MaxDistance.Value or 3000
     local whitelist = (Options.ESPWhitelist and Options.ESPWhitelist.Value) or {}
 
     for inst, data in pairs(activeESP) do
@@ -8104,26 +8181,26 @@ registerConnection(RunService.RenderStepped:Connect(function()
             removeESP(inst)
         else
             local isVisible = false
-            if espEnabled then
-                if not (data.name == "Crylight" and isBlacklistedCrylight(inst)) then
-                    if filterMode == "All" then
-                        isVisible = true
-                    elseif filterMode == "CrylightOnly" and data.name == "Crylight" then
-                        isVisible = true
-                    elseif filterMode == "Whitelist" and whitelist[data.name] then
-                        isVisible = true
-                    end
-                end
+            local curCol = data.color
+            local isCrylight = (data.name == "Crylight" or data.name:find("Crylight"))
+            local isOre = (data.name:find("Ore") or data.name:find("Ferrus") or data.name:find("Iron") or data.name:find("Gold") or data.name:find("Carnelian"))
+
+            if isCrylight and crylightEnabled then
+                isVisible = true
+                curCol = cryColor
+            elseif isOre and oreEnabled then
+                isVisible = true
+                curCol = oreColor
+            elseif (crylightEnabled or oreEnabled) and whitelist[data.name] then
+                isVisible = true
             end
 
             if isVisible then
                 local pos = inst:GetPivot().Position
-                local dist = (localRoot.Position - pos).Magnitude
+                local dist = (localPos - pos).Magnitude
                 if dist <= maxDist then
-                    local text = data.name
-                    if showDist then text = string.format("%s [%dm]", data.name, math.floor(dist)) end
-                    data.label.Text = text
-                    data.label.TextColor3 = data.color
+                    data.label.Text = string.format("%s [%dm]", data.name, math.floor(dist))
+                    data.label.TextColor3 = curCol
                     data.billboard.Enabled = true
                 else
                     data.billboard.Enabled = false
@@ -8152,6 +8229,7 @@ for _, desc in ipairs(workspace:GetDescendants()) do
         createNpcESP(desc)
     end
 end
+
 local Window = ZeroLib:CreateWindow({
     Title = "ARCANE LINEAGE",
     Size = UDim2.new(0, 680, 0, 480),
@@ -9338,431 +9416,4 @@ end
 
 -- Vòng lặp cập nhật Enemy Status
 function EnemyStatusEngine.start()
-    if EnemyStatusEngine.running then return end
-    EnemyStatusEngine.running = true
-    createEnemyStatusScreenHUD()
-
-    EnemyStatusEngine.thread = task.spawn(function()
-        while EnemyStatusEngine.running do
-            local inCombat = isInCombat()
-            local hud = EnemyStatusEngine.gui and EnemyStatusEngine.gui:FindFirstChild("MainFrame")
-
-            if inCombat and (Toggles.ShowEnemyStatusHUD and Toggles.ShowEnemyStatusHUD.Value or Toggles.ShowEnemyStatusHead and Toggles.ShowEnemyStatusHead.Value) then
-                if hud and Toggles.ShowEnemyStatusHUD and Toggles.ShowEnemyStatusHUD.Value then
-                    hud.Visible = true
-                elseif hud then
-                    hud.Visible = false
-                end
-
-                -- Lọc quái vật CHÍNH XÁC trong trận đấu của người chơi
-                local activeEnemies = {}
-                local living = workspace:FindFirstChild("Living")
-                local char = LocalPlayer.Character
-                local myFightVal = char and char:FindFirstChild("FightInProgress")
-                local myFightId = myFightVal and myFightVal.Value
-                local myRoot = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
-
-                if living and myRoot then
-                    for _, m in ipairs(living:GetChildren()) do
-                        if m ~= char and m:FindFirstChildOfClass("Humanoid") and not Players:GetPlayerFromCharacter(m) then
-                            local fVal = m:FindFirstChild("FightInProgress")
-                            local hum = m:FindFirstChildOfClass("Humanoid")
-                            local root = m:FindFirstChild("HumanoidRootPart") or m:FindFirstChild("Torso")
-                            
-                            local isMyEnemy = false
-                            if myFightId and fVal and fVal.Value == myFightId then
-                                isMyEnemy = true
-                            elseif root and (root.Position - myRoot.Position).Magnitude < 40 then
-                                isMyEnemy = true
-                            end
-
-                            if isMyEnemy and hum and hum.Health > 0 then
-                                table.insert(activeEnemies, m)
-                            end
-                        end
-                    end
-                end
-
-                -- Xây dựng nội dung hiển thị HUD
-                local hudLines = {}
-                local now = os.clock()
-                if EnemyStatusEngine.lastIndicatedSkill and (now - EnemyStatusEngine.lastIndicatedTime < 2.5) then
-                    local skName = EnemyStatusEngine.lastIndicatedSkill
-                    table.insert(hudLines, string.format("⚠️ <b><font color='#FF5555'>ĐANG CHUẨN BỊ: %s</font></b>", skName))
-                    table.insert(hudLines, "────────────────────────────")
-                elseif EnemyStatusEngine.currentDecidingEnemy then
-                    table.insert(hudLines, string.format("⏳ <i><font color='#F39C12'>%s đang suy nghĩ lượt...</font></i>", EnemyStatusEngine.currentDecidingEnemy))
-                    table.insert(hudLines, "────────────────────────────")
-                end
-
-                for idx, enemyModel in ipairs(activeEnemies) do
-                    local sData = analyzeEnemyStatus(enemyModel)
-                    if sData then
-                        local hpPercent = math.clamp(sData.curHp / math.max(1, sData.maxHp), 0, 1)
-                        local hpColor = hpPercent > 0.5 and "#2ECC71" or (hpPercent > 0.25 and "#F39C12" or "#E74C3C")
-                        local energyStr = string.format("⚡ Energy: <font color='#3498DB'><b>%d / %d</b></font>", sData.curEnergy, sData.maxEnergy)
-
-                        table.insert(hudLines, string.format("<b>%s</b> (<font color='%s'>%d/%d HP</font>) | %s", sData.name, hpColor, sData.curHp, sData.maxHp, energyStr))
-                        table.insert(hudLines, string.format("  • <i>Chiêu trước:</i> <font color='#BDC3C7'>%s</font>", sData.lastAttack))
-                        table.insert(hudLines, "  • <b>Chiêu thức & Trạng thái:</b>")
-                        for _, skLine in ipairs(sData.skills) do
-                            table.insert(hudLines, "    " .. skLine)
-                        end
-                        if idx < #activeEnemies then
-                            table.insert(hudLines, "")
-                        end
-
-                        -- Cập nhật Billboard trên đầu quái
-                        if Toggles.ShowEnemyStatusHead and Toggles.ShowEnemyStatusHead.Value then
-                            local head = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
-                            if head then
-                                local bb = EnemyStatusEngine.billboards[enemyModel]
-                                if not bb or not bb.Parent then
-                                    bb = Instance.new("BillboardGui")
-                                    bb.Name = "EnemyStatusBB"
-                                    bb.Size = UDim2.new(0, 200, 0, 60)
-                                    bb.StudsOffset = Vector3.new(0, 3.2, 0)
-                                    bb.AlwaysOnTop = true
-                                    bb.Adornee = head
-                                    bb.MaxDistance = 150
-
-                                    local frame = Instance.new("Frame")
-                                    frame.Size = UDim2.new(1, 0, 1, 0)
-                                    frame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-                                    frame.BackgroundTransparency = 0.25
-                                    frame.BorderSizePixel = 0
-                                    frame.Parent = bb
-
-                                    local corner = Instance.new("UICorner")
-                                    corner.CornerRadius = UDim.new(0, 6)
-                                    corner.Parent = frame
-
-                                    local stroke = Instance.new("UIStroke")
-                                    stroke.Color = Color3.fromRGB(6, 182, 212)
-                                    stroke.Thickness = 1
-                                    stroke.Parent = frame
-
-                                    local lbl = Instance.new("TextLabel")
-                                    lbl.Name = "Info"
-                                    lbl.Size = UDim2.new(1, -8, 1, -6)
-                                    lbl.Position = UDim2.new(0, 4, 0, 3)
-                                    lbl.BackgroundTransparency = 1
-                                    lbl.TextColor3 = Color3.fromRGB(240, 240, 240)
-                                    lbl.Font = Enum.Font.GothamMedium
-                                    lbl.TextSize = 10
-                                    lbl.TextWrapped = true
-                                    lbl.RichText = true
-                                    lbl.Parent = frame
-
-                                    pcall(function()
-                                        local coreGui = game:GetService("CoreGui")
-                                        bb.Parent = coreGui
-                                    end)
-                                    if not bb.Parent then bb.Parent = PlayerGui end
-                                    EnemyStatusEngine.billboards[enemyModel] = bb
-                                end
-
-                                local infoLbl = bb:FindFirstChild("Info", true)
-                                if infoLbl then
-                                    local shortSkills = {}
-                                    for i = 1, math.min(3, #sData.skills) do
-                                        local skClean = sData.skills[i]:gsub("•%s*", "")
-                                        table.insert(shortSkills, skClean)
-                                    end
-                                    infoLbl.Text = string.format("<b>%s</b> (<font color='%s'>%d HP</font>) | ⚡ %d/%d E\nLast: %s\n%s", 
-                                        sData.name, hpColor, sData.curHp, sData.curEnergy, sData.maxEnergy, sData.lastAttack, table.concat(shortSkills, "\n"))
-                                end
-                            end
-                        end
-                    end
-                end
-
-                if #activeEnemies == 0 then
-                    table.insert(hudLines, "<i>Đang đợi quái vật xuất hiện...</i>")
-                end
-
-                local cLbl = hud and hud:FindFirstChild("Content")
-                if cLbl then
-                    cLbl.Text = table.concat(hudLines, "\n")
-                end
-            else
-                if hud then hud.Visible = false end
-                -- Xóa sạch các billboard khi thoát giao tranh hoặc tắt toggle
-                for m, bb in pairs(EnemyStatusEngine.billboards) do
-                    if bb and bb.Parent then bb:Destroy() end
-                end
-                table.clear(EnemyStatusEngine.billboards)
-            end
-
-            task.wait(0.2)
-        end
-    end)
-end
-
-function EnemyStatusEngine.stop()
-    EnemyStatusEngine.running = false
-    if EnemyStatusEngine.thread then
-        task.cancel(EnemyStatusEngine.thread)
-        EnemyStatusEngine.thread = nil
-    end
-    if EnemyStatusEngine.gui then
-        EnemyStatusEngine.gui:Destroy()
-        EnemyStatusEngine.gui = nil
-    end
-    for _, bb in pairs(EnemyStatusEngine.billboards) do
-        if bb and bb.Parent then bb:Destroy() end
-    end
-    table.clear(EnemyStatusEngine.billboards)
-end
-
-EnemyStatusEngine.start()
-
--- 2. CLASS TRAINERS ESP ENGINE
-    task.spawn(function()
-        while HubState.running do
-            task.wait(0.6)
-            if not HubState.running then break end
-
-            if Toggles.Trainer_ESP and Toggles.Trainer_ESP.Value then
-                local char = LocalPlayer.Character
-                local root = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
-                local maxDist = (Options.Trainer_ESPMaxDist and Options.Trainer_ESPMaxDist.Value) or 4000
-                local trainerColor = (Options.TrainerESPColor and Options.TrainerESPColor.Value) or Color3.fromRGB(168, 85, 247)
-
-                if root then
-                    local myPos = root.Position
-                    
-                    -- Quét Base Trainers
-                    for tName, tPos in pairs(BaseTrainers or {}) do
-                        local dist = (tPos - myPos).Magnitude
-                        if dist <= maxDist then
-                            local bb = espBillboards["Trainer_" .. tName]
-                            if not bb or not bb.Parent then
-                                bb = Instance.new("BillboardGui")
-                                bb.Name = "TrainerESP_" .. tName
-                                bb.Size = UDim2.new(0, 160, 0, 30)
-                                bb.AlwaysOnTop = true
-                                bb.MaxDistance = maxDist
-
-                                local lbl = Instance.new("TextLabel")
-                                lbl.Name = "Text"
-                                lbl.Size = UDim2.new(1, 0, 1, 0)
-                                lbl.BackgroundTransparency = 1
-                                lbl.TextColor3 = trainerColor
-                                lbl.Font = Enum.Font.GothamBold
-                                lbl.TextSize = 11
-                                lbl.TextStrokeTransparency = 0.3
-                                lbl.Parent = bb
-
-                                local anchor = Instance.new("Part")
-                                anchor.Size = Vector3.new(1, 1, 1)
-                                anchor.Position = tPos + Vector3.new(0, 4, 0)
-                                anchor.Anchored = true
-                                anchor.CanCollide = false
-                                anchor.Transparency = 1
-                                anchor.Parent = workspace
-                                bb.Adornee = anchor
-
-                                pcall(function() bb.Parent = game:GetService("CoreGui") end)
-                                if not bb.Parent then bb.Parent = PlayerGui end
-                                espBillboards["Trainer_" .. tName] = bb
-                            end
-
-                            local textLbl = bb:FindFirstChild("Text")
-                            if textLbl then
-                                textLbl.TextColor3 = trainerColor
-                                textLbl.Text = string.format("[%s] [%dm]", tName, math.floor(dist))
-                            end
-                        else
-                            if espBillboards["Trainer_" .. tName] then
-                                espBillboards["Trainer_" .. tName]:Destroy()
-                                espBillboards["Trainer_" .. tName] = nil
-                            end
-                        end
-                    end
-
-                    -- Quét Super Class Trainers
-                    for tName, tPos in pairs(SuperTrainers or {}) do
-                        local dist = (tPos - myPos).Magnitude
-                        if dist <= maxDist then
-                            local bb = espBillboards["Trainer_" .. tName]
-                            if not bb or not bb.Parent then
-                                bb = Instance.new("BillboardGui")
-                                bb.Name = "TrainerESP_" .. tName
-                                bb.Size = UDim2.new(0, 160, 0, 30)
-                                bb.AlwaysOnTop = true
-                                bb.MaxDistance = maxDist
-
-                                local lbl = Instance.new("TextLabel")
-                                lbl.Name = "Text"
-                                lbl.Size = UDim2.new(1, 0, 1, 0)
-                                lbl.BackgroundTransparency = 1
-                                lbl.TextColor3 = trainerColor
-                                lbl.Font = Enum.Font.GothamBold
-                                lbl.TextSize = 11
-                                lbl.TextStrokeTransparency = 0.3
-                                lbl.Parent = bb
-
-                                local anchor = Instance.new("Part")
-                                anchor.Size = Vector3.new(1, 1, 1)
-                                anchor.Position = tPos + Vector3.new(0, 4, 0)
-                                anchor.Anchored = true
-                                anchor.CanCollide = false
-                                anchor.Transparency = 1
-                                anchor.Parent = workspace
-                                bb.Adornee = anchor
-
-                                pcall(function() bb.Parent = game:GetService("CoreGui") end)
-                                if not bb.Parent then bb.Parent = PlayerGui end
-                                espBillboards["Trainer_" .. tName] = bb
-                            end
-
-                            local textLbl = bb:FindFirstChild("Text")
-                            if textLbl then
-                                textLbl.TextColor3 = trainerColor
-                                textLbl.Text = string.format("[%s] [%dm]", tName, math.floor(dist))
-                            end
-                        else
-                            if espBillboards["Trainer_" .. tName] then
-                                espBillboards["Trainer_" .. tName]:Destroy()
-                                espBillboards["Trainer_" .. tName] = nil
-                            end
-                        end
-                    end
-                end
-            else
-                for key, bb in pairs(espBillboards) do
-                    if key:find("Trainer_") then
-                        bb:Destroy()
-                        espBillboards[key] = nil
-                    end
-                end
-            end
-        end
-    end)
-
-    -- 3. GENERAL NPC & SERVICES ESP ENGINE
-    task.spawn(function()
-        while HubState.running do
-            task.wait(0.6)
-            if not HubState.running then break end
-
-            if Toggles.NPC_ESP and Toggles.NPC_ESP.Value then
-                local char = LocalPlayer.Character
-                local root = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
-                local maxDist = (Options.NPC_ESPMaxDist and Options.NPC_ESPMaxDist.Value) or 2500
-                local npcColor = (Options.NPCESPColor and Options.NPCESPColor.Value) or Color3.fromRGB(251, 191, 36)
-
-                if root then
-                    local myPos = root.Position
-                    
-                    -- Quét Quest NPCs
-                    for qName, qPos in pairs(QuestNPCs or {}) do
-                        local dist = (qPos - myPos).Magnitude
-                        if dist <= maxDist then
-                            local bb = espBillboards["NPC_" .. qName]
-                            if not bb or not bb.Parent then
-                                bb = Instance.new("BillboardGui")
-                                bb.Name = "NPCESP_" .. qName
-                                bb.Size = UDim2.new(0, 160, 0, 30)
-                                bb.AlwaysOnTop = true
-                                bb.MaxDistance = maxDist
-
-                                local lbl = Instance.new("TextLabel")
-                                lbl.Name = "Text"
-                                lbl.Size = UDim2.new(1, 0, 1, 0)
-                                lbl.BackgroundTransparency = 1
-                                lbl.TextColor3 = npcColor
-                                lbl.Font = Enum.Font.GothamBold
-                                lbl.TextSize = 11
-                                lbl.TextStrokeTransparency = 0.3
-                                lbl.Parent = bb
-
-                                local anchor = Instance.new("Part")
-                                anchor.Size = Vector3.new(1, 1, 1)
-                                anchor.Position = qPos + Vector3.new(0, 4, 0)
-                                anchor.Anchored = true
-                                anchor.CanCollide = false
-                                anchor.Transparency = 1
-                                anchor.Parent = workspace
-                                bb.Adornee = anchor
-
-                                pcall(function() bb.Parent = game:GetService("CoreGui") end)
-                                if not bb.Parent then bb.Parent = PlayerGui end
-                                espBillboards["NPC_" .. qName] = bb
-                            end
-
-                            local textLbl = bb:FindFirstChild("Text")
-                            if textLbl then
-                                textLbl.TextColor3 = npcColor
-                                textLbl.Text = string.format("%s [%dm]", qName, math.floor(dist))
-                            end
-                        else
-                            if espBillboards["NPC_" .. qName] then
-                                espBillboards["NPC_" .. qName]:Destroy()
-                                espBillboards["NPC_" .. qName] = nil
-                            end
-                        end
-                    end
-
-                    -- Quét General NPCs
-                    for nName, nPos in pairs(GeneralNPCs or {}) do
-                        local dist = (nPos - myPos).Magnitude
-                        if dist <= maxDist then
-                            local bb = espBillboards["NPC_" .. nName]
-                            if not bb or not bb.Parent then
-                                bb = Instance.new("BillboardGui")
-                                bb.Name = "NPCESP_" .. nName
-                                bb.Size = UDim2.new(0, 160, 0, 30)
-                                bb.AlwaysOnTop = true
-                                bb.MaxDistance = maxDist
-
-                                local lbl = Instance.new("TextLabel")
-                                lbl.Name = "Text"
-                                lbl.Size = UDim2.new(1, 0, 1, 0)
-                                lbl.BackgroundTransparency = 1
-                                lbl.TextColor3 = npcColor
-                                lbl.Font = Enum.Font.GothamBold
-                                lbl.TextSize = 11
-                                lbl.TextStrokeTransparency = 0.3
-                                lbl.Parent = bb
-
-                                local anchor = Instance.new("Part")
-                                anchor.Size = Vector3.new(1, 1, 1)
-                                anchor.Position = nPos + Vector3.new(0, 4, 0)
-                                anchor.Anchored = true
-                                anchor.CanCollide = false
-                                anchor.Transparency = 1
-                                anchor.Parent = workspace
-                                bb.Adornee = anchor
-
-                                pcall(function() bb.Parent = game:GetService("CoreGui") end)
-                                if not bb.Parent then bb.Parent = PlayerGui end
-                                espBillboards["NPC_" .. nName] = bb
-                            end
-
-                            local textLbl = bb:FindFirstChild("Text")
-                            if textLbl then
-                                textLbl.TextColor3 = npcColor
-                                textLbl.Text = string.format("[%s] [%dm]", nName, math.floor(dist))
-                            end
-                        else
-                            if espBillboards["NPC_" .. nName] then
-                                espBillboards["NPC_" .. nName]:Destroy()
-                                espBillboards["NPC_" .. nName] = nil
-                            end
-                        end
-                    end
-                end
-            else
-                for key, bb in pairs(espBillboards) do
-                    if key:find("NPC_") then
-                        bb:Destroy()
-                        espBillboards[key] = nil
-                    end
-                end
-            end
-        end
-    end)
-
 
