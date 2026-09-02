@@ -10021,6 +10021,7 @@ HopGroup:AddButton({
 -- -----------------------------------------------------------------------------
 -- TAB 2: AUTO COMBAT & AUTO FIGHT
 -- -----------------------------------------------------------------------------
+do
 local CombatGroup = Tabs.Combat:AddLeftGroupbox("⚡ Auto Combat & Minigames QTE")
 local FightGroup  = Tabs.Combat:AddRightGroupbox("⚔️ Auto Fight & Skill Priority")
 
@@ -10232,6 +10233,8 @@ FightGroup:AddSlider("CombatDelay", {
 
 -- TAB 3: MOVEMENT CONTROLLER (WITH FULL KEYBIND PICKERS)
 -- -----------------------------------------------------------------------------
+end
+
 local FlyGroup = Tabs.Movement:AddLeftGroupbox("Flight & NoClip")
 local SpeedGroup = Tabs.Movement:AddRightGroupbox("Speed & Jump")
 
@@ -10497,6 +10500,7 @@ LandmarkGroup:AddButton({
         Teleporter.cancel()
     end
 })
+do
 local PlayerESPGroup   = Tabs.Visuals:AddLeftGroupbox("Player ESP & Trackers")
 local TrainerESPGroup  = Tabs.Visuals:AddLeftGroupbox("Class Trainer ESP")
 local NpcESPGroup      = Tabs.Visuals:AddLeftGroupbox("General NPC & Service ESP")
@@ -11115,6 +11119,9 @@ end
 -- -----------------------------------------------------------------------------
 -- TAB: DISCORD WEBHOOK INTEGRATION & NOTIFICATIONS
 -- -----------------------------------------------------------------------------
+end
+
+do
 local WebhookConfigGroup = Tabs.Webhook:AddLeftGroupbox("Webhook Configuration")
 local WebhookActionsGroup = Tabs.Webhook:AddRightGroupbox("Webhook Testing & Actions")
 
@@ -11154,8 +11161,9 @@ WebhookActionsGroup:AddButton({
         AutoYarthul.sendWebhook("Test")
     end,
 })
+end
 
-
+do
 local ThemeGroup = Tabs.Settings:AddLeftGroupbox("Theme & Visual Appearance")
 
 ThemeGroup:AddDropdown("ThemeSelect", {
@@ -11477,6 +11485,8 @@ if AutoYarthul then
 end-- =============================================================================
 -- ENEMY STATUS & SKILL COOLDOWN MONITOR (QOL VISUAL SUITE)
 -- =============================================================================
+end
+
 local EnemyStatusEngine = {
     running = false,
     thread = nil,
