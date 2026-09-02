@@ -9702,6 +9702,15 @@ QOLGroup:AddToggle("ShowEnemyInfo", {
     Tooltip = "Display clean overhead text directly above enemy HP bars showing all enemy skills, cooldowns, energy requirements, and status without boxes",
 })
 
+QOLGroup:AddSlider("EnemyInfoHeight", {
+    Text = "Enemy Info Height Offset",
+    Default = 8,
+    Min = 3,
+    Max = 25,
+    Rounding = 1,
+    Tooltip = "Height offset in studs above the HP bar (increase if overlapping tall monster names/health bars)",
+})
+
 QOLGroup:AddToggle("RevealRealHpMana", {
     Text = "Reveal Real HP / Mana",
     Default = false,
@@ -10777,7 +10786,8 @@ function EnemyStatusEngine.start()
                             -- Dynamic Height Offset Calculation (Anchored above StatDisplay with 0 overlap)
                             local adorneePart = (statDisplay and statDisplay.Parent and statDisplay.Parent:IsA("BasePart") and statDisplay.Parent) or head
                             local baseOffsetY = statDisplay and statDisplay.StudsOffset.Y or 2.5
-                            local targetOffsetY = baseOffsetY + 3.2 -- Placed 3.2 studs above HP bar center
+                            local userHeight = (Options.EnemyInfoHeight and Options.EnemyInfoHeight.Value) or 8
+                            local targetOffsetY = baseOffsetY + userHeight -- Significantly elevated well above the HP bar
 
                             local skillCount = #sData.skills
                             local rows = math.max(1, math.ceil(skillCount / 2))
