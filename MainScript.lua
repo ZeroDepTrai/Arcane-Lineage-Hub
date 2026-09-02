@@ -10501,6 +10501,7 @@ LandmarkGroup:AddButton({
     end
 })
 do
+do
 local PlayerESPGroup   = Tabs.Visuals:AddLeftGroupbox("Player ESP & Trackers")
 local TrainerESPGroup  = Tabs.Visuals:AddLeftGroupbox("Class Trainer ESP")
 local NpcESPGroup      = Tabs.Visuals:AddLeftGroupbox("General NPC & Service ESP")
@@ -10686,7 +10687,7 @@ local OptimizationState = {
 }
 
 -- 1. XU LY hidden CAY COI & THAM THUC VAT (REMOVE TREES / FOLIAGE / GRASS)
-local function applyPartTreeRemoval(obj, hideTrees)
+function FPSBooster.FPSBooster.applyPartTreeRemoval(obj, hideTrees)
     if not obj then return end
     local name = obj.Name:lower()
     local isTreeFoliage = name:find("tree") or name:find("bush") or name:find("leaf") or name:find("leaves")
@@ -10708,7 +10709,7 @@ local function applyPartTreeRemoval(obj, hideTrees)
     end
 end
 
-local function applyTreeRemoval()
+function FPSBooster.FPSBooster.applyTreeRemoval()
     task.spawn(function()
         pcall(function()
             local hideTrees = Toggles.RemoveTrees and Toggles.RemoveTrees.Value or false
@@ -10729,7 +10730,7 @@ local function applyTreeRemoval()
             end
 
             for _, obj in ipairs(workspace:GetDescendants()) do
-                applyPartTreeRemoval(obj, hideTrees)
+                FPSBooster.applyPartTreeRemoval(obj, hideTrees)
             end
 
             if hideTrees then
@@ -10737,7 +10738,7 @@ local function applyTreeRemoval()
                     OptimizationState.removeTreesConnection = workspace.DescendantAdded:Connect(function(child)
                         if OptimizationState.removeTreesActive then
                             task.defer(function()
-                                applyPartTreeRemoval(child, true)
+                                FPSBooster.applyPartTreeRemoval(child, true)
                             end)
                         end
                     end)
@@ -10754,7 +10755,7 @@ local function applyTreeRemoval()
 end
 
 -- 2. XU LY DO HOA MUOT & TAT PARTICLE (LOW GRAPHICS)
-local function applyPartLowGraphics(p, isLow)
+function FPSBooster.FPSBooster.applyPartLowGraphics(p, isLow)
     if not p then return end
     if LocalPlayer.Character and p:IsDescendantOf(LocalPlayer.Character) then return end
 
@@ -10790,7 +10791,7 @@ local function applyPartLowGraphics(p, isLow)
     end
 end
 
-local function applyLowGraphics()
+function FPSBooster.FPSBooster.applyLowGraphics()
     task.spawn(function()
         pcall(function()
             local isLow = Toggles.LowGraphics and Toggles.LowGraphics.Value or false
@@ -10805,7 +10806,7 @@ local function applyLowGraphics()
             end
 
             for _, p in ipairs(workspace:GetDescendants()) do
-                applyPartLowGraphics(p, isLow)
+                FPSBooster.applyPartLowGraphics(p, isLow)
             end
 
             if isLow then
@@ -10813,7 +10814,7 @@ local function applyLowGraphics()
                     OptimizationState.lowGraphicsConnection = workspace.DescendantAdded:Connect(function(child)
                         if OptimizationState.lowGraphicsActive then
                             task.defer(function()
-                                applyPartLowGraphics(child, true)
+                                FPSBooster.applyPartLowGraphics(child, true)
                             end)
                         end
                     end)
@@ -10830,7 +10831,7 @@ local function applyLowGraphics()
 end
 
 -- 3. XU LY MASTER FPS BOOST (clear SUONG MU / HIEU UNG ANH SANG)
-local function applyRemoveFog()
+function FPSBooster.FPSBooster.applyRemoveFog()
     task.spawn(function()
         pcall(function()
             local isRemove = Toggles.RemoveFog and Toggles.RemoveFog.Value or false
@@ -10873,7 +10874,7 @@ local function applyRemoveFog()
     end)
 end
 
-local function applyFPSBoost()
+function FPSBooster.FPSBooster.applyFPSBoost()
     task.spawn(function()
         pcall(function()
             local isBoost = Toggles.EnableFPSBoost and Toggles.EnableFPSBoost.Value
@@ -10918,7 +10919,7 @@ local function applyFPSBoost()
 end
 
 -- 4. XU LY EXTREME FPS BOOSTER (POTATO MODE TOAN DIEN - not TAT 3D RENDER)
-local function applyExtremePart(p)
+function FPSBooster.FPSBooster.applyExtremePart(p)
     if not p then return end
     if p:IsA("BasePart") then
         p.Material = Enum.Material.SmoothPlastic
@@ -10944,7 +10945,7 @@ local function applyExtremePart(p)
     end
 end
 
-local function applyExtremeFPSBoost()
+function FPSBooster.FPSBooster.applyExtremeFPSBoost()
     task.spawn(function()
         pcall(function()
             local isExtreme = (Toggles.FPSBoost and Toggles.FPSBoost.Value) or (Toggles.ExtremeFPSBoost and Toggles.ExtremeFPSBoost.Value) or false
@@ -10998,8 +10999,8 @@ local function applyExtremeFPSBoost()
 
                 -- E. Quet toan bo vat the trong Workspace
                 for _, obj in ipairs(workspace:GetDescendants()) do
-                    applyExtremePart(obj)
-                    applyPartTreeRemoval(obj, true)
+                    FPSBooster.applyExtremePart(obj)
+                    FPSBooster.applyPartTreeRemoval(obj, true)
                 end
 
                 -- F. Lang nghe vat the moi sinh ra va lap tuc ep ve dang Potato
@@ -11007,8 +11008,8 @@ local function applyExtremeFPSBoost()
                     OptimizationState.extremeConnection = workspace.DescendantAdded:Connect(function(child)
                         if OptimizationState.extremeActive then
                             task.defer(function()
-                                applyExtremePart(child)
-                                applyPartTreeRemoval(child, true)
+                                FPSBooster.applyExtremePart(child)
+                                FPSBooster.applyPartTreeRemoval(child, true)
                             end)
                         end
                     end)
@@ -11032,7 +11033,7 @@ local function applyExtremeFPSBoost()
                 Lighting.OutdoorAmbient = FPSBooster.originalOutdoorAmbient or Color3.fromRGB(128, 128, 128)
                 Lighting.ShadowSoftness = FPSBooster.originalShadowSoftness or 0.2
 
-                applyFPSBoost()
+                FPSBooster.applyFPSBoost()
                 Library:Notify("Extreme FPS Booster Deactivated.", 3)
             end
         end)
@@ -11080,7 +11081,7 @@ FPSGroup:AddToggle("RemoveFog", {
     Default = false,
     Tooltip = "Actively check and permanently clear all fog, haze, blur, and lighting atmosphere with continuous watchdog loop",
     Callback = function(val)
-        if applyRemoveFog then applyRemoveFog() end
+        if applyRemoveFog then FPSBooster.applyRemoveFog() end
     end,
 })
 
@@ -11089,7 +11090,7 @@ FPSGroup:AddToggle("FPSBoost", {
     Default = false,
     Tooltip = "Maximum FPS Boost: Smooth Plastic, disable Decals/Textures/Lights, hide foliage, disable Particles/Shadows/Fog",
     Callback = function(val)
-        applyExtremeFPSBoost()
+        FPSBooster.applyExtremeFPSBoost()
     end,
 })
 
@@ -11119,6 +11120,9 @@ end
 -- -----------------------------------------------------------------------------
 -- TAB: DISCORD WEBHOOK INTEGRATION & NOTIFICATIONS
 -- -----------------------------------------------------------------------------
+end
+
+do
 end
 
 do
@@ -11161,6 +11165,9 @@ WebhookActionsGroup:AddButton({
         AutoYarthul.sendWebhook("Test")
     end,
 })
+end
+
+do
 end
 
 do
@@ -11278,7 +11285,7 @@ local AntiAFK = {
     connections = {},
 }
 
-local function initAntiAFK()
+function AntiAFK.init()
     if AntiAFK.initialized then return end
     AntiAFK.initialized = true
 
@@ -11322,7 +11329,7 @@ local function initAntiAFK()
     hubLog("[AntiAFK] Built-in Anti-AFK Engine Initialized Successfully!")
 end
 
-initAntiAFK()
+AntiAFK.init()
 
 -- =============================================================================
 -- QOL: REAL HP/MANA REVEAL & UNIDENTIFIED ITEMS / ITEM STATS REVEALER
@@ -11486,6 +11493,7 @@ end-- ==========================================================================
 -- ENEMY STATUS & SKILL COOLDOWN MONITOR (QOL VISUAL SUITE)
 -- =============================================================================
 end
+end
 
 local EnemyStatusEngine = {
     running = false,
@@ -11502,7 +11510,7 @@ local EnemyStatusEngine = {
     currentTurn = 0,
 }
 
-local function initEnemyStatusData()
+function EnemyStatusEngine.EnemyStatusEngine.initEnemyStatusData()
     local rep = game:GetService("ReplicatedStorage")
     pcall(function()
         local skillsMod = rep:FindFirstChild("Constants") and rep.Constants:FindFirstChild("Skills")
@@ -11532,7 +11540,7 @@ local function initEnemyStatusData()
     pcall(function() scanNPCFolder(rep:FindFirstChild("NPCs")) end)
     pcall(function() scanNPCFolder(rep:FindFirstChild("NPCs_Extra")) end)
 end
-initEnemyStatusData()
+EnemyStatusEngine.initEnemyStatusData()
 
 pcall(function()
     local fightRemotes = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Fight")
@@ -11557,7 +11565,7 @@ pcall(function()
     end
 end)
 
-local function getSkillStats(skillName)
+function EnemyStatusEngine.EnemyStatusEngine.getSkillStats(skillName)
     if not skillName or skillName == "" or skillName == "None" or skillName == "Strike" then
         return 0, 0
     end
@@ -11575,7 +11583,7 @@ local function getSkillStats(skillName)
     return cost, cd
 end
 
-local function analyzeEnemyStatus(enemyModel)
+function EnemyStatusEngine.EnemyStatusEngine.analyzeEnemyStatus(enemyModel)
     if not enemyModel or not enemyModel.Parent then return nil end
 
     local enemyName = enemyModel.Name
@@ -11594,7 +11602,7 @@ local function analyzeEnemyStatus(enemyModel)
     if lastAttack ~= "None" and lastAttack ~= "" then
         if not EnemyStatusEngine.lastUsedAttacks[enemyModel] or EnemyStatusEngine.lastUsedAttacks[enemyModel] ~= lastAttack then
             EnemyStatusEngine.lastUsedAttacks[enemyModel] = lastAttack
-            local _, baseCD = getSkillStats(lastAttack)
+            local _, baseCD = EnemyStatusEngine.getSkillStats(lastAttack)
             if baseCD > 0 then
                 if not EnemyStatusEngine.cooldowns[enemyModel] then EnemyStatusEngine.cooldowns[enemyModel] = {} end
                 EnemyStatusEngine.cooldowns[enemyModel][lastAttack] = baseCD
@@ -11616,7 +11624,7 @@ local function analyzeEnemyStatus(enemyModel)
             for _, skName in ipairs(categoryMoves) do
                 if type(skName) == "string" and not seenSkills[skName] and skName ~= "BaseClass" and skName ~= "SuperClass" and skName ~= "None" then
                     seenSkills[skName] = true
-                    local cost, baseCD = getSkillStats(skName)
+                    local cost, baseCD = EnemyStatusEngine.getSkillStats(skName)
                     local remCD = modelCDs[skName] or 0
                     local statusTag = ""
 
@@ -11633,7 +11641,7 @@ local function analyzeEnemyStatus(enemyModel)
             end
         elseif type(categoryMoves) == "string" and not seenSkills[categoryMoves] and categoryMoves ~= "BaseClass" and categoryMoves ~= "SuperClass" then
             seenSkills[categoryMoves] = true
-            local cost, baseCD = getSkillStats(categoryMoves)
+            local cost, baseCD = EnemyStatusEngine.getSkillStats(categoryMoves)
             local remCD = modelCDs[categoryMoves] or 0
             local statusTag = ""
 
@@ -11709,7 +11717,7 @@ function EnemyStatusEngine.start()
                 end
 
                 for idx, enemyModel in ipairs(activeEnemies) do
-                    local sData = analyzeEnemyStatus(enemyModel)
+                    local sData = EnemyStatusEngine.analyzeEnemyStatus(enemyModel)
                     if sData then
                         local head = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
                         if head then
