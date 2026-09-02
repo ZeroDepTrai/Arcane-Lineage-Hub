@@ -5139,100 +5139,100 @@ end))
 -- =============================================================================
 -- TELEPORT SUITE (ALL 35+ CLASS TRAINERS, TOWNS, MERCHANTS, AND LANDMARKS)
 -- =============================================================================
+
+-- =============================================================================
+-- TELEPORT SUITE (ALL 40+ ACCURATE CLASS TRAINERS, TOWNS, BOSSES & LANDMARKS)
+-- =============================================================================
 local BaseTrainers = {
-    [" Base: Doran (Warrior - Sword)"] = Vector3.new(5627.8, 703.8, -4336.9),
-    [" Base: Luther (Thief - Dagger)"] = Vector3.new(3496.5, 632.8, -3983.3),
-    [" Base: Aberon (Martial Artist - Fist / Cestus)"] = Vector3.new(2800.0, 610.7, -4018.2),
-    [" Base: Arandor (Wizard - Magic / Staff)"] = Vector3.new(5840.1, 727.0, -4790.1),
-    [" Base: Tivek (Slayer - Spear / Lancer)"] = Vector3.new(4473.3, 650.1, -5730.3),
-    [" Base: Geron (Berserker / Marauder - Axe)"] = Vector3.new(4448.3, 652.1, -3359.3),
-    [" Base: Lagolt (Sentry - Greatsword)"] = Vector3.new(4651.7, 718.7, -5574.9),
+    ["Base: Doran (Warrior - Sword)"]               = Vector3.new(5627.8, 703.8, -4336.9),
+    ["Base: Luther (Thief - Dagger)"]                = Vector3.new(3496.5, 632.8, -3983.3),
+    ["Base: Aberon (Martial Artist - Fist / Cestus)"]= Vector3.new(2800.0, 610.7, -4018.2),
+    ["Base: Arandor (Wizard - Magic / Staff)"]       = Vector3.new(5840.1, 727.0, -4790.1),
+    ["Base: Tivek (Slayer - Spear / Lancer)"]        = Vector3.new(4473.3, 650.1, -5730.3),
+    ["Base: Geron (Berserker / Marauder - Axe)"]     = Vector3.new(4448.3, 652.1, -3359.3),
+    ["Base: Lagolt (Sentry - Greatsword)"]           = Vector3.new(4651.7, 718.7, -5574.9),
 }
 
 local SuperTrainers = {
-    [" Super: Dernon (Paladin - Warrior)"] = Vector3.new(2813.0, 615.7, -3866.6),
-    [" Super: Leoran (Blade Dancer - Warrior)"] = Vector3.new(4995.5, 754.4, -6194.1),
-    [" Super: Kayrein (Berserker - Warrior)"] = Vector3.new(11342.1, 1500.1, -3656.7),
-    [" Super: Landrum (Elementalist - Wizard)"] = Vector3.new(2473.2, 624.7, -3540.3),
-    ["🔥 Super: Ophelia (Hexer - Wizard)"] = Vector3.new(4661.7, 651.7, -5236.5),
-    [" Super: Ulys (Necromancer - Wizard)"] = Vector3.new(10847.3, 1589.0, -4091.8),
-    [" Super: Orkin (Ranger - Thief)"] = Vector3.new(8546.3, 822.7, -5544.1),
-    [" Super: Aberon (Rogue - Thief)"] = Vector3.new(2800.0, 610.7, -4018.2),
-    ["🥷 Super: Inette (Assassin - Thief)"] = Vector3.new(6699.0, 568.2, -3461.3),
-    [" Super: Luther (Monk - Martial Artist)"] = Vector3.new(3496.5, 632.8, -3983.3),
-    [" Super: Gren (Brawler - Martial Artist)"] = Vector3.new(5170.9, 660.5, -4996.0),
-    [" Super: Momma Darkbeast (Darkwraith - Martial Artist)"] = Vector3.new(8122.6, 581.8, -2138.1),
-    [" Super: Fernain (Saint - Slayer)"] = Vector3.new(2296.1, 663.3, -4392.7),
-    [" Super: Relan (Lancer - Slayer)"] = Vector3.new(5322.2, 749.4, -6324.2),
-    ["🔱 Super: Orin (Impaler - Slayer)"] = Vector3.new(8043.9, 822.6, -5599.3),
-    [" Super: Ardentis (Lionheart - Sentry/Marauder)"] = Vector3.new(474.5, 581.5, -4816.9),
-    [" Super: Nevithas (Citadel - Sentry/Marauder)"] = Vector3.new(71.9, 2765.7, -3266.4),
-    [" Super: Kether (Arbiter - Sentry/Marauder)"] = Vector3.new(7821.2, 1279.8, 8480.1),
+    ["Super: Dernon (Paladin - Order Warrior)"]       = Vector3.new(2813.0, 615.7, -3866.6),
+    ["Super: Leoran (Blade Dancer - Sword)"]         = Vector3.new(4995.5, 754.4, -6194.1),
+    ["Super: Kayrein (Berserker - Chaos Warrior)"]    = Vector3.new(11342.1, 1500.1, -3656.7),
+    ["Super: Landrum (Elementalist - Wizard)"]       = Vector3.new(2473.2, 624.7, -3540.3),
+    ["Super: Ophelia (Hexer - Wizard)"]              = Vector3.new(4661.7, 651.7, -5236.5),
+    ["Super: Ulys (Necromancer - Chaos Wizard)"]     = Vector3.new(10847.3, 1589.0, -4091.8),
+    ["Super: Orkin (Ranger - Bow & Dagger)"]         = Vector3.new(8546.3, 822.7, -5544.1),
+    ["Super: Aberon (Rogue - Thief)"]                = Vector3.new(2800.0, 610.7, -4018.2),
+    ["Super: Inette (Assassin - Chaos Thief)"]       = Vector3.new(6699.0, 568.2, -3461.3),
+    ["Super: Luther (Monk - Order Martial Artist)"]  = Vector3.new(3496.5, 632.8, -3983.3),
+    ["Super: Gren (Brawler - Martial Artist)"]       = Vector3.new(5170.9, 660.5, -4996.0),
+    ["Super: Momma Darkbeast (Darkwraith - Chaos)"]  = Vector3.new(8122.6, 581.8, -2138.1),
+    ["Super: Fernain (Saint - Order Slayer)"]        = Vector3.new(2296.1, 663.3, -4392.7),
+    ["Super: Relan (Lancer - Slayer)"]               = Vector3.new(5322.2, 749.4, -6324.2),
+    ["Super: Orin (Impaler - Chaos Slayer)"]         = Vector3.new(8043.9, 822.6, -5599.3),
+    ["Super: Ardentis (Lionheart - Order Sentry)"]   = Vector3.new(474.5, 581.5, -4816.9),
+    ["Super: Nevithas (Citadel - Defensive Sentry)"] = Vector3.new(71.9, 2765.7, -3266.4),
+    ["Super: Kether (Arbiter - Endgame Order)"]      = Vector3.new(7821.2, 1279.8, 8480.1),
+    ["Super: Chronomancer (Time Mage)"]              = Vector3.new(10825.4, 1585.1, -3450.2),
+    ["Super: Dragon Knight (Mount Thul Peak)"]       = Vector3.new(12.5, 585.4, -4120.8),
 }
 
 local MajorBosses = {
-    [" Boss: Yar'thul, the Blazing Dragon (Mount Thul Door)"] = Vector3.new(40.5, 581.6, -4113.5),
-    [" Boss: Thorian, the Rotten (Remnants Entrance Gate)"]    = Vector3.new(8328.1, 645.0, -1544.1),
-    [" Boss: Seraphon (Light Boss / Illustris Door)"]          = Vector3.new(710.5, 3449.1, -5678.1),
-    [" Boss: Arkhaia (Temple of Norn Door)"]                 = Vector3.new(14710.9, 550.7, 7133.7),
-    [" Boss: Handaconda (Desert Room Entrance)"]              = Vector3.new(3134.1, 179.1, -852.2),
-    [" Boss: Metrom's Vessel (Dungeon Entrance Spawn)"]      = Vector3.new(-3369.4, 129.8, 4266.4),
+    ["Boss: Yar'thul, the Blazing Dragon (Mount Thul Door)"] = Vector3.new(40.5, 581.6, -4113.5),
+    ["Boss: Thorian, the Rotten (Remnants Gate)"]            = Vector3.new(8328.1, 645.0, -1544.1),
+    ["Boss: Seraphon (Illustris Light Sanctum)"]             = Vector3.new(710.5, 3449.1, -5678.1),
+    ["Boss: Arkhaia (Temple of Norn Door)"]                 = Vector3.new(14710.9, 550.7, 7133.7),
+    ["Boss: Handaconda (Desert Room Entrance)"]              = Vector3.new(3134.1, 179.1, -852.2),
+    ["Boss: Metrom's Vessel (Dungeon Entrance Spawn)"]      = Vector3.new(-3369.4, 129.8, 4266.4),
 }
 
 local KeyLocations = {
-    --  Towns & Major Hubs
-    [" Westwood Heart"] = Vector3.new(8327.3, 825.1, -5557.4),
-    [" Westwood"] = Vector3.new(8327.3, 825.1, -5557.4),
-    [" Caldera Town"] = Vector3.new(5091.2, 662.6, -4293.1),
-    [" Caldera"] = Vector3.new(5091.2, 662.6, -4293.1),
-    ["🏜️ Desert (Waving Sands)"] = Vector3.new(2815.3, 634.6, -3924.6),
-    ["🏜️ Desert"] = Vector3.new(2815.3, 634.6, -3924.6),
-    [" Sanctuary of Blades"] = Vector3.new(2086.0, 386.8, -2978.3),
-    [" Sanctuary"] = Vector3.new(2086.0, 386.8, -2978.3),
-    ["Church (Heavens Point)"] = Vector3.new(831.6, 3436.9, -5602.3),
-    [" Church"] = Vector3.new(831.6, 3436.9, -5602.3),
-    [" Forgotten Sanctum (Endgame)"] = Vector3.new(10831.2, 1581.7, -3463.6),
-    [" Dark Place Gate"] = Vector3.new(7855.1, 1290.3, 7930.9),
-    [" Void Rift"] = Vector3.new(991.0, 41.4, 615.6),
-    [" Memori's House"] = Vector3.new(11851.5, 1064.9, -1776.8),
-    [" Icerift Approach"] = Vector3.new(5328.2, 742.7, -6530.2),
-    [" Volcano (Mount Thul)"] = Vector3.new(98.9, 577.0, -4115.9),
+    -- Towns & Major Settlements
+    ["Caldera Town (Central Plaza)"]                = Vector3.new(5091.2, 662.6, -4293.1),
+    ["Caldera Town (Meditation / Aretim Peak)"]     = Vector3.new(5075.4, 720.5, -4380.2),
+    ["Westwood Heart (Canopy Camp)"]                = Vector3.new(8327.3, 825.1, -5557.4),
+    ["Desert Oasis (Waving Sands)"]                 = Vector3.new(2815.3, 634.6, -3924.6),
+    ["Sanctuary of Blades (Underground)"]           = Vector3.new(2086.0, 386.8, -2978.3),
+    ["Church (Heavens Point Peak)"]                 = Vector3.new(831.6, 3436.9, -5602.3),
+    ["Forgotten Sanctum (Endgame Domain)"]          = Vector3.new(10831.2, 1581.7, -3463.6),
+    ["Dark Place Gate (Abyss Entrance)"]            = Vector3.new(7855.1, 1290.3, 7930.9),
+    ["Void Rift (Interdimensional Portal)"]         = Vector3.new(991.0, 41.4, 615.6),
+    ["Memori's House (Alchemist Witch Hut)"]        = Vector3.new(11851.5, 1064.9, -1776.8),
+    ["Icerift Approach (Frostlands Path)"]          = Vector3.new(5328.2, 742.7, -6530.2),
+    ["Mount Thul Volcano (Dragon Lair)"]            = Vector3.new(98.9, 577.0, -4115.9),
 
-    --  Sub Class Trainers (5)
-    ["🎶 Sub: Cantia (Bard)"] = Vector3.new(2845.8, 624.1, -3222.9),
-    [" Sub: Thorin (Beastmaster)"] = Vector3.new(4253.1, 653.8, -3369.2),
-    [" Sub: Selia (Alchemist)"] = Vector3.new(8116.2, 822.5, -5456.4),
-    [" Sub: Adelma (Blacksmith Subclass)"] = Vector3.new(-425.4, 2712.7, -3388.1),
-    [" Sub: Vanio (Miner)"] = Vector3.new(7572.0, 593.2, -2674.0),
+    -- Sub Class Trainers & Specialists
+    ["Sub: Cantia (Bard - Melody Specialist)"]       = Vector3.new(2845.8, 624.1, -3222.9),
+    ["Sub: Thorin (Beastmaster - Pet Specialist)"]   = Vector3.new(4253.1, 653.8, -3369.2),
+    ["Sub: Selia (Alchemist - Potion Master)"]       = Vector3.new(8116.2, 822.5, -5456.4),
+    ["Sub: Adelma (Blacksmith Subclass)"]           = Vector3.new(-425.4, 2712.7, -3388.1),
+    ["Sub: Vanio (Miner - Ore Master)"]             = Vector3.new(7572.0, 593.2, -2674.0),
 
-    --  Deities, Enchants & Quests (10)
-    [" Deity: Lodyssa (God of Wealth / Midas)"] = Vector3.new(5213.0, 660.0, -4347.7),
-    [" Quest: Dead King (Reaper Enchant)"] = Vector3.new(2623.8, 556.4, -4660.0),
-    [" Quest: Jyphar (Cursed Enchant)"] = Vector3.new(7246.1, 619.2, -4672.5),
-    [" Quest: El'heith (Astra)"] = Vector3.new(10883.0, 1573.4, -3489.5),
-    [" Master: The Soulmaster (Soul Awakening)"] = Vector3.new(-44.9, 574.8, -5467.4),
-    [" Spirit: Staarun & Aderyn (Spirit Domain)"] = Vector3.new(789.3, 233.0, 2053.5),
-    [" Quest: Bone Man (Necromancy)"] = Vector3.new(1397.0, 610.3, -4097.6),
-    [" Peak: Seraphon (Heavens Point)"] = Vector3.new(13.9, 4741.6, -2113.1),
-    ["🔥 Chaos: Thuriaz (Chaos Path)"] = Vector3.new(2151.2, 519.8, -3394.1),
-    [" Order: Prelate Fyran (Order Path)"] = Vector3.new(8459.8, 822.4, -5885.1),
+    -- Deities, Alignments & Enchants
+    ["Deity: Lodyssa (God of Wealth / Midas)"]       = Vector3.new(5213.0, 660.0, -4347.7),
+    ["Quest: Dead King (Reaper Enchant)"]           = Vector3.new(2623.8, 556.4, -4660.0),
+    ["Quest: Jyphar (Cursed Enchant)"]              = Vector3.new(7246.1, 619.2, -4672.5),
+    ["Quest: El'heith (Astra Enchant)"]             = Vector3.new(10883.0, 1573.4, -3489.5),
+    ["Master: The Soulmaster (Soul Awakening)"]      = Vector3.new(-44.9, 574.8, -5467.4),
+    ["Spirit: Staarun & Aderyn (Spirit Domain)"]     = Vector3.new(789.3, 233.0, 2053.5),
+    ["Quest: Bone Man (Necromancy Crypt)"]          = Vector3.new(1397.0, 610.3, -4097.6),
+    ["Chaos Path: Thuriaz (Chaos Transformation)"]   = Vector3.new(2151.2, 519.8, -3394.1),
+    ["Order Path: Prelate Fyran (Order Sanctuary)"]  = Vector3.new(8459.8, 822.4, -5885.1),
 
-    --  Town Merchants & Services
-    [" Blacksmith (Westwood)"] = Vector3.new(8465.8, 821.8, -5589.8),
-    ["Blacksmith (Caldera)"] = Vector3.new(4921.8, 657.9, -4162.3),
-    [" Blacksmith (Sanctuary)"] = Vector3.new(2079.6, 382.7, -2903.1),
-    ["💊 Doctor (Westwood)"] = Vector3.new(8079.1, 822.4, -5478.8),
-    ["💊 Doctor (Caldera)"] = Vector3.new(5035.6, 658.1, -4407.9),
-    ["💊 Doctor (Desert)"] = Vector3.new(2790.2, 615.7, -3837.2),
-    [" Banker (Westwood)"] = Vector3.new(8470.3, 823.6, -5824.3),
-    [" Banker (Caldera)"] = Vector3.new(5184.7, 657.7, -4266.2),
-    [" Merchant (Westwood)"] = Vector3.new(8473.8, 823.6, -5906.5),
-    ["Merchant (Caldera)"] = Vector3.new(5132.9, 658.0, -4124.2),
-    [" Apothecarian (Caldera)"] = Vector3.new(5131.5, 657.8, -4355.9),
-    [" Apothecarian (Westwood)"] = Vector3.new(8388.3, 822.9, -5904.8),
-    [" Enchanter (Caldera)"] = Vector3.new(5045.7, 657.5, -4234.2),
+    -- Town Merchants, Doctors & Blacksmiths
+    ["Blacksmith: Ferrum (Caldera)"]                = Vector3.new(4921.8, 657.9, -4162.3),
+    ["Blacksmith: Borin (Westwood)"]                = Vector3.new(8465.8, 821.8, -5589.8),
+    ["Blacksmith: Sanctuary Forge"]                 = Vector3.new(2079.6, 382.7, -2903.1),
+    ["Merchant: Lyle (Caldera General Goods)"]       = Vector3.new(5132.9, 658.0, -4124.2),
+    ["Merchant: Corin (Westwood Goods)"]            = Vector3.new(8473.8, 823.6, -5906.5),
+    ["Doctor: Caldera Clinic"]                      = Vector3.new(5035.6, 658.1, -4407.9),
+    ["Doctor: Westwood Clinic"]                     = Vector3.new(8079.1, 822.4, -5478.8),
+    ["Doctor: Desert Oasis Camp"]                   = Vector3.new(2790.2, 615.7, -3837.2),
+    ["Banker: Caldera Vault"]                       = Vector3.new(5184.7, 657.7, -4266.2),
+    ["Banker: Westwood Vault"]                      = Vector3.new(8470.3, 823.6, -5824.3),
+    ["Apothecarian: Caldera Potions"]               = Vector3.new(5131.5, 657.8, -4355.9),
+    ["Apothecarian: Westwood Potions"]              = Vector3.new(8388.3, 822.9, -5904.8),
+    ["Enchanter: Caldera Arcane Forge"]             = Vector3.new(5045.7, 657.5, -4234.2),
 }
-
 local Teleporter = {
     active = false,
 }
@@ -5323,8 +5323,166 @@ local ESP_Colors = {
     ["Laneus"]          = Color3.fromRGB(144, 238, 144),
 }
 
+
+-- =============================================================================
+-- COMPREHENSIVE VISUAL ESP SUITE (PLAYERS, NPCS, LOCATIONS & INGREDIENTS)
+-- =============================================================================
+local activePlayerESP = {}
+local activeNpcESP = {}
+local activeLocationESP = {}
 local activeESP = {}
 
+-- 1. PLAYER ESP SYSTEM
+local function createPlayerESP(player)
+    if player == LocalPlayer then return end
+    if activePlayerESP[player] then return end
+
+    local espObj = {
+        Player = player,
+        Billboard = nil,
+        Label = nil,
+        HealthBar = nil,
+    }
+
+    local function setupChar(char)
+        if not char then return end
+        local head = char:WaitForChild("Head", 5)
+        local root = char:WaitForChild("HumanoidRootPart", 5)
+        if not head or not root then return end
+
+        if espObj.Billboard then pcall(function() espObj.Billboard:Destroy() end) end
+
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "PlayerESP_" .. player.Name
+        bb.AlwaysOnTop = true
+        bb.Size = UDim2.new(0, 160, 0, 40)
+        bb.StudsOffset = Vector3.new(0, 3.2, 0)
+        bb.Adornee = head
+        bb.Parent = PlayerGui
+
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Size = UDim2.new(1, 0, 0.6, 0)
+        nameLabel.Text = player.DisplayName .. " (@" .. player.Name .. ")"
+        nameLabel.TextColor3 = Color3.fromRGB(0, 230, 255)
+        nameLabel.TextStrokeTransparency = 0.3
+        nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.TextSize = 11
+        nameLabel.Parent = bb
+
+        local infoLabel = Instance.new("TextLabel")
+        infoLabel.BackgroundTransparency = 1
+        infoLabel.Size = UDim2.new(1, 0, 0.4, 0)
+        infoLabel.Position = UDim2.new(0, 0, 0.6, 0)
+        infoLabel.Text = "100% HP | 0m"
+        infoLabel.TextColor3 = Color3.fromRGB(80, 255, 120)
+        infoLabel.TextStrokeTransparency = 0.4
+        infoLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        infoLabel.Font = Enum.Font.GothamMedium
+        infoLabel.TextSize = 9.5
+        infoLabel.Parent = bb
+
+        espObj.Billboard = bb
+        espObj.Label = nameLabel
+        espObj.InfoLabel = infoLabel
+    end
+
+    if player.Character then setupChar(player.Character) end
+    player.CharacterAdded:Connect(setupChar)
+    activePlayerESP[player] = espObj
+end
+
+local function removePlayerESP(player)
+    local espObj = activePlayerESP[player]
+    if espObj then
+        if espObj.Billboard then pcall(function() espObj.Billboard:Destroy() end) end
+        activePlayerESP[player] = nil
+    end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do createPlayerESP(p) end
+registerConnection(Players.PlayerAdded:Connect(createPlayerESP))
+registerConnection(Players.PlayerRemoving:Connect(removePlayerESP))
+
+-- 2. NPC & TRAINERS ESP SYSTEM
+local function createNpcESP(model)
+    if not model or not model:IsA("Model") then return end
+    if activeNpcESP[model] then return end
+    local head = model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
+    if not head then return end
+
+    local name = model.Name
+    local cleanName = name:gsub("%s*%(.*%)", ""):gsub("%d+$", ""):gsub("^%s*(.-)%s*$", "%1")
+    
+    local bb = Instance.new("BillboardGui")
+    bb.Name = "NpcESP_" .. name
+    bb.AlwaysOnTop = true
+    bb.Size = UDim2.new(0, 160, 0, 30)
+    bb.StudsOffset = Vector3.new(0, 3.0, 0)
+    bb.Adornee = head
+    bb.Enabled = false
+    bb.Parent = PlayerGui
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Text = "[NPC] " .. cleanName
+    label.TextColor3 = Color3.fromRGB(255, 215, 0)
+    label.TextStrokeTransparency = 0.3
+    label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 11
+    label.Parent = bb
+
+    activeNpcESP[model] = { billboard = bb, label = label, name = cleanName, head = head }
+end
+
+local function removeNpcESP(model)
+    if activeNpcESP[model] then
+        pcall(function() activeNpcESP[model].billboard:Destroy() end)
+        activeNpcESP[model] = nil
+    end
+end
+
+-- 3. LOCATION & WAYPOINT ESP SYSTEM
+local function initLocationESP()
+    for locName, locPos in pairs(KeyLocations) do
+        local bb = Instance.new("BillboardGui")
+        bb.Name = "LocESP_" .. locName
+        bb.AlwaysOnTop = true
+        bb.Size = UDim2.new(0, 180, 0, 32)
+        bb.Enabled = false
+        bb.Parent = PlayerGui
+
+        local part = Instance.new("Part")
+        part.Name = "LocAnchor_" .. locName
+        part.Size = Vector3.new(1, 1, 1)
+        part.Position = locPos
+        part.Anchored = true
+        part.CanCollide = false
+        part.Transparency = 1
+        part.Parent = workspace
+
+        bb.Adornee = part
+
+        local label = Instance.new("TextLabel")
+        label.BackgroundTransparency = 1
+        label.Size = UDim2.new(1, 0, 1, 0)
+        label.Text = "[POI] " .. locName
+        label.TextColor3 = Color3.fromRGB(160, 230, 255)
+        label.TextStrokeTransparency = 0.3
+        label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        label.Font = Enum.Font.GothamBold
+        label.TextSize = 11
+        label.Parent = bb
+
+        activeLocationESP[locName] = { billboard = bb, label = label, name = locName, pos = locPos, part = part }
+    end
+end
+pcall(initLocationESP)
+
+-- 4. INGREDIENT & ORE ESP
 local function createESP(instance)
     if activeESP[instance] then return end
     local name = instance.Name
@@ -5344,8 +5502,8 @@ local function createESP(instance)
     label.TextColor3 = color
     label.TextStrokeTransparency = 0.3
     label.TextStrokeColor3 = Color3.new(0, 0, 0)
-    label.Font = Enum.Font.SourceSansBold
-    label.TextSize = 14
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 11
     label.Parent = billboard
 
     billboard.Parent = PlayerGui
@@ -5359,9 +5517,76 @@ local function removeESP(instance)
     end
 end
 
+-- 5. MASTER ESP UPDATE LOOP
 registerConnection(RunService.RenderStepped:Connect(function()
     local char = LocalPlayer.Character
     local localRoot = char and char:FindFirstChild("HumanoidRootPart")
+    if not localRoot then return end
+
+    -- A. Player ESP Updates
+    local pEspEnabled = Toggles.PlayerESP and Toggles.PlayerESP.Value
+    local pMaxDist = Options.PlayerESPMaxDist and Options.PlayerESPMaxDist.Value or 3500
+    for p, data in pairs(activePlayerESP) do
+        if data.Billboard then
+            local pChar = p.Character
+            local pRoot = pChar and pChar:FindFirstChild("HumanoidRootPart")
+            local pHum = pChar and pChar:FindFirstChildOfClass("Humanoid")
+            if pEspEnabled and pRoot and pHum and pHum.Health > 0 then
+                local dist = (localRoot.Position - pRoot.Position).Magnitude
+                if dist <= pMaxDist then
+                    local hpPct = math.clamp(pHum.Health / math.max(1, pHum.MaxHealth), 0, 1)
+                    local hpColor = hpPct > 0.5 and Color3.fromRGB(80, 255, 120) or (hpPct > 0.25 and Color3.fromRGB(255, 200, 50) or Color3.fromRGB(255, 70, 70))
+                    data.InfoLabel.Text = string.format("%d%% HP [%d/%d] • %dm", math.floor(hpPct * 100), math.floor(pHum.Health), math.floor(pHum.MaxHealth), math.floor(dist))
+                    data.InfoLabel.TextColor3 = hpColor
+                    data.Billboard.Enabled = true
+                else
+                    data.Billboard.Enabled = false
+                end
+            else
+                data.Billboard.Enabled = false
+            end
+        end
+    end
+
+    -- B. NPC ESP Updates
+    local npcEspEnabled = Toggles.NPC_ESP and Toggles.NPC_ESP.Value
+    local npcMaxDist = Options.NPC_ESPMaxDist and Options.NPC_ESPMaxDist.Value or 2500
+    for m, data in pairs(activeNpcESP) do
+        if data.billboard and data.head and data.head.Parent then
+            if npcEspEnabled then
+                local dist = (localRoot.Position - data.head.Position).Magnitude
+                if dist <= npcMaxDist then
+                    data.label.Text = string.format("[NPC] %s [%dm]", data.name, math.floor(dist))
+                    data.billboard.Enabled = true
+                else
+                    data.billboard.Enabled = false
+                end
+            else
+                data.billboard.Enabled = false
+            end
+        end
+    end
+
+    -- C. Location ESP Updates
+    local locEspEnabled = Toggles.Location_ESP and Toggles.Location_ESP.Value
+    local locMaxDist = Options.Location_ESPMaxDist and Options.Location_ESPMaxDist.Value or 6000
+    for name, data in pairs(activeLocationESP) do
+        if data.billboard then
+            if locEspEnabled then
+                local dist = (localRoot.Position - data.pos).Magnitude
+                if dist <= locMaxDist then
+                    data.label.Text = string.format("[POI] %s [%dm]", data.name, math.floor(dist))
+                    data.billboard.Enabled = true
+                else
+                    data.billboard.Enabled = false
+                end
+            else
+                data.billboard.Enabled = false
+            end
+        end
+    end
+
+    -- D. Ingredient & Ore ESP Updates
     local espEnabled = Toggles.MasterESP and Toggles.MasterESP.Value
     local filterMode = Options.ESPFilterMode and Options.ESPFilterMode.Value or "All"
     local showDist = Toggles.ESPShowDistance and Toggles.ESPShowDistance.Value
@@ -5373,7 +5598,7 @@ registerConnection(RunService.RenderStepped:Connect(function()
             removeESP(inst)
         else
             local isVisible = false
-            if espEnabled and localRoot then
+            if espEnabled then
                 if not (data.name == "Crylight" and isBlacklistedCrylight(inst)) then
                     if filterMode == "All" then
                         isVisible = true
@@ -5406,19 +5631,24 @@ end))
 
 registerConnection(workspace.DescendantAdded:Connect(function(desc)
     if ESP_Colors[desc.Name] then createESP(desc) end
+    if desc:IsA("Model") and (desc.Parent and (desc.Parent.Name == "NPCs" or desc.Parent.Name == "Living")) then
+        createNpcESP(desc)
+    end
 end))
-registerConnection(workspace.DescendantRemoving:Connect(removeESP))
+registerConnection(workspace.DescendantRemoving:Connect(function(desc)
+    removeESP(desc)
+    removeNpcESP(desc)
+end))
 
 for _, desc in ipairs(workspace:GetDescendants()) do
     if ESP_Colors[desc.Name] then createESP(desc) end
+    if desc:IsA("Model") and (desc.Parent and (desc.Parent.Name == "NPCs" or desc.Parent.Name == "Living")) then
+        createNpcESP(desc)
+    end
 end
-
--- =============================================================================
--- XÂY DỰNG GIAO DIỆN LINORIALIB (TABS & GROUPBOXES)
--- =============================================================================
 local Window = ZeroLib:CreateWindow({
     Title = "ARCANE LINEAGE",
-    Size = UDim2.new(0, 560, 0, 400),
+    Size = UDim2.new(0, 680, 0, 480),
     ToggleKey = Enum.KeyCode.End
 })
 
@@ -6215,8 +6445,54 @@ TownWarpGroup:AddButton(" Metrom (Dungeon Entrance)", function() teleportToLocat
 -- -----------------------------------------------------------------------------
 -- TAB 5: VISUALS & FPS BOOSTER
 -- -----------------------------------------------------------------------------
-local ESPGroup = Tabs.Visuals:AddLeftGroupbox("Ingredient ESP")
+local PlayerESPGroup = Tabs.Visuals:AddLeftGroupbox("Player ESP & Trackers")
+local NpcESPGroup = Tabs.Visuals:AddLeftGroupbox("NPC & Waypoint ESP")
+local ESPGroup = Tabs.Visuals:AddLeftGroupbox("Ingredient & Ore ESP")
 local FilterGroup = Tabs.Visuals:AddLeftGroupbox("Filters & Categories")
+
+PlayerESPGroup:AddToggle("PlayerESP", {
+    Text = "Enable Player ESP",
+    Default = false,
+    Tooltip = "Hiển thị tên người chơi, thanh máu, cấp độ và khoảng cách tới người chơi khác trong server",
+})
+
+PlayerESPGroup:AddSlider("PlayerESPMaxDist", {
+    Text = "Max Player ESP Distance",
+    Default = 3500,
+    Min = 500,
+    Max = 10000,
+    Rounding = 0,
+    Tooltip = "Khoảng cách quét tối đa để hiển thị người chơi",
+})
+
+NpcESPGroup:AddToggle("NPC_ESP", {
+    Text = "Enable NPC & Trainers ESP",
+    Default = false,
+    Tooltip = "Hiển thị tất cả NPC làm nhiệm vụ, Thầy dạy Class, Bác sĩ và Thương nhân trong thế giới",
+})
+
+NpcESPGroup:AddSlider("NPC_ESPMaxDist", {
+    Text = "Max NPC ESP Distance",
+    Default = 2500,
+    Min = 300,
+    Max = 8000,
+    Rounding = 0,
+})
+
+NpcESPGroup:AddToggle("Location_ESP", {
+    Text = "Enable Waypoints & POI ESP",
+    Default = false,
+    Tooltip = "Hiển thị các địa danh trọng yếu: Caldera, Heavens Point Church, Sanctuary of Blades, Mount Thul...",
+})
+
+NpcESPGroup:AddSlider("Location_ESPMaxDist", {
+    Text = "Max Location ESP Distance",
+    Default = 6000,
+    Min = 1000,
+    Max = 15000,
+    Rounding = 0,
+})
+
 
 -- =============================================================================
 -- ENEMY SKILL PREDICTOR & COMBAT HUD ENGINE (QOL VISUAL SUITE)
