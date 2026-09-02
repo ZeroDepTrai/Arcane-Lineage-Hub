@@ -9623,6 +9623,8 @@ local Tabs = {
     Webhook  = Window:AddTab({ Name = "Webhook", Icon = ZeroLib.Icons.Terminal }),
     Settings = Window:AddTab({ Name = "Settings", Icon = ZeroLib.Icons.Settings }),
 }
+Tabs.Combat = Tabs.AutoQTE
+Tabs.Teleports = Tabs.Teleport
 
 -- -----------------------------------------------------------------------------
 -- TAB 1: AUTO FARM (INGREDIENTS & ORE MINING)
