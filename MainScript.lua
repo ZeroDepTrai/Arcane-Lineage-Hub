@@ -7309,6 +7309,66 @@ function Miner.stop()
 end
 
 -- =============================================================================
+-- AUTO COMBAT QTE ENGINE (BLATANT REMOTE HOOK + LEGIT PIXEL SWEET SPOT)
+-- =============================================================================
+local originalQTEFunctions = {}
+local qteHookInstalled = false
+
+local function installBlatantQTEHook()
+    if qteHookInstalled then return end
+    pcall(function()
+        local rep = game:GetService("ReplicatedStorage")
+        local rf = rep:FindFirstChild("Remotes") and rep.Remotes:FindFirstChild("Information") and rep.Remotes.Information:FindFirstChild("RemoteFunction")
+        if not rf or not getconnections or not getupvalues then return end
+
+        for _, conn in ipairs(getconnections(rf.OnClientEvent)) do
+            local fn = conn.Function
+            if fn then
+                local uvs = getupvalues(fn)
+                if uvs and type(uvs[1]) == "table" and uvs[1].DodgeQTE then
+                    local qteTable = uvs[1]
+                    for qName, qFn in pairs(qteTable) do
+                        if not originalQTEFunctions[qName] then
+                            originalQTEFunctions[qName] = qFn
+                        end
+
+                        qteTable[qName] = function(params)
+                            local masterOn = Toggles.MasterQTE and Toggles.MasterQTE.Value
+                            local isBlatant = Options.QTEMode and Options.QTEMode.Value == "Blatant"
+
+                            if masterOn and isBlatant then
+                                if qName == "DodgeQTE" then
+                                    -- Tra ve ket qua Perfect Dodge (100% Ne hoan hao khong ton mau va chan don)
+                                    return { true, true }
+                                else
+                                    -- Tra ve ket qua Perfect Hit 100% cho cac minigame tan cong
+                                    return true
+                                end
+                            end
+
+                            if originalQTEFunctions[qName] then
+                                return originalQTEFunctions[qName](params)
+                            end
+                        end
+                    end
+                    qteHookInstalled = true
+                    hubLog("[QTE]  Authentic Blatant Remote Hook activated successfully!")
+                    break
+                end
+            end
+        end
+    end)
+end
+
+task.spawn(function()
+    while HubState.running do
+        if not qteHookInstalled then
+            installBlatantQTEHook()
+        end
+        task.wait(1)
+    end
+end)
+
 -- AUTO COMBAT QTE ENGINE (SINGLE-CLICK, 0.25S DEBOUNCED SWEET SPOT ENGINE)
 -- =============================================================================
 local DaggerArcSizes = { 20, 25, 30, 35, 40, 45, 55, 65, 75, 85, 95, 105 }
