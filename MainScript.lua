@@ -7770,55 +7770,20 @@ end
 
 -- 7. SPEAR QTE (INSTANT NATIVE CLOSURE RESOLVER FOR TAPS, LINES & CURVES)
 
--- 9. YAR'THUL METEOR QTE (AUTO DODGE METEORS & POSITION SHIFT)
+-- 9. YAR'THUL METEOR QTE (EXACT ORIGINAL GIST ARENA SHIFT ENGINE)
 local function handleYarthulQTE(yarthulQTE)
     if not isQTEActive("Yarthul") or not yarthulQTE or not yarthulQTE.Visible then return end
     pcall(function()
         local gameFrame = yarthulQTE:FindFirstChild("Game")
         local arena = gameFrame and gameFrame:FindFirstChild("Arena")
-        local player = arena and arena:FindFirstChild("Player")
-        local otherControls = yarthulQTE:FindFirstChild("OtherControls")
-
-        -- Legit Smart AI: Jump or move away from falling meteors
-        if gameFrame and player then
-            local playerX = player.Position.X.Scale
-            local playerY = player.Position.Y.Scale
-
-            local incomingDanger = false
-            for _, child in ipairs(gameFrame:GetChildren()) do
-                if child:IsA("ImageLabel") and child.Visible and child:FindFirstChild("Hitbox") then
-                    local metX = child.Position.X.Scale
-                    local metY = child.Position.Y.Scale
-                    if math.abs(playerX - metX) < 0.18 and metY > 0.3 and metY < 0.85 then
-                        incomingDanger = true
-                        if otherControls and otherControls:FindFirstChild("Up") then
-                            singleClick(otherControls.Up)
-                        else
-                            pressKey(Enum.KeyCode.Space)
-                            pressKey(Enum.KeyCode.W)
-                        end
-                        if playerX > 0.5 then
-                            if otherControls and otherControls:FindFirstChild("Left") then
-                                singleClick(otherControls.Left)
-                            else
-                                pressKey(Enum.KeyCode.A)
-                            end
-                        else
-                            if otherControls and otherControls:FindFirstChild("Right") then
-                                singleClick(otherControls.Right)
-                            else
-                                pressKey(Enum.KeyCode.D)
-                            end
-                        end
-                        break
-                    end
-                end
+        if arena then
+            local playerFrame = arena:FindFirstChild("Player")
+            if playerFrame then
+                playerFrame.Position = UDim2.new(-50, 0, -50, 0)
             end
-
-            -- If player is still trapped, safely snap position outside meteor zone
-            if arena then
-                if player then
-                    player.Position = UDim2.new(player.Position.X.Scale, player.Position.X.Offset, math.min(player.Position.Y.Scale, 0.4), player.Position.Y.Offset)
+            for _, obj in ipairs(arena:GetChildren()) do
+                if obj ~= playerFrame and obj:IsA("GuiObject") and obj.Name ~= "UIListLayout" and obj.Name ~= "UIGridLayout" then
+                    obj.Position = UDim2.new(50, 0, 50, 0)
                 end
             end
         end
