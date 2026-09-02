@@ -2716,6 +2716,34 @@ function ConfigManager:GetConfigs()
     return #list > 0 and list or {"default"}
 end
 
+function ConfigManager:SetAutoLoad(name)
+    self:Init()
+    if writefile then
+        writefile(self.Folder .. "/autoload.txt", tostring(name))
+        ZeroLib:Notify({ Title = "Auto Load Config", Content = "Đã đặt auto load cho profile: " .. tostring(name), Type = "Success" })
+    end
+end
+
+function ConfigManager:ClearAutoLoad()
+    self:Init()
+    if delfile and isfile and isfile(self.Folder .. "/autoload.txt") then
+        delfile(self.Folder .. "/autoload.txt")
+        ZeroLib:Notify({ Title = "Auto Load Config", Content = "Đã tắt tính năng Auto Load Config", Type = "Info" })
+    elseif writefile then
+        writefile(self.Folder .. "/autoload.txt", "")
+    end
+end
+
+function ConfigManager:GetAutoLoad()
+    self:Init()
+    local path = self.Folder .. "/autoload.txt"
+    if readfile and isfile and isfile(path) then
+        local name = readfile(path):gsub("%s+", "")
+        if #name > 0 then return name end
+    end
+    return nil
+end
+
 ZeroLib.ConfigManager = ConfigManager
 
 return ZeroLib
