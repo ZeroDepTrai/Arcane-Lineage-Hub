@@ -4696,6 +4696,908 @@ end
 -- =============================================================================
 -- AUTO BOSS FARM ENGINE: YAR'THUL, THE BLAZING DRAGON (MOUNT THUL)
 -- =============================================================================
+
+
+local LevelFarmer = {
+    running = false,
+    noclipConn = nil,
+    undergroundPlatform = nil,
+    farmSpotLv1_30 = Vector3.new(5131.5, 662.4, -3947.6),   -- The Crossing Safe Block (Lv 1 - 30)
+    farmSpotLv30_50 = Vector3.new(3067.7, 623.9, -3832.3),  -- Desert Safe Block (Lv 30 - 50)
+    farmSpots = {
+        ["The Crossing (Caldera / Starter Mobs)"] = Vector3.new(5986.4, 616.8, -4260.2),
+        ["Deeproot Canopy (Westwood / Forest Mobs)"] = Vector3.new(7595.9, 599.3, -3361.3),
+        ["Waving Sands (Desert / Sand Mobs)"] = Vector3.new(3062.7, 595.1, -4566.3),
+        ["Withered Grove (Cursed Grove / Undead Mobs)"] = Vector3.new(6075.8, 639.3, -2013.1),
+        ["Mount Thul (Snow Mountain / Frost Mobs)"] = Vector3.new(572.3, 559.5, -4156.2),
+    },
+    essenceBeforeCombat = -1,
+    zeroGainFightCount = 0,
+    wasInCombat = false,
+    lastMeditateTime = 0,
+    aretimPos = Vector3.new(789.8, 238.0, 2120.8),
+}
+
+local function ensureUndergroundPlatform(targetPos)
+    local plat = workspace:FindFirstChild("ArcaneFarmPlatform")
+    if not plat then
+        plat = Instance.new("Part")
+        plat.Name = "ArcaneFarmPlatform"
+        plat.Size = Vector3.new(20, 2, 20)
+        plat.Anchored = true
+        plat.CanCollide = true
+        plat.Transparency = 0.5
+        plat.Material = Enum.Material.SmoothPlastic
+        plat.Color = Color3.fromRGB(35, 35, 35)
+        plat.Parent = workspace
+    end
+    plat.Position = targetPos
+    LevelFarmer.undergroundPlatform = plat
+    return plat
+end
+
+local function removeUndergroundPlatform()
+    local plat = workspace:FindFirstChild("ArcaneFarmPlatform")
+    if plat then plat:Destroy() end
+    LevelFarmer.undergroundPlatform = nil
+end
+
+local function enableLevelFarmerNoclip()
+    if LevelFarmer.noclipConn then return end
+    LevelFarmer.noclipConn = registerConnection(RunService.Stepped:Connect(function()
+        if not LevelFarmer.running then return end
+        local c = LocalPlayer.Character
+        if c and not isInCombat() then
+            for _, p in ipairs(c:GetDescendants()) do
+                if p:IsA("BasePart") then
+                    p.CanCollide = false
+                end
+            end
+            local r = c:FindFirstChild("HumanoidRootPart")
+            if r then
+                r.AssemblyLinearVelocity = Vector3.zero
+                r.AssemblyAngularVelocity = Vector3.zero
+            end
+        end
+    end))
+end
+
+local function disableLevelFarmerNoclip()
+    if LevelFarmer.noclipConn then
+        LevelFarmer.noclipConn:Disconnect()
+        LevelFarmer.noclipConn = nil
+    end
+end
+
+local function getCurrentLevel()
+    local pgui = PlayerGui
+    local hud = pgui and pgui:FindFirstChild("HUD")
+    if hud then
+        local lvlObj = hud:FindFirstChild("CharacterLevel", true)
+        local lvlText = lvlObj and lvlObj:FindFirstChild("Level")
+        if lvlText and lvlText:IsA("TextLabel") then
+            local num = tonumber(lvlText.Text:match("%d+"))
+            if num then return num end
+        end
+    end
+    local char = LocalPlayer.Character
+    local lvlVal = char and (char:FindFirstChild("Level") or (char:FindFirstChild("Status") and char.Status:FindFirstChild("Level")))
+    if lvlVal and lvlVal:IsA("ValueBase") then
+        return tonumber(lvlVal.Value) or 1
+    end
+    return 1
+end
+
+local function getCurrentEssence()
+    local pgui = PlayerGui
+    local hud = pgui and pgui:FindFirstChild("HUD")
+    if hud then
+        local crystals = hud:FindFirstChild("Crystals", true)
+        local amountObj = crystals and crystals:FindFirstChild("Amount")
+        if amountObj and amountObj:IsA("TextLabel") then
+            local num = tonumber(amountObj.Text:match("%d+"))
+            if num then return num end
+        end
+    end
+    return 0
+end
+
+local function getActiveFarmSpot()
+    local mode = (Options and Options.FarmLevelMode and Options.FarmLevelMode.Value) or "Auto (Detect Level 1 - 50)"
+    
+    if mode == "Level 1 - 30 (Underground)" then
+        return LevelFarmer.farmSpotLv1_30, "Level 1 - 30 (Underground)"
+    elseif mode == "Level 30 - 50 (Desert Block)" then
+        return LevelFarmer.farmSpotLv30_50, "Level 30 - 50 (Desert Block)"
+    elseif mode:find("Auto") then
+        -- Auto detect player level (Lv < 30 fly ve bai underground Caldera, Lv >= 30 fly ve khoi safely Desert)
+        local currentLvl = getCurrentLevel()
+        if currentLvl >= 30 then
+            return LevelFarmer.farmSpotLv30_50, string.format("Auto Detect (Lv %d -> Desert Block 30-50)", currentLvl)
+        else
+            return LevelFarmer.farmSpotLv1_30, string.format("Auto Detect (Lv %d -> Underground 1-30)", currentLvl)
+        end
+    elseif LevelFarmer.farmSpots[mode] then
+        return LevelFarmer.farmSpots[mode], mode
+    else
+        return LevelFarmer.farmSpotLv1_30, "Level 1 - 30 (Underground)"
+    end
+end
+
+local function flyToFarmSpot(targetSpot)
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum then
+        warn("[AutoFarmLevel]  HumanoidRootPart or Humanoid not found!")
+        return false
+    end
+
+    local currentPos = root.Position
+    local targetCF = CFrame.new(targetSpot.X, targetSpot.Y + 4.0, targetSpot.Z)
+    local distance = (currentPos - targetCF.Position).Magnitude
+
+    if distance <= 4 then
+        root.CFrame = targetCF
+        ensureUndergroundPlatform(targetSpot)
+        return true
+    end
+
+    hubLog(string.format("[AutoFarmLevel]  Starting Safe Sky-Tween flight to farm spot at (%.1f, %.1f, %.1f) - distance: %.1f studs...", targetCF.X, targetCF.Y, targetCF.Z, distance))
+
+    ensureUndergroundPlatform(targetSpot)
+    enableLevelFarmerNoclip()
+
+    local skyHeight = 1500
+    local skyY = math.max(skyHeight, currentPos.Y + 200, targetSpot.Y + 200)
+
+    -- Phase 1: Fly straight up to high airspace
+    local s1 = smoothTweenTo(CFrame.new(currentPos.X, skyY, currentPos.Z), 200, function() return LevelFarmer.running end)
+    if not s1 or not LevelFarmer.running then return false end
+
+    -- Phase 2: Fly horizontally across airspace to farm spot
+    local s2 = smoothTweenTo(CFrame.new(targetSpot.X, skyY, targetSpot.Z), 240, function() return LevelFarmer.running end)
+    if not s2 or not LevelFarmer.running then return false end
+
+    -- Phase 3: landed straight dung xuong bai farm (xuyen khoi / xuyen dat safely)
+    local s3 = smoothTweenTo(targetCF, 180, function() return LevelFarmer.running end)
+    if s3 then
+        root.CFrame = targetCF
+        hubLog("[AutoFarmLevel]  Landed safely at farm spot!")
+    end
+    return s3
+end
+
+local function safeClickButton(btn)
+    if not btn then return false end
+    local clicked = false
+
+    if getconnections then
+        local conns = getconnections(btn.MouseButton1Click)
+        if conns and #conns > 0 then
+            for _, c in ipairs(conns) do
+                if c.Function then
+                    task.spawn(c.Function)
+                    clicked = true
+                elseif c.Fire then
+                    pcall(function() c:Fire() end)
+                    clicked = true
+                end
+            end
+            if clicked then return true end
+        end
+    end
+
+    if firesignal then
+        pcall(function() firesignal(btn.MouseButton1Click) end)
+        return true
+    end
+
+    return false
+end
+
+local function getCurrentStats()
+    local stats = { Strength = 0, Endurance = 0, Speed = 0, Arcane = 0, Luck = 0 }
+    local pgui = PlayerGui
+    local sm = pgui and pgui:FindFirstChild("StatMenu")
+    if sm then
+        local attrs = sm:FindFirstChild("Attributes", true)
+        if attrs then
+            for statName, _ in pairs(stats) do
+                local frame = attrs:FindFirstChild(statName)
+                local valObj = frame and frame:FindFirstChild("StatValue")
+                if valObj and valObj:IsA("TextLabel") then
+                    local num = tonumber(valObj.Text:match("^%s*(%d+)"))
+                    if num then stats[statName] = num end
+                end
+            end
+        end
+    end
+    return stats
+end
+
+-- =============================================================================
+-- USER STATS ALLOCATION CACHE SYSTEM (PERSISTENT BY ROBLOX USERNAME)
+-- =============================================================================
+local STATS_CACHE_FILE = "Arcane_Hub_StatsCache.json"
+local statsCacheMemory = {}
+
+local function loadStatsCache()
+    if readfile and isfile and isfile(STATS_CACHE_FILE) then
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(readfile(STATS_CACHE_FILE))
+        end)
+        if success and type(result) == "table" then
+            statsCacheMemory = result
+            return result
+        end
+    end
+    return statsCacheMemory
+end
+
+local function saveStatsCache(cache)
+    statsCacheMemory = cache
+    if writefile then
+        pcall(function()
+            writefile(STATS_CACHE_FILE, HttpService:JSONEncode(cache))
+        end)
+    end
+end
+
+local function getUserStatsCache()
+    local username = LocalPlayer.Name
+    local cache = loadStatsCache()
+    if not cache[username] then
+        cache[username] = {
+            Strength = 0,
+            Endurance = 0,
+            Speed = 0,
+            Arcane = 0,
+            Luck = 0,
+        }
+        saveStatsCache(cache)
+    end
+    return cache[username], cache, username
+end
+
+local function clearUserStatsCache()
+    local userStats, allCache, username = getUserStatsCache()
+    allCache[username] = {
+        Strength = 0,
+        Endurance = 0,
+        Speed = 0,
+        Arcane = 0,
+        Luck = 0,
+    }
+    saveStatsCache(allCache)
+    hubLog(string.format("[AutoStats]  has clear clean cache points stats cua tai khoan '%s'!", username))
+    Library:Notify(string.format(" Cleared stats cache for '%s'!", username), 4)
+end
+
+local function allocateStats()
+    if not (Toggles.AutoAllocateStats and Toggles.AutoAllocateStats.Value) then return end
+
+    local pgui = LocalPlayer:WaitForChild("PlayerGui")
+    local lvlUpGui = pgui:FindFirstChild("LevelUp")
+    
+    -- 1. Wait for LevelUp UI to appear and enable (server game co do tre ~2.5s khi open dialogue Aretim)
+    local waitStart = os.clock()
+    while os.clock() - waitStart < 8.0 do
+        lvlUpGui = pgui:FindFirstChild("LevelUp")
+        if lvlUpGui and lvlUpGui.Enabled and lvlUpGui:FindFirstChild("Container") then
+            break
+        end
+        task.wait(0.3)
+    end
+
+    if not (lvlUpGui and lvlUpGui.Enabled and lvlUpGui:FindFirstChild("Container")) then
+        hubLog("[AutoFarmLevel]  LevelUp UI not detected.")
+        return
+    end
+
+    local container = lvlUpGui.Container
+    local header = container:FindFirstChild("Header")
+    local pointsLabel = header and header:FindFirstChild("PointsLeft")
+    local pointsText = pointsLabel and pointsLabel.Text or ""
+    local availPoints = tonumber(pointsText:match("(%d+)")) or 0
+
+    local userStats, allCache, username = getUserStatsCache()
+    hubLog(string.format("[AutoFarmLevel]  [LevelUp GUI] Tai khoan '%s' co %d Stat Points not yet allocated.", username, availPoints))
+
+    if availPoints <= 0 then
+        local finishBtn = lvlUpGui:FindFirstChild("Finish")
+        if finishBtn then
+            if getconnections then
+                for _, c in ipairs(getconnections(finishBtn.MouseButton1Click)) do
+                    if c.Function then c.Function() break elseif c.Fire then c:Fire() break end
+                end
+            elseif firesignal then
+                firesignal(finishBtn.MouseButton1Click)
+            end
+        end
+        return
+    end
+
+    -- 2. Read target slider configuration
+    local strSlider = Options.TargetStrength and Options.TargetStrength.Value or 20
+    local arcSlider = Options.TargetArcane and Options.TargetArcane.Value or 0
+    local endSlider = Options.TargetEndurance and Options.TargetEndurance.Value or 20
+    local spdSlider = Options.TargetSpeed and Options.TargetSpeed.Value or 10
+    local lckSlider = Options.TargetLuck and Options.TargetLuck.Value or 10
+
+    -- Target manual stat investment = max(0, slider - 10) due to +10 free milestone points do
+    local strMaxAdd = math.max(0, strSlider - 10)
+    local arcMaxAdd = math.max(0, arcSlider - 10)
+    local endMaxAdd = math.max(0, endSlider - 10)
+    local spdMaxAdd = math.max(0, spdSlider - 10)
+    local lckMaxAdd = math.max(0, lckSlider - 10)
+
+    -- Remaining points needed compared to account allocated cache
+    local strNeeded = math.max(0, strMaxAdd - (userStats.Strength or 0))
+    local arcNeeded = math.max(0, arcMaxAdd - (userStats.Arcane or 0))
+    local endNeeded = math.max(0, endMaxAdd - (userStats.Endurance or 0))
+    local spdNeeded = math.max(0, spdMaxAdd - (userStats.Speed or 0))
+    local lckNeeded = math.max(0, lckMaxAdd - (userStats.Luck or 0))
+
+    hubLog(string.format("[AutoStats]  Cache hien tai cua '%s': Str:%d/%d, End:%d/%d, Spd:%d/%d, Arc:%d/%d, Lck:%d/%d",
+        username,
+        userStats.Strength or 0, strMaxAdd,
+        userStats.Endurance or 0, endMaxAdd,
+        userStats.Speed or 0, spdMaxAdd,
+        userStats.Arcane or 0, arcMaxAdd,
+        userStats.Luck or 0, lckMaxAdd
+    ))
+
+    -- Allocate points
+    local strAdd = math.min(availPoints, strNeeded)
+    availPoints = availPoints - strAdd
+
+    local endAdd = math.min(availPoints, endNeeded)
+    availPoints = availPoints - endAdd
+
+    local spdAdd = math.min(availPoints, spdNeeded)
+    availPoints = availPoints - spdAdd
+
+    local arcAdd = math.min(availPoints, arcNeeded)
+    availPoints = availPoints - arcAdd
+
+    local lckAdd = math.min(availPoints, lckNeeded)
+    availPoints = availPoints - lckAdd
+
+    -- If points remain (Game requires 100% distribution before Finish):
+    -- Automatically allocate into highest target stat slider
+    if availPoints > 0 then
+        if strSlider >= endSlider and strSlider >= arcSlider and strSlider > 0 then
+            strAdd = strAdd + availPoints
+        elseif endSlider >= strSlider and endSlider >= arcSlider and endSlider > 0 then
+            endAdd = endAdd + availPoints
+        elseif arcSlider >= strSlider and arcSlider >= endSlider and arcSlider > 0 then
+            arcAdd = arcAdd + availPoints
+        elseif spdSlider >= lckSlider and spdSlider > 0 then
+            spdAdd = spdAdd + availPoints
+        else
+            lckAdd = lckAdd + availPoints
+        end
+        availPoints = 0
+    end
+
+    -- 3. Click stat upgrade button in PlayerGui.LevelUp
+    local buttonsFrame = container:FindFirstChild("Body") and container.Body:FindFirstChild("Buttons")
+    local function getStatUpButton(statName)
+        if not buttonsFrame then return nil end
+        local statFrame = buttonsFrame:FindFirstChild(statName)
+        local frame = statFrame and statFrame:FindFirstChild("Frame")
+        return frame and frame:FindFirstChild(statName .. "Up")
+    end
+
+    local function clickLevelUpButton(statName, count)
+        if count <= 0 then return end
+        local upBtn = getStatUpButton(statName)
+        if not upBtn then
+            for _, d in ipairs(container:GetDescendants()) do
+                if d:IsA("ImageButton") and d.Name == (statName .. "Up") then
+                    upBtn = d
+                    break
+                end
+            end
+        end
+        if not upBtn then
+            warn("[AutoStats]  Button not found:", statName .. "Up")
+            return
+        end
+
+        local toAllocBox = container:FindFirstChild("ToAllocate", true)
+        if toAllocBox and toAllocBox:IsA("TextBox") then
+            toAllocBox.Text = tostring(count)
+            task.wait(0.08)
+            if getconnections then
+                for _, c in ipairs(getconnections(upBtn.MouseButton1Click)) do
+                    if c.Function then c.Function() break
+                    elseif c.Fire then c:Fire() break end
+                end
+            elseif firesignal then
+                firesignal(upBtn.MouseButton1Click)
+            end
+            task.wait(0.1)
+        else
+            for _ = 1, count do
+                if getconnections then
+                    for _, c in ipairs(getconnections(upBtn.MouseButton1Click)) do
+                        if c.Function then c.Function() break
+                        elseif c.Fire then c:Fire() break end
+                    end
+                elseif firesignal then
+                    firesignal(upBtn.MouseButton1Click)
+                end
+                task.wait(0.05)
+            end
+        end
+    end
+
+    if strAdd > 0 then clickLevelUpButton("Strength", strAdd) end
+    if endAdd > 0 then clickLevelUpButton("Endurance", endAdd) end
+    if spdAdd > 0 then clickLevelUpButton("Speed", spdAdd) end
+    if arcAdd > 0 then clickLevelUpButton("Arcane", arcAdd) end
+    if lckAdd > 0 then clickLevelUpButton("Luck", lckAdd) end
+
+    -- Update permanent cache for account
+    userStats.Strength = (userStats.Strength or 0) + strAdd
+    userStats.Endurance = (userStats.Endurance or 0) + endAdd
+    userStats.Speed = (userStats.Speed or 0) + spdAdd
+    userStats.Arcane = (userStats.Arcane or 0) + arcAdd
+    userStats.Luck = (userStats.Luck or 0) + lckAdd
+    saveStatsCache(allCache)
+
+    task.wait(0.4)
+    local finishBtn = lvlUpGui:FindFirstChild("Finish")
+    if finishBtn then
+        if getconnections then
+            for _, c in ipairs(getconnections(finishBtn.MouseButton1Click)) do
+                if c.Function then c.Function() break
+                elseif c.Fire then c:Fire() break end
+            end
+        elseif firesignal then
+            firesignal(finishBtn.MouseButton1Click)
+        end
+        hubLog(string.format("[AutoFarmLevel]  has allocated Stats cho '%s': Str+%d (total %d/%d), End+%d (total %d/%d), Spd+%d (total %d/%d), Arc+%d (total %d/%d), Luck+%d (total %d/%d) va bam Finish!", 
+            username,
+            strAdd, userStats.Strength, strMaxAdd,
+            endAdd, userStats.Endurance, endMaxAdd,
+            spdAdd, userStats.Speed, spdMaxAdd,
+            arcAdd, userStats.Arcane, arcMaxAdd,
+            lckAdd, userStats.Luck, lckMaxAdd
+        ))
+    end
+
+    -- Wait for LevelUp GUI to close before continuing
+    local closeWait = os.clock()
+    while lvlUpGui.Enabled and os.clock() - closeWait < 4.0 do
+        task.wait(0.3)
+    end
+end
+
+local function isInSoulCorridor()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then return false end
+    return (root.Position - LevelFarmer.aretimPos).Magnitude < 400
+end
+
+local function simulateKeyPress(keyCode, holdTime)
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
+        task.wait(holdTime or 0.15)
+        VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
+    end)
+end
+
+local function humanoidMeditateAndLevelUp()
+    local now = os.clock()
+    if now - LevelFarmer.lastMeditateTime < 5 then
+        return false
+    end
+    LevelFarmer.lastMeditateTime = now
+
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not root or not hum then return false end
+
+    -- 1. Find nearest Meditation Mat
+    local mats = workspace:FindFirstChild("Mats")
+    local nearestMat = nil
+    local nearestDist = math.huge
+    if mats then
+        for _, mat in ipairs(mats:GetChildren()) do
+            local pos = mat:GetPivot().Position
+            local d = (pos - root.Position).Magnitude
+            if d < nearestDist then
+                nearestDist = d
+                nearestMat = mat
+            end
+        end
+    end
+
+    if not nearestMat then
+        hubLog("[AutoFarmLevel]  MeditationMat not found.")
+        return false
+    end
+
+    local matPos = nearestMat:GetPivot().Position
+    local targetCF = CFrame.new(matPos.X, matPos.Y + 1.2, matPos.Z)
+
+    hubLog(string.format("[AutoFarmLevel]  Flying to Meditation Mat at (%.1f, %.1f, %.1f)...", matPos.X, matPos.Y, matPos.Z))
+
+    hum.PlatformStand = true
+    local noclipConn = RunService.Stepped:Connect(function()
+        local c = LocalPlayer.Character
+        if c then
+            for _, p in ipairs(c:GetDescendants()) do
+                if p:IsA("BasePart") then p.CanCollide = false end
+            end
+            local r = c:FindFirstChild("HumanoidRootPart")
+            if r then r.AssemblyLinearVelocity = Vector3.zero end
+        end
+    end)
+
+    local distance = (root.Position - targetCF.Position).Magnitude
+    local speed = 180
+    local duration = math.max(0.1, distance / speed)
+    local tween = TweenService:Create(root, TweenInfo.new(duration, Enum.EasingStyle.Linear), { CFrame = targetCF })
+    tween:Play()
+    tween.Completed:Wait()
+
+    noclipConn:Disconnect()
+    hum.PlatformStand = false
+    hum:ChangeState(Enum.HumanoidStateType.Landed)
+    hum:ChangeState(Enum.HumanoidStateType.Running)
+    root.CFrame = targetCF
+    task.wait(0.8)
+
+    -- 2. Press M key via VirtualInputManager (single trigger)
+    hubLog("[AutoFarmLevel]  Pressing M key to meditate into Soul Corridor...")
+    simulateKeyPress(Enum.KeyCode.M, 0.12)
+
+    -- Monitor scene transition (Wait up to 8.5s for meditation animation & screen fade)
+    local waited = 0
+    while not isInSoulCorridor() and waited < 8.5 do
+        task.wait(0.5)
+        waited = waited + 0.5
+    end
+
+    if isInSoulCorridor() then
+        hubLog("[AutoFarmLevel]  Entered Soul Corridor successfully!")
+        task.wait(1.0)
+
+        -- 3. Travel to NPC Aretim (Refresh character reference in Soul Corridor)
+        local scChar = LocalPlayer.Character
+        local scRoot = scChar and scChar:FindFirstChild("HumanoidRootPart")
+        local scHum = scChar and scChar:FindFirstChildOfClass("Humanoid")
+        if not scRoot or not scHum then return false end
+
+        local aretimModel = workspace:FindFirstChild("NPCs") and workspace.NPCs:FindFirstChild("Aretim")
+        local aretimPos = aretimModel and aretimModel:GetPivot().Position or LevelFarmer.aretimPos
+        local aretimTargetCF = CFrame.lookAt(Vector3.new(aretimPos.X, aretimPos.Y + 1.5, aretimPos.Z - 4.0), aretimPos)
+
+        hubLog(string.format("[AutoFarmLevel] 🚶 Flying to NPC Aretim at (%.1f, %.1f, %.1f)...", aretimPos.X, aretimPos.Y, aretimPos.Z))
+        
+        scHum.PlatformStand = true
+        local noclipCorridor = RunService.Stepped:Connect(function()
+            local c = LocalPlayer.Character
+            if c then
+                for _, p in ipairs(c:GetDescendants()) do
+                    if p:IsA("BasePart") then p.CanCollide = false end
+                end
+                local r = c:FindFirstChild("HumanoidRootPart")
+                if r then r.AssemblyLinearVelocity = Vector3.zero end
+            end
+        end)
+
+        local dCorridor = (scRoot.Position - aretimTargetCF.Position).Magnitude
+        local tCorridor = TweenService:Create(scRoot, TweenInfo.new(math.max(0.1, dCorridor / 140), Enum.EasingStyle.Linear), { CFrame = aretimTargetCF })
+        tCorridor:Play()
+        tCorridor.Completed:Wait()
+
+        noclipCorridor:Disconnect()
+        scHum.PlatformStand = false
+        scHum:ChangeState(Enum.HumanoidStateType.Running)
+        scRoot.CFrame = aretimTargetCF
+        task.wait(0.6)
+
+        -- 4. Trigger dialogue and verify NPCDialogue is visible
+        local pgui = PlayerGui
+        local diag = pgui:FindFirstChild("NPCDialogue")
+        local diagOpened = false
+        local diagStart = os.clock()
+
+        hubLog("[AutoFarmLevel]  Triggering dialogue with Aretim...")
+        while (os.clock() - diagStart < 6.0) do
+            diag = pgui:FindFirstChild("NPCDialogue")
+            if diag and diag.Enabled then
+                diagOpened = true
+                hubLog("[AutoFarmLevel]  Aretim dialogue interface opened successfully!")
+                break
+            end
+
+            scRoot.CFrame = aretimTargetCF
+            local aretimProx = aretimModel and aretimModel:FindFirstChildWhichIsA("ProximityPrompt", true)
+            if aretimProx and fireproximityprompt then
+                fireproximityprompt(aretimProx)
+            end
+            task.wait(0.5)
+        end
+
+        -- 5. Auto select maximum level up dialogue option
+        if diagOpened and diag and diag.Enabled then
+            task.wait(0.5)
+            local optionsFrame = diag:FindFirstChild("Options", true)
+            if optionsFrame then
+                local clicked = false
+                -- Priority 1: Multi-level upgrade (Show me as much light as I can handle. (+ X LVLS))
+                for _, opt in ipairs(optionsFrame:GetChildren()) do
+                    if opt:IsA("TextButton") and opt.Visible then
+                        local txt = opt.Text:lower()
+                        if (txt:find("as much light") or txt:find("lvls")) and not txt:find("+ 0 lvls") then
+                            hubLog(string.format("[AutoFarmLevel]  Clicking max upgrade: '%s'", opt.Text))
+                            safeClickButton(opt)
+                            clicked = true
+                            break
+                        end
+                    end
+                end
+                -- Priority 2: Single level upgrade (+LVL)
+                if not clicked then
+                    for _, opt in ipairs(optionsFrame:GetChildren()) do
+                        if opt:IsA("TextButton") and opt.Visible and opt.Text:lower():find("+lvl") and not opt.Text:lower():find("+ 0") then
+                            hubLog(string.format("[AutoFarmLevel]  Clicking 1 level upgrade: '%s'", opt.Text))
+                            safeClickButton(opt)
+                            clicked = true
+                            break
+                        end
+                    end
+                end
+                -- Neu not enough Essence de increase: close dialogue bang 'Not yet.'
+                if not clicked then
+                    for _, opt in ipairs(optionsFrame:GetChildren()) do
+                        if opt:IsA("TextButton") and opt.Visible and opt.Text:lower():find("not yet") then
+                            hubLog("[AutoFarmLevel]  Insufficient Essence to level up, closing dialogue.")
+                            safeClickButton(opt)
+                            break
+                        end
+                    end
+                end
+            end
+        else
+            warn("[AutoFarmLevel]  Failed to open NPCDialogue with Aretim.")
+        end
+        task.wait(1.5)
+
+        -- 5. Auto allocate Stat points per configuration and finish
+        allocateStats()
+        task.wait(1.0)
+
+        -- 6. Simulate pressing M key to exit Soul Corridor back to Overworld
+        hubLog("[AutoFarmLevel]  Pressing M key to exit meditation and return to Overworld...")
+        simulateKeyPress(Enum.KeyCode.M, 0.12)
+
+        local exitWaited = 0
+        while isInSoulCorridor() and exitWaited < 8.5 do
+            task.wait(0.5)
+            exitWaited = exitWaited + 0.5
+        end
+    else
+        hubLog("[AutoFarmLevel]  Cannot enter Soul Corridor on this cycle.")
+    end
+
+    -- 7. Return to safe farm spot via Sky-Tween
+    local spot, spotDesc = getActiveFarmSpot()
+    hubLog(string.format("[AutoFarmLevel]  Flying back to farm spot (%s) via Sky-Tween...", spotDesc))
+    flyToFarmSpot(spot)
+    enableLevelFarmerNoclip()
+    hubLog("[AutoFarmLevel]  Returned safely to farm spot!")
+
+    -- Reset Essence counter after combat
+    LevelFarmer.essenceBeforeCombat = getCurrentEssence()
+    LevelFarmer.zeroGainFightCount = 0
+    return true
+end
+
+
+
+local function getCurrentTurnNumber()
+    local pgui = PlayerGui
+    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
+    local header = actionBG and actionBG:FindFirstChild("Header")
+    local title = header and header:FindFirstChild("Title")
+    if title and title.Text then
+        return tonumber(title.Text:match("%d+"))
+    end
+    return nil
+end
+
+local function isPlayerTurn()
+    local char = LocalPlayer and LocalPlayer.Character
+    if not char then return false end
+
+    if not isInCombat() then return false end
+
+    local pgui = PlayerGui
+    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    if not combatGui or not combatGui.Enabled then return false end
+
+    -- Check if Deciding belongs to Player OR Player's Summons (e.g. Skeletons, Minions)
+    local deciding = combatGui:FindFirstChild("Deciding")
+    if deciding and deciding.Visible then
+        local label = deciding:FindFirstChild("TextLabel")
+        local text = label and label.Text or ""
+        if text ~= "" then
+            local isMyTurn = text:find(LocalPlayer.Name) ~= nil
+            if not isMyTurn and char:FindFirstChild("Summons") then
+                for _, s in ipairs(char.Summons:GetChildren()) do
+                    if text:find(s.Name) then
+                        isMyTurn = true
+                        break
+                    end
+                end
+            end
+            if not isMyTurn and (text:lower():find("skeleton") or text:lower():find("summon") or text:lower():find("minion")) then
+                isMyTurn = true
+            end
+            if not isMyTurn then
+                return false
+            end
+        end
+    end
+
+    local dodge = combatGui:FindFirstChild("DodgeQTE")
+    if dodge and dodge.Visible then return false end
+
+    local goBtn = combatGui:FindFirstChild("Go")
+    if goBtn and goBtn.Visible then return true end
+
+    local actionBG = combatGui:FindFirstChild("ActionBG")
+    if not actionBG or not actionBG.Visible then return false end
+
+    local header = actionBG:FindFirstChild("Header")
+    local title = header and header:FindFirstChild("Title")
+    if title and title.Text and (title.Text:find("Turn") or title.Text:find("Action")) then
+        return true
+    end
+
+    local ctx = actionBG:FindFirstChild("ContextPage")
+    local atk = actionBG:FindFirstChild("AttacksPage")
+    if (ctx and ctx.Visible) or (atk and atk.Visible) then
+        return true
+    end
+
+    return false
+end
+
+local function scanPlayerSkills()
+    if not HubState.knownPlayerSkills then
+        HubState.knownPlayerSkills = {
+            ["Strike"] = true,
+        }
+    end
+
+    local skillSet = table.clone(HubState.knownPlayerSkills)
+    local pgui = PlayerGui
+    local blacklist = {
+        ["Skills"] = true, ["Element"] = true, ["Physical"] = true, ["Magic"] = true, ["Fire"] = true,
+        ["Holy"] = true, ["Nature"] = true, ["Hex"] = true, ["Dark"] = true, ["Poison"] = true,
+        ["Duration"] = true, ["Scaling"] = true, ["Strength"] = true, ["Arcane"] = true, ["Buff"] = true,
+        ["Debuff"] = true, ["Heal"] = true, ["Speed"] = true, ["Luck"] = true, ["Cost"] = true,
+        ["Cooldown"] = true, ["Active"] = true, ["Passive"] = true, ["ACTIVE"] = true, ["PASSIVE"] = true,
+        ["UNEQUIP"] = true, ["Label"] = true, ["N/A"] = true, ["Button"] = true, ["Example"] = true,
+        ["Info"] = true, ["Template"] = true, ["Return"] = true, ["Shadow Form"] = true, ["SKILL NAME"] = true,
+    }
+
+    local summonOnlyMoves = {
+        ["Smack"] = true,
+        ["Bone Spray"] = true,
+        ["Self Destruct"] = true,
+        ["Rotten Swipe"] = true,
+        ["Shriek"] = true,
+        ["Double Slam"] = true,
+        ["Light Bolt"] = true,
+        ["Gale Uplift"] = true,
+        ["Sylph's Prayer"] = true,
+    }
+
+    -- 1. Scan from live SkillDisplay (Active Class/Player Skills)
+    pcall(function()
+        local skillDisplay = pgui and pgui:FindFirstChild("SkillDisplay")
+        if skillDisplay then
+            local skillsFolder = skillDisplay:FindFirstChild("Skills", true)
+            if skillsFolder then
+                for _, c in ipairs(skillsFolder:GetChildren()) do
+                    if (c:IsA("TextButton") or c:IsA("GuiButton") or c:IsA("TextLabel")) and not blacklist[c.Name] then
+                        local name = c:IsA("TextButton") and c.Text or c.Name
+                        if #name > 1 and not blacklist[name] then
+                            if summonOnlyMoves[name] then
+                                skillSet[string.format("[Summon] %s", name)] = true
+                            else
+                                skillSet[name] = true
+                                HubState.knownPlayerSkills[name] = true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 2. Scan from in-combat AttacksPage
+    pcall(function()
+        local combatGui = pgui and pgui:FindFirstChild("Combat")
+        local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
+        local atkPage = actionBG and actionBG:FindFirstChild("AttacksPage")
+        local attackFrame = atkPage and atkPage:FindFirstChild("Attack")
+        local scrollFrame = attackFrame and attackFrame:FindFirstChild("ScrollingFrame")
+        if scrollFrame then
+            for _, btn in ipairs(scrollFrame:GetChildren()) do
+                if (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) and not blacklist[btn.Name] then
+                    local label = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
+                    local sName = (label and label.Text ~= "" and label.Text) or btn.Name
+                    if #sName > 1 and not blacklist[sName] then
+                        if summonOnlyMoves[sName] then
+                            skillSet[string.format("[Summon] %s", sName)] = true
+                        else
+                            skillSet[sName] = true
+                            HubState.knownPlayerSkills[sName] = true
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 3. Dynamic Summon Skills Integration (ONLY if summon spells are learned by this character)
+    local summonSpells = {
+        ["Call Skeleton"] = {"Smack", "Bone Spray", "Self Destruct"},
+        ["Raise Dead"] = {"Rotten Swipe", "Shriek", "Double Slam", "Smack"},
+        ["Call Sylph"] = {"Sylph's Prayer", "Light Bolt", "Gale Uplift"},
+    }
+    for spellName, moves in pairs(summonSpells) do
+        if skillSet[spellName] then
+            for _, move in ipairs(moves) do
+                skillSet[string.format("[Summon] %s", move)] = true
+            end
+        end
+    end
+
+    -- Clean up any bare summon moves that might have leaked into skillSet without [Summon] prefix
+    for sMove in pairs(summonOnlyMoves) do
+        if skillSet[sMove] and not HubState.knownPlayerSkills[sMove] then
+            skillSet[sMove] = nil
+        end
+    end
+
+    -- Always include basic attack
+    skillSet["Strike"] = true
+
+    local list = {}
+    for name in pairs(skillSet) do
+        table.insert(list, name)
+    end
+    table.sort(list)
+    return list
+end
+
+-- =============================================================================
+-- AUTO FIGHT ENGINE (STANDALONE COMBAT TURN & SKILL EXECUTOR)
+-- =============================================================================
+
+-- auto stop moi instance AutoYarthul cu is chay underground before khi khoi tao instance moi
+if shared.AutoYarthulInstance then
+    pcall(function() shared.AutoYarthulInstance.stop(true) end)
+    shared.AutoYarthulInstance = nil
+end
+
+-- =============================================================================
+-- AUTO BOSS FARM ENGINE: YAR'THUL, THE BLAZING DRAGON (MOUNT THUL)
+-- =============================================================================
 local AutoYarthul = {
     running = false,
     thread = nil,
@@ -7470,24 +8372,7 @@ local function handleDodgeQTE(dodgeQTE)
     local blockZone = inset:FindFirstChild("Block")
     if not indicator or not indicator.Visible then return end
 
-    local isBlatant = Options.QTEMode and Options.QTEMode.Value == "Blatant"
-    if isBlatant then
-        local now = os.clock()
-        if now - AutoQTE.lastDodgeHit > 0.15 then
-            AutoQTE.lastDodgeHit = now
-            singleClick(stopBtn)
-            pcall(function()
-                local RS = game:GetService("ReplicatedStorage")
-                local dRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Fight") and RS.Remotes.Fight:FindFirstChild("DodgeMiniGame")
-                if dRemote and dRemote:IsA("RemoteEvent") then
-                    dRemote:FireServer("Dodge")
-                end
-            end)
-        end
-        return
-    end
-
-    local targetZone = (dodgeZone and dodgeZone.Visible) and dodgeZone or blockZone
+    local targetZone = (Toggles.PreferPerfectDodge and Toggles.PreferPerfectDodge.Value and dodgeZone and dodgeZone.Visible) and dodgeZone or blockZone
     if not targetZone then return end
 
     local indLeft = indicator.AbsolutePosition.X
@@ -7522,10 +8407,10 @@ local function handleSwordQTE(swordQTE)
     local window = inset:FindFirstChild("Window")
     if not window or not window.Visible then return end
 
-    -- Tim Indicator is hoat dong theo stats tuan tu cua game (1, 2, 3, 4...)
+    -- Tìm Indicator đang hoạt động theo chỉ số tuần tự của game (1, 2, 3, 4...)
     local targetInd = inset:FindFirstChild(tostring(AutoQTE.currentSwordIndex))
     if not targetInd or not targetInd.Visible or AutoQTE.swordHitTable[targetInd] then
-        -- Fallback: Tim indicator co stats nho nhat not yet bam va is hien thi
+        -- Fallback: Tìm indicator có chỉ số nhỏ nhất chưa bấm và đang hiển thị
         local lowestIdx = math.huge
         targetInd = nil
         for _, child in ipairs(inset:GetChildren()) do
@@ -7551,7 +8436,7 @@ local function handleSwordQTE(swordQTE)
     local winWidth = window.AbsoluteSize.X
     local winRight = winLeft + winWidth
 
-    -- Tinh toan vung center trung chuan (Sweet Spot) safely ben trong Window
+    -- Tính toán vùng tâm trúng chuẩn (Sweet Spot) an toàn bên trong Window
     local sweetSpotMin = winLeft + (winWidth * 0.25)
     local sweetSpotMax = winRight - (winWidth * 0.15)
 
@@ -7562,23 +8447,16 @@ local function handleSwordQTE(swordQTE)
         end)
     end
 
-    local isBlatant = Options.QTEMode and Options.QTEMode.Value == "Blatant"
-    if isBlatant or (indCenter >= sweetSpotMin and indCenter <= sweetSpotMax) or (isColliding and indLeft >= winLeft and indRight <= winRight + 5) then
+    -- Chỉ bấm khi Indicator đã thực sự tiến vào vùng tâm của Window (Tránh bấm sớm ở các super class như Berserker)
+    if (indCenter >= sweetSpotMin and indCenter <= sweetSpotMax) or (isColliding and indLeft >= winLeft and indRight <= winRight + 5) then
         AutoQTE.lastSwordHit = os.clock()
         AutoQTE.swordHitTable[targetInd] = true
         AutoQTE.currentSwordIndex = AutoQTE.currentSwordIndex + 1
 
-        local delayMs = (not isBlatant and Options.ReactionDelayMs and Options.ReactionDelayMs.Value) or 0
+        local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
         if delayMs > 0 then task.wait(delayMs / 1000) end
 
         singleClick(stopBtn)
-        if isBlatant then
-            pcall(function()
-                local RS = game:GetService("ReplicatedStorage")
-                local sRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Fight") and RS.Remotes.Fight:FindFirstChild("SwordQTE")
-                if sRemote and sRemote:IsA("RemoteEvent") then sRemote:FireServer(true) end
-            end)
-        end
     end
 end
 
@@ -7611,19 +8489,11 @@ local function handleDaggerQTE(daggerQTE)
             local arcSize = DaggerArcSizes[arcIndex] or 25
             local maxTolerance = (arcSize * 0.5) * 0.85
 
-            local isBlatant = Options.QTEMode and Options.QTEMode.Value == "Blatant"
-            if isBlatant or math.abs(diff) <= maxTolerance then
+            if math.abs(diff) <= maxTolerance then
                 AutoQTE.hitWeakpoints[wp] = true
-                local delayMs = (not isBlatant and Options.ReactionDelayMs and Options.ReactionDelayMs.Value) or 0
+                local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
                 if delayMs > 0 then task.wait(delayMs / 1000) end
                 if stopBtn then singleClick(stopBtn) else pressKey(Enum.KeyCode.Space) end
-                if isBlatant then
-                    pcall(function()
-                        local RS = game:GetService("ReplicatedStorage")
-                        local dRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Fight") and RS.Remotes.Fight:FindFirstChild("DaggerQTE")
-                        if dRemote and dRemote:IsA("RemoteEvent") then dRemote:FireServer(true) end
-                    end)
-                end
                 break
             end
         end
@@ -7689,8 +8559,8 @@ local function handleAxeQTE(axeQTE)
     local targetWidth = threshold.AbsoluteSize.X / gaugeWidth
     local currentFill = fill.AbsoluteSize.X / gaugeWidth
 
-    -- points activate safely: Chi bam khi thanh tuot xuong under day hoac dropped vao 15% phan under cua vung Threshold
-    -- Giup ngan chan tuyet doi viec nhay lo (overshoot) o cac do kho cao khi vung Threshold bi thu hep
+    -- Điểm kích hoạt an toàn: Chỉ bấm khi thanh tuột xuống dưới đáy hoặc rơi vào 15% phần dưới của vùng Threshold
+    -- Giúp ngăn chặn tuyệt đối việc nhảy lố (overshoot) ở các độ khó cao khi vùng Threshold bị thu hẹp
     local targetBottomSafeZone = targetStart + (targetWidth * 0.15)
 
     if currentFill <= targetBottomSafeZone then
@@ -7730,7 +8600,7 @@ local function handleMagicQTE(magicQTE)
         if rune:IsA("GuiObject") and rune.Visible and rune.Name ~= "Slotted" and rune.ImageTransparency < 0.9 and not AutoQTE.magicSlottedTable[rune] then
             local runeName = rune.Name
 
-            -- Tim o Slot muc tieu tuong ung not yet duoc su dung trong round nay
+            -- Tìm ô Slot mục tiêu tương ứng chưa được sử dụng trong round này
             local matchingSlot = nil
             for _, slot in ipairs(slotChildren) do
                 if slot:IsA("GuiObject") and slot.Name == runeName and slot.Name ~= "Slotted" and not usedSlots[slot] then
@@ -7748,7 +8618,7 @@ local function handleMagicQTE(magicQTE)
 
                     local slotted = false
 
-                    -- Phuong phap 1: Native Closure Injection truc tiep vao closure InputEnded
+                    -- Phương pháp 1: Native Closure Injection trực tiếp vào closure InputEnded
                     if getconns and setuv then
                         local conns = getconns(rune.InputEnded)
                         if conns and #conns > 0 then
@@ -7772,7 +8642,7 @@ local function handleMagicQTE(magicQTE)
                         end
                     end
 
-                    -- Cap nhat truc quan va phat am thanh slot
+                    -- Cập nhật trực quan và phát âm thanh slot
                     rune.Name = "Slotted"
                     rune.ImageTransparency = 1
                     rune.Visible = false
@@ -7783,7 +8653,7 @@ local function handleMagicQTE(magicQTE)
                         pcall(function() magicQTE.RuneSlotIn:Play() end)
                     end
 
-                    -- Phuong phap 2: Fallback chuot simulate neu closure not available
+                    -- Phương pháp 2: Fallback chuột giả lập nếu closure không khả dụng
                     if not slotted then
                         local runePos = rune.AbsolutePosition + (rune.AbsoluteSize / 2)
                         local slotPos = matchingSlot.AbsolutePosition + (matchingSlot.AbsoluteSize / 2)
@@ -7865,9 +8735,8 @@ end
 
 -- 7. SPEAR QTE (INSTANT NATIVE CLOSURE RESOLVER FOR TAPS, LINES & CURVES)
 
--- 9. YAR'THUL METEOR QTE (EXACT ORIGINAL GIST ARENA SHIFT ENGINE)
 local function handleYarthulQTE(yarthulQTE)
-    if not isQTEActive("Yarthul") or not yarthulQTE or not yarthulQTE.Visible then return end
+    if not yarthulQTE or not yarthulQTE.Visible then return end
     pcall(function()
         local gameFrame = yarthulQTE:FindFirstChild("Game")
         local arena = gameFrame and gameFrame:FindFirstChild("Arena")
@@ -7910,7 +8779,7 @@ local function handleSpearQTE(spearQTE)
 
                     local resolved = false
 
-                    -- Phuong phap 1: Native Closure Resolution (Giai truc tiep Tap, Line slider va Curve slider)
+                    -- Phương pháp 1: Native Closure Resolution (Giải trực tiếp Tap, Line slider và Curve slider)
                     if getconns and getuvs then
                         local connsAct = getconns(btn.Activated)
                         local connsBeg = getconns(btn.InputBegan)
@@ -7950,7 +8819,7 @@ local function handleSpearQTE(spearQTE)
                         end
                     end
 
-                    -- Phuong phap 2: Hardware & Software Signal Fallback
+                    -- Phương pháp 2: Hardware & Software Signal Fallback
                     if not resolved then
                         local btnCenterX = btn.AbsolutePosition.X + btn.AbsoluteSize.X / 2
                         local btnCenterY = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y / 2
@@ -8060,6 +8929,7 @@ end))
 -- =============================================================================
 -- MOVEMENT CONTROLLER (FLY, NOCLIP, SPEEDHACK, CFRAME SPEED, INFINITE JUMP)
 -- =============================================================================
+
 local Movement = {
     flyBodyVelocity = nil,
 }
@@ -8765,20 +9635,14 @@ local StatsGroup = Tabs.AutoFarm:AddRightGroupbox("Auto Stats Build & Cache")
 -- -----------------------------------------------------------------------------
 -- SUB-GROUP: AUTO BOSS YAR'THUL (THE BLAZING DRAGON)
 -- -----------------------------------------------------------------------------
-local YarthulGroup = Tabs.AutoFarm:AddRightGroupbox("Auto Boss: Yar'thul (Blazing Dragon)")
+local YarthulGroup = Tabs.AutoFarm:AddRightGroupbox("🐉 Auto Boss: Yar'thul (Blazing Dragon)")
 
 YarthulGroup:AddToggle("AutoFarmYarthul", {
     Text = "Enable Auto Farm & Retry Yar'thul",
     Default = false,
-    Tooltip = "auto test vi tri Spawn trong Instance -> Tween toi gate Boss de Begin Fight -> auto danh theo chien thuat chuan (Uu tien 1: Sense Expansion xen ke dut khoat not Meditate -> Uu tien 2: Carnage khi E>=3 & Carnage has hoi CD & not co Flame Pillar dut khoat not Meditate -> Uu tien 3: Strike kem Meditate Sub-Action de load Energy) -> auto collect do, Hook SetCore Callback auto Accept vao Roll Pool (0ms) & auto quet toan bo Drop moi vao inventory -> auto Retry lap again vo tan",
+    Tooltip = "Tự động kiểm tra vị trí Spawn trong Instance -> Tween tới Cổng Boss để Begin Fight -> Tự động đánh theo chiến thuật chuẩn (Ưu tiên 1: Sense Expansion xen kẽ dứt khoát không Meditate -> Ưu tiên 2: Carnage khi E>=3 & Carnage đã hồi CD & không có Flame Pillar dứt khoát không Meditate -> Ưu tiên 3: Strike kèm Meditate Sub-Action để nạp Energy) -> Tự động nhặt đồ, Hook SetCore Callback tự động Accept vào Roll Pool (0ms) & Tự động quét toàn bộ Drop mới vào kho đồ -> Tự động Retry lặp lại vô tận",
     Callback = function(Value)
         if Value then
-            if Toggles.AutoFight and not Toggles.AutoFight.Value then
-                Toggles.AutoFight:SetValue(true)
-            end
-            if Options.SelectedCombatAction then
-                Options.SelectedCombatAction:SetValue("Auto Smart (Best Skill -> Strike)")
-            end
             AutoYarthul.start()
         else
             if not AutoYarthul.isRestoring then
@@ -8788,18 +9652,18 @@ YarthulGroup:AddToggle("AutoFarmYarthul", {
     end
 })
 
-YarthulGroup:AddLabel(" Strat: Sense (Alternating) > Carnage > Strike + Med")
+YarthulGroup:AddLabel("📜 Strat: Sense (Alternating) > Carnage > Strike + Med")
 
 YarthulGroup:AddToggle("YarthulMeditateSubAction", {
     Text = "Use Meditate Sub-Action on Strike",
-    Default = false,
-    Tooltip = "auto activate Sub-Action Meditate kem after don Strike de load nhanh Energy (Carnage va Sense Expansion duoc tung don dut khoat not kem Meditate de tranh ket thuc turn som hoac trung Flame Pillar)",
+    Default = true,
+    Tooltip = "Tự động kích hoạt Sub-Action Meditate kèm sau đòn Strike để nạp nhanh Energy (Carnage và Sense Expansion được tung đòn dứt khoát KHÔNG kèm Meditate để tránh kết thúc lượt sớm hoặc trúng Flame Pillar)",
 })
 
 YarthulGroup:AddToggle("YarthulAutoLoot", {
     Text = "Auto Loot & Roll Pool (Direct Hook)",
-    Default = false,
-    Tooltip = "auto Hook SetCore Notification Callback de Accept tuc thi vao Roll Pool khi dropped Artifact, hoan toan not chiem chuot cua player",
+    Default = true,
+    Tooltip = "Tự động Hook SetCore Notification Callback để Accept tức thì vào Roll Pool khi rơi Artifact, hoàn toàn không chiếm chuột của người chơi",
 })
 
 YarthulGroup:AddSlider("YarthulTweenSpeed", {
@@ -8808,18 +9672,47 @@ YarthulGroup:AddSlider("YarthulTweenSpeed", {
     Min = 120,
     Max = 350,
     Rounding = 0,
-    Tooltip = "speed fly Sky-Tween toi gate Mount Thul (mac dinh 220 studs/s)",
+    Tooltip = "Tốc độ bay Sky-Tween tới cổng Mount Thul (mặc định 220 studs/s)",
+})
+
+YarthulGroup:AddToggle("YarthulSendWebhook", {
+    Text = "Enable Discord Webhook",
+    Default = true,
+    Tooltip = "Tự động gửi thông báo Discord Embed chi tiết danh sách tất cả vật phẩm rơi (Loot Drops) nhận được vào kho đồ sau khi diệt Boss Yar'thul",
+})
+
+YarthulGroup:AddInput("YarthulWebhook", {
+    Default = "",
+    Numeric = false,
+    Finished = false,
+    Text = "Discord Webhook URL",
+    Tooltip = "Dán link Discord Webhook URL của bạn vào đây để nhận thông báo realtime",
+    Placeholder = "https://discord.com/api/webhooks/...",
 })
 
 YarthulGroup:AddButton({
-    Text = "Tween to Mount Thul Door Now",
+    Text = "🧪 Test Yar'thul Webhook Now",
+    Func = function()
+        AutoYarthul.sendWebhook("Test")
+    end
+})
+
+YarthulGroup:AddButton({
+    Text = "🐉 Tween to Mount Thul Door Now",
     Func = function()
         teleportToLocation(AutoYarthul.gatePosition)
     end
 })
 
 YarthulGroup:AddButton({
-    Text = "Stop Auto Farm Yar'thul",
+    Text = "🔍 Check Current Place & Instance ID",
+    Func = function()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/Check_Place_Info.lua?t=" .. tick()))()
+    end
+})
+
+YarthulGroup:AddButton({
+    Text = "🛑 Stop Auto Farm Yar'thul",
     Func = function()
         AutoYarthul.stop(true)
         if Toggles.AutoFarmYarthul then
@@ -9128,21 +10021,46 @@ HopGroup:AddButton({
 -- -----------------------------------------------------------------------------
 -- TAB 2: AUTO COMBAT & AUTO FIGHT
 -- -----------------------------------------------------------------------------
-local CombatGroup = Tabs.AutoQTE:AddLeftGroupbox("Auto Combat & Minigames QTE")
-local FightGroup  = Tabs.AutoQTE:AddRightGroupbox("Auto Fight & Skill Priority")
+local CombatGroup = Tabs.Combat:AddLeftGroupbox("⚡ Auto Combat & Minigames QTE")
+local FightGroup  = Tabs.Combat:AddRightGroupbox("⚔️ Auto Fight & Skill Priority")
 
 CombatGroup:AddToggle("MasterQTE", {
     Text = "Enable Auto Combat QTE",
-    Default = false,
-    Tooltip = "Automatically solve all combat QTEs (Dodge, Sword, Dagger, Hammer, Axe, Magic, Fist, Spear, Lockpick, Yar'thul Meteor QTE, Thorian QTE) with 100% Perfect Dodge",
+    Default = true,
+    Tooltip = "Tự động giải và hoàn thành toàn bộ QTE khi chiến đấu / mở rương",
 })
 
-CombatGroup:AddDropdown("QTEMode", {
-    Values = { "Legit", "Blatant" },
-    Default = 1,
-    Multi = false,
-    Text = "QTE Completion Mode",
-    Tooltip = "• Legit: Human-like smooth precision timing and pixel tracking\n• Blatant: Instant remote packet execution completing minigames in 0ms",
+CombatGroup:AddDropdown("EnabledQTEList", {
+    Values = {
+        "Auto Dodge / Block",
+        "Sword (Window Strike)",
+        "Dagger (Weakpoints)",
+        "Hammer (Power Bar)",
+        "Axe (Equilibrium)",
+        "Staff / Magic (Rune Matching)",
+        "Fist / Cestus (Combos)",
+        "Spear (Taps, Lines & Curves)",
+        "Chest Lockpick"
+    },
+    Default = {
+        "Auto Dodge / Block",
+        "Sword (Window Strike)",
+        "Dagger (Weakpoints)",
+        "Hammer (Power Bar)",
+        "Axe (Equilibrium)",
+        "Staff / Magic (Rune Matching)",
+        "Fist / Cestus (Combos)",
+        "Spear (Taps, Lines & Curves)",
+        "Chest Lockpick"
+    },
+    Multi = true,
+    Text = "Active QTE Minigames",
+})
+
+CombatGroup:AddToggle("PreferPerfectDodge", {
+    Text = "Prefer Perfect Dodge (100% Invuln)",
+    Default = true,
+    Tooltip = "Ưu tiên canh chuẩn ô Dodge (Né hoàn hảo 100% không mất máu), dự phòng Block",
 })
 
 CombatGroup:AddSlider("ReactionDelayMs", {
@@ -9151,13 +10069,13 @@ CombatGroup:AddSlider("ReactionDelayMs", {
     Min = 0,
     Max = 150,
     Rounding = 0,
-    Tooltip = "Reaction delay for Legit mode (0 = instant response)",
+    Tooltip = "Độ trễ mô phỏng phản xạ người chơi (0 = chuẩn xác tức thì)",
 })
 
 FightGroup:AddToggle("AutoFight", {
     Text = "Enable Auto Fight (Auto Attack)",
     Default = false,
-    Tooltip = "auto tung skill / danh thuong / thien khi den turn trong battle. Hoat dong doc lap (not can bat Auto Farm Level).",
+    Tooltip = "Tự động tung chiêu / đánh thường / thiền khi đến lượt trong trận đấu. Hoạt động độc lập (không cần bật Auto Farm Level).",
     Callback = function(Value)
         if Value then AutoFight.start() else AutoFight.stop() end
     end
@@ -9172,7 +10090,7 @@ FightGroup:AddDropdown("SelectedCombatAction", {
     Default = 1,
     Multi = false,
     Text = "Combat Attack / Skill Action",
-    Tooltip = "Lua select mode tung skill khi den turn:\n• Strike: Basic Attack\n• Auto Smart: Tu select skill manh nhat\n• Custom Skill: Uu tien theo 4 slot ben under",
+    Tooltip = "Lựa chọn chế độ tung chiêu khi đến lượt:\n• Strike: Đánh thường\n• Auto Smart: Tự chọn chiêu mạnh nhất\n• Custom Skill: Ưu tiên theo 4 slot bên dưới",
 })
 
 local customSkillUIElements = {}
@@ -9189,7 +10107,7 @@ end
 recordCustomSkillElement(function()
     return FightGroup:AddButton({
         Text = "🔄 Scan / Refresh My Skills",
-        Tooltip = "Quet again list skill thuc is gear tu interface UI cua ban",
+        Tooltip = "Quét lại danh sách chiêu thức đang trang bị từ giao diện UI của bạn",
         Func = function()
             local skills = scanPlayerSkills()
             table.insert(skills, 1, "None")
@@ -9197,7 +10115,7 @@ recordCustomSkillElement(function()
             if Options.CustomSkillSlot2 then Options.CustomSkillSlot2:SetValues(skills) end
             if Options.CustomSkillSlot3 then Options.CustomSkillSlot3:SetValues(skills) end
             if Options.CustomSkillSlot4 then Options.CustomSkillSlot4:SetValues(skills) end
-            Library:Notify(string.format(" has quet thay %d skill thuc!", #skills - 1), 3)
+            Library:Notify(string.format("✅ Đã quét thấy %d chiêu thức!", #skills - 1), 3)
         end
     })
 end)
@@ -9210,8 +10128,8 @@ recordCustomSkillElement(function()
         Values = initialSkills,
         Default = #initialSkills > 1 and 2 or 1,
         Multi = false,
-        Text = "Priority 1 (Uu tien cao nhat)",
-        Tooltip = "skill thuc duoc uu tien tung ra dau tien khi ready",
+        Text = "Priority 1 (Ưu tiên cao nhất)",
+        Tooltip = "Chiêu thức được ưu tiên tung ra đầu tiên khi sẵn sàng",
     })
 end)
 
@@ -9221,7 +10139,7 @@ recordCustomSkillElement(function()
         Default = 1,
         Multi = false,
         Text = "Priority 2",
-        Tooltip = "skill thuc duoc su dung neu Priority 1 is hoi skill (CD)",
+        Tooltip = "Chiêu thức được sử dụng nếu Priority 1 đang hồi chiêu (CD)",
     })
 end)
 
@@ -9231,7 +10149,7 @@ recordCustomSkillElement(function()
         Default = 1,
         Multi = false,
         Text = "Priority 3",
-        Tooltip = "skill thuc duoc su dung neu Priority 1 & 2 is hoi skill",
+        Tooltip = "Chiêu thức được sử dụng nếu Priority 1 & 2 đang hồi chiêu",
     })
 end)
 
@@ -9241,15 +10159,15 @@ recordCustomSkillElement(function()
         Default = 1,
         Multi = false,
         Text = "Priority 4",
-        Tooltip = "skill thuc du phong cuoi cung",
+        Tooltip = "Chiêu thức dự phòng cuối cùng",
     })
 end)
 
 recordCustomSkillElement(function()
     return FightGroup:AddToggle("AutoMeditateInCombat", {
-        Text = "Auto Meditate if Cannot Use Skill",
+        Text = "🧘 Auto Meditate if Cannot Use Skill",
         Default = false,
-        Tooltip = "BAT: Neu toan bo skill uu tien is hoi skill hoac missing Energy/Stamina -> auto select Meditate de hoi the luc / mana. TAT: auto fallback ve danh thuong (Strike).",
+        Tooltip = "BẬT: Nếu toàn bộ skill ưu tiên đang hồi chiêu hoặc thiếu Energy/Stamina -> Tự động chọn Meditate để hồi thể lực / mana. TẮT: Tự động fallback về đánh thường (Strike).",
     })
 end)
 
@@ -9286,7 +10204,7 @@ FightGroup:AddDropdown("CombatExecutionMode", {
     Default = 1,
     Multi = false,
     Text = "Combat Execution Method",
-    Tooltip = "• Direct Remote: Bo qua interface UI, gui truc tiep Remote packet toi Server trong 0ms va support Sub-actions.\n• UI Emulation: simulate thao tac click chuot tren interface nhu player real.",
+    Tooltip = "• Direct Remote: Bỏ qua giao diện UI, gửi trực tiếp Remote packet tới Server trong 0ms và hỗ trợ Sub-actions.\n• UI Emulation: Giả lập thao tác click chuột trên giao diện như người chơi thật.",
 })
 
 FightGroup:AddDropdown("CombatSubAction", {
@@ -9297,8 +10215,8 @@ FightGroup:AddDropdown("CombatSubAction", {
     },
     Default = 2,
     Multi = false,
-    Text = "Sub-Action (Same-Turn Action)",
-    Tooltip = "Gui them hanh dong phu (Hoi Energy hoac Bat thu) now trong cung 1 turn danh chinh!",
+    Text = "⚡ Sub-Action (Same-Turn Action)",
+    Tooltip = "Gửi thêm hành động phụ (Hồi Energy hoặc Bật thủ) ngay trong cùng 1 lượt đánh chính!",
 })
 
 FightGroup:AddSlider("CombatDelay", {
@@ -9307,10 +10225,11 @@ FightGroup:AddSlider("CombatDelay", {
     Min = 0.0,
     Max = 2.0,
     Rounding = 2,
-    Tooltip = "Do tre phan xa before khi ra skill (0.0s = tuc thi 0ms, 0.05s = muot ma)",
+    Tooltip = "Độ trễ phản xạ trước khi ra chiêu (0.0s = tức thì 0ms, 0.05s = mượt mà)",
 })
 
 -- -----------------------------------------------------------------------------
+
 -- TAB 3: MOVEMENT CONTROLLER (WITH FULL KEYBIND PICKERS)
 -- -----------------------------------------------------------------------------
 local FlyGroup = Tabs.Movement:AddLeftGroupbox("Flight & NoClip")
