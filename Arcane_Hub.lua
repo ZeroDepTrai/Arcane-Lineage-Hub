@@ -104,39 +104,89 @@ local HttpRequest = (syn and syn.request) or (http and http.request) or http_req
 
 local function getQueuePayload()
     return [=[
+local genv = (getgenv and getgenv()) or _G
+local now = os.clock()
+if genv._ArcaneHubTeleportQueuedExec and (now - genv._ArcaneHubTeleportQueuedExec < 5) then
+    return
+end
+genv._ArcaneHubTeleportQueuedExec = now
+
 task.spawn(function()
+    local startWait = os.clock()
+    if not game:IsLoaded() then
+        pcall(function() game.Loaded:Wait() end)
+    end
+    while not game:IsLoaded() and (os.clock() - startWait < 15) do
+        task.wait(0.2)
+    end
+
+    local players = game:GetService("Players")
+    local playerWait = os.clock()
+    while not players.LocalPlayer and (os.clock() - playerWait < 15) do
+        task.wait(0.2)
+    end
+
     task.wait(1.5)
-    local genv = (getgenv and getgenv()) or _G
+
     if genv._ArcaneHubRunning or (shared and shared.ArcaneHub) then
         return
     end
 
     local executed = false
-    -- 1. Try loading from executor local script
+
+    -- 1. Ưu tiên nạp từ local script của executor
     local fileCandidates = {
         "Arcane_Hub.lua",
         "Arcane_Hub.luau",
         "scripts/Arcane_Hub.lua",
-        "scripts/Arcane_Hub.luau",
+        "scripts/Arcane_Hub.luau"
     }
+
     for _, path in ipairs(fileCandidates) do
-        if not executed and readfile and isfile and isfile(path) then
+        if not executed and loadfile then
+            local ok, fn = pcall(loadfile, path)
+            if ok and type(fn) == "function" then
+                local runOk, err = pcall(fn)
+                if runOk then
+                    executed = true
+                    break
+                end
+            end
+        end
+        if not executed and readfile then
             local ok, src = pcall(readfile, path)
             if ok and type(src) == "string" and #src > 100 then
                 local loadOk, fn = pcall(loadstring, src)
                 if loadOk and type(fn) == "function" then
                     local runOk, err = pcall(fn)
-                    if runOk then executed = true; break end
+                    if runOk then
+                        executed = true
+                        break
+                    end
                 end
             end
         end
     end
 
-    -- 2. Master GitHub Loader
+    -- 2. Fallback tải trực tiếp từ GitHub / Gist
     if not executed then
-        pcall(function()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/Arcane_Hub.lua"))()
-        end)
+        local remoteUrls = {
+            "https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/Arcane_Hub.lua",
+            "https://gist.githubusercontent.com/ZeroDepTrai/c81661682d9297b3f8130a53bc900df8/raw/Arcane_Hub.lua"
+        }
+        for _, url in ipairs(remoteUrls) do
+            local ok, code = pcall(function() return game:HttpGet(url) end)
+            if ok and type(code) == "string" and #code > 100 then
+                local loadOk, fn = pcall(loadstring, code)
+                if loadOk and type(fn) == "function" then
+                    local runOk, err = pcall(fn)
+                    if runOk then
+                        executed = true
+                        break
+                    end
+                end
+            end
+        end
     end
 end)
 ]=]
@@ -2106,8 +2156,9 @@ function AutoYarthul.sendWebhook(eventType, extraData)
     end)
 end
 
--- 6. DIRECT HOOK ENGINE: TỰ ĐỘNG CHẤP NHẬN LOOT POOL / ITEM DROP (SAFE & NON-INTRUSIVE)
+-- 6. DIRECT HOOK ENGINE: TỰ ĐỘNG CHẤP NHẬN LOOT POOL / ITEM DROP BẰNG METAMETHOD VÀ CALLBACK TRỰC TIẾP
 function AutoYarthul.hookLootRemote()
+    -- Hook StarterGui:SetCore("SendNotification") qua hookmetamethod (__namecall)
     pcall(function()
         if not shared.ArcaneSetCoreHookInstalled and hookmetamethod then
             shared.ArcaneSetCoreHookInstalled = true
@@ -2119,28 +2170,18 @@ function AutoYarthul.hookLootRemote()
                     local coreData = args[2]
                     local title = tostring(coreData.Title or "")
                     local text = tostring(coreData.Text or "")
-                    local combined = (title .. " " .. text):lower()
-                    
-                    if combined:find("item") or combined:find("drop") or combined:find("roll") or combined:find("dice") or combined:find("artifact") then
-                        print(string.format("[AutoLoot Hook] ⚡ Bắt được Notification rơi đồ: '%s' ('%s') -> Auto Accept!", title, text))
+                    if title:lower():find("item") or title:lower():find("drop") or text:lower():find("dropped") or text:lower():find("roll") or text:lower():find("dice") then
+                        print(string.format("[AutoLoot Hook] ⚡ Bắt được SetCore Notification '%s' -> Tự động kích hoạt Callback 'Accept' trực tiếp (0ms)!", title))
                         if AutoYarthul and AutoYarthul.running then
                             AutoYarthul.updateHUD("🎁 Đã Accept vào Loot Roll Pool (0ms)!")
-                            if Library and Library.Notify then
-                                Library:Notify("🎁 Auto Accepted Loot Roll Pool!", 4)
-                            end
-                            pcall(function()
-                                AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
-                            end)
+                            Library:Notify("🎁 Auto Accepted Loot Roll Pool!", 4)
+                            AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
                         end
                         if coreData.Callback then
                             task.spawn(function()
                                 pcall(function()
-                                    if typeof(coreData.Callback) == "Instance" then
-                                        if coreData.Callback:IsA("BindableFunction") then
-                                            coreData.Callback:Invoke("Accept")
-                                        elseif coreData.Callback:IsA("BindableEvent") then
-                                            coreData.Callback:Fire("Accept")
-                                        end
+                                    if typeof(coreData.Callback) == "Instance" and coreData.Callback:IsA("BindableFunction") then
+                                        coreData.Callback:Fire("Accept")
                                     elseif typeof(coreData.Callback) == "function" then
                                         coreData.Callback("Accept")
                                     end
@@ -2151,7 +2192,7 @@ function AutoYarthul.hookLootRemote()
                 end
                 return oldNamecall(self, ...)
             end)
-            print("[AutoLoot] ⚡ Đã cài đặt Safe Hook SetCore SendNotification thành công!")
+            print("[AutoLoot] ⚡ Đã cài đặt Hook SetCore SendNotification thành công!")
         end
     end)
 
@@ -2164,7 +2205,7 @@ function AutoYarthul.hookLootRemote()
             AutoYarthul.refightConn = refightRemote.OnClientEvent:Connect(function(action, data)
                 if AutoYarthul.running and AutoYarthul.isInsideInstance() then
                     if action == "OpenGui" and type(data) == "table" and data.BattleID then
-                        print(string.format("[AutoRefight Remote] 🐉 Nhận OpenGui (BattleID: %s) -> Gửi Remote Accept tức thì!", tostring(data.BattleID)))
+                        print(string.format("[AutoRefight Remote] 🐉 [RefightBoss Remote] Nhận OpenGui (BattleID: %s) -> Gửi Remote Accept tức thì!", tostring(data.BattleID)))
                         task.wait(0.2)
                         pcall(function()
                             refightRemote:FireServer(data.BattleID, "Accept")
@@ -2177,8 +2218,6 @@ function AutoYarthul.hookLootRemote()
         end
     end)
 end
-
-AutoYarthul.hookLootRemote()
 
 -- 7. Kiểm tra xem bảng Refight đã xuất hiện VÀ THỰC SỰ ĐANG HIỆN TRÊN MÀN HÌNH (Main.Visible == true)
 function AutoYarthul.isRefightActive()

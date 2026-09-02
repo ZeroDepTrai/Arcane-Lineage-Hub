@@ -104,39 +104,89 @@ local HttpRequest = (syn and syn.request) or (http and http.request) or http_req
 
 local function getQueuePayload()
     return [=[
+local genv = (getgenv and getgenv()) or _G
+local now = os.clock()
+if genv._ArcaneHubTeleportQueuedExec and (now - genv._ArcaneHubTeleportQueuedExec < 5) then
+    return
+end
+genv._ArcaneHubTeleportQueuedExec = now
+
 task.spawn(function()
+    local startWait = os.clock()
+    if not game:IsLoaded() then
+        pcall(function() game.Loaded:Wait() end)
+    end
+    while not game:IsLoaded() and (os.clock() - startWait < 15) do
+        task.wait(0.2)
+    end
+
+    local players = game:GetService("Players")
+    local playerWait = os.clock()
+    while not players.LocalPlayer and (os.clock() - playerWait < 15) do
+        task.wait(0.2)
+    end
+
     task.wait(1.5)
-    local genv = (getgenv and getgenv()) or _G
+
     if genv._ArcaneHubRunning or (shared and shared.ArcaneHub) then
         return
     end
 
     local executed = false
-    -- 1. Try loading from executor local script
+
+    -- 1. Ưu tiên nạp từ local script của executor
     local fileCandidates = {
         "Arcane_Hub.lua",
         "Arcane_Hub.luau",
         "scripts/Arcane_Hub.lua",
-        "scripts/Arcane_Hub.luau",
+        "scripts/Arcane_Hub.luau"
     }
+
     for _, path in ipairs(fileCandidates) do
-        if not executed and readfile and isfile and isfile(path) then
+        if not executed and loadfile then
+            local ok, fn = pcall(loadfile, path)
+            if ok and type(fn) == "function" then
+                local runOk, err = pcall(fn)
+                if runOk then
+                    executed = true
+                    break
+                end
+            end
+        end
+        if not executed and readfile then
             local ok, src = pcall(readfile, path)
             if ok and type(src) == "string" and #src > 100 then
                 local loadOk, fn = pcall(loadstring, src)
                 if loadOk and type(fn) == "function" then
                     local runOk, err = pcall(fn)
-                    if runOk then executed = true; break end
+                    if runOk then
+                        executed = true
+                        break
+                    end
                 end
             end
         end
     end
 
-    -- 2. Master GitHub Loader
+    -- 2. Fallback tải trực tiếp từ GitHub / Gist
     if not executed then
-        pcall(function()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/Arcane_Hub.lua"))()
-        end)
+        local remoteUrls = {
+            "https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/Arcane_Hub.lua",
+            "https://gist.githubusercontent.com/ZeroDepTrai/c81661682d9297b3f8130a53bc900df8/raw/Arcane_Hub.lua"
+        }
+        for _, url in ipairs(remoteUrls) do
+            local ok, code = pcall(function() return game:HttpGet(url) end)
+            if ok and type(code) == "string" and #code > 100 then
+                local loadOk, fn = pcall(loadstring, code)
+                if loadOk and type(fn) == "function" then
+                    local runOk, err = pcall(fn)
+                    if runOk then
+                        executed = true
+                        break
+                    end
+                end
+            end
+        end
     end
 end)
 ]=]
@@ -418,154 +468,6 @@ local function sendDiscordReport(harvestedMap, totalHarvested)
 end
 
 -- =============================================================================
-
--- =============================================================================
--- CORRUPT SERVER DETECTOR & HUNTER ENGINE
--- =============================================================================
-local CorruptHunter = {
-    running = false,
-    thread = nil,
-}
-
-local function checkIsCorruptServer()
-    local isCorrupt = false
-    local eventName = "None"
-
-    -- 1. Check CurrentEvent in ReplicatedStorage
-    local ev = ReplicatedStorage:FindFirstChild("CurrentEvent")
-    if ev and ev:IsA("StringValue") and ev.Value ~= "" and ev.Value ~= "None" then
-        isCorrupt = true
-        eventName = ev.Value
-    end
-
-    -- 2. Check ShadowSky in ReplicatedStorage
-    local ss = ReplicatedStorage:FindFirstChild("ShadowSky")
-    if ss and ss:IsA("BoolValue") and ss.Value == true then
-        isCorrupt = true
-        if eventName == "None" then eventName = "Shadow Sky (Corrupted)" end
-    end
-
-    -- 3. Check Lighting PostEffects
-    local lighting = game:GetService("Lighting")
-    if lighting then
-        local sc = lighting:FindFirstChild("ShadowCorrupt")
-        if sc and sc:IsA("PostEffect") and sc.Enabled then
-            isCorrupt = true
-            if eventName == "None" then eventName = "Shadow Corrupt Effect" end
-        end
-        local cs = lighting:FindFirstChild("CursedSky")
-        if cs and cs:IsA("PostEffect") and cs.Enabled then
-            isCorrupt = true
-            if eventName == "None" then eventName = "Cursed Sky Effect" end
-        end
-        local lss = lighting:FindFirstChild("ShadowSky")
-        if lss and lss:IsA("PostEffect") and lss.Enabled then
-            isCorrupt = true
-            if eventName == "None" then eventName = "Shadow Sky Effect" end
-        end
-    end
-
-    -- 4. Check for Aberrant mobs in Living
-    local living = workspace:FindFirstChild("Living")
-    if living then
-        for _, m in ipairs(living:GetChildren()) do
-            local mn = m.Name:lower()
-            if mn:find("aberrant") or mn:find("corrupt") then
-                isCorrupt = true
-                if eventName == "None" then eventName = "Aberrant Spawn: " .. m.Name end
-                break
-            end
-        end
-    end
-
-    return isCorrupt, eventName
-end
-
-local function sendCorruptServerWebhook(eventName)
-    local webhookUrl = Options.DiscordWebhook and Options.DiscordWebhook.Value or ""
-    if #webhookUrl < 10 or not HttpRequest then return end
-
-    task.spawn(function()
-        local pingContent = Toggles.CorruptPingRole and Toggles.CorruptPingRole.Value and "@everyone" or nil
-        local reg = tostring(ReplicatedStorage:FindFirstChild("Region") and ReplicatedStorage.Region.Value or "Unknown")
-        local pCount = #Players:GetPlayers()
-        local pMax = Players.MaxPlayers or 20
-
-        local payload = {
-            username = "Arcane Lineage • Corrupt Server Alert",
-            avatar_url = "https://cdn-icons-png.flaticon.com/512/1042/1042340.png",
-            content = pingContent,
-            embeds = {{
-                title = "🔮 PHÁT HIỆN CORRUPT SERVER (EVENT SERVER)! 🔮",
-                description = string.format("Đã tìm thấy Server có sự kiện đặc biệt: **%s**!", eventName),
-                color = 0x9B59B6,
-                fields = {
-                    { name = "🌌 Sự Kiện (Event)", value = string.format("**%s**", eventName), inline = true },
-                    { name = "👥 Người Chơi", value = string.format("%d / %d", pCount, pMax), inline = true },
-                    { name = "🌍 Khu Vực (Region)", value = string.format("`%s`", reg), inline = true },
-                    { name = "🆔 Server JobId", value = string.format("```%s```", game.JobId), inline = false },
-                    { name = "📋 Script Teleport Vào Server", value = string.format("```lua\ngame:GetService('TeleportService'):TeleportToPlaceInstance(%d, '%s', game.Players.LocalPlayer)\n```", game.PlaceId, game.JobId), inline = false },
-                    { name = "👤 Phát Hiện Bởi", value = string.format("`%s` (%s)", LocalPlayer.Name, LocalPlayer.DisplayName), inline = true }
-                },
-                footer = { text = "Arcane Lineage Master Hub • Corrupt Hunter" },
-                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
-            }}
-        }
-        pcall(function()
-            HttpRequest({
-                Url = webhookUrl,
-                Method = "POST",
-                Headers = { ["Content-Type"] = "application/json" },
-                Body = HttpService:JSONEncode(payload)
-            })
-        end)
-    end)
-end
-
-function CorruptHunter.start()
-    if CorruptHunter.running then return end
-    CorruptHunter.running = true
-    print("[CorruptHunter] 🔮 Bắt đầu quy trình tìm kiếm Corrupted Server...")
-    Library:Notify("🔮 Bắt đầu tìm kiếm Corrupted Server...", 4)
-
-    CorruptHunter.thread = task.spawn(function()
-        task.wait(2.5) -- Đợi game load ReplicatedStorage và Lighting đầy đủ
-        while CorruptHunter.running do
-            local isCorrupt, eventName = checkIsCorruptServer()
-            if isCorrupt then
-                print(string.format("[CorruptHunter] 🌟 PHÁT HIỆN CORRUPT SERVER: '%s'!", eventName))
-                Library:Notify(string.format("🔮 PHÁT HIỆN CORRUPT SERVER: %s!", eventName), 10)
-                sendCorruptServerWebhook(eventName)
-                
-                local stay = Toggles.StayInCorruptServer and Toggles.StayInCorruptServer.Value
-                if stay ~= false then
-                    print("[CorruptHunter] 🛑 Đã dừng Server Hop để ở lại Corrupt Server!")
-                    CorruptHunter.running = false
-                    if Toggles.HuntCorruptServer then
-                        Toggles.HuntCorruptServer:SetValue(false)
-                    end
-                    break
-                end
-            else
-                print("[CorruptHunter] ⏳ Server hiện tại không phải Corrupt Server. Đang chuẩn bị chuyển server tiếp theo...")
-                Library:Notify("⏳ Không phải Corrupt Server. Đang đổi server...", 3)
-                task.wait(1.5)
-                ServerHopper.hop()
-                task.wait(10) -- Chờ teleport
-            end
-            task.wait(4)
-        end
-    end)
-end
-
-function CorruptHunter.stop()
-    CorruptHunter.running = false
-    if CorruptHunter.thread then
-        task.cancel(CorruptHunter.thread)
-        CorruptHunter.thread = nil
-    end
-end
-
 -- AUTO START & MENU-SKIP
 -- =============================================================================
 local function handleAutoStart()
@@ -920,9 +822,6 @@ function Farmer.stop()
     print("[AutoFarm] Đã dừng Auto Farm.")
 end
 
--- =============================================================================
--- COMBAT STATE DETECTOR
--- =============================================================================
 local function isInCombat()
     local char = LocalPlayer.Character
     if not char then return false end
@@ -2106,8 +2005,9 @@ function AutoYarthul.sendWebhook(eventType, extraData)
     end)
 end
 
--- 6. DIRECT HOOK ENGINE: TỰ ĐỘNG CHẤP NHẬN LOOT POOL / ITEM DROP (SAFE & NON-INTRUSIVE)
+-- 6. DIRECT HOOK ENGINE: TỰ ĐỘNG CHẤP NHẬN LOOT POOL / ITEM DROP BẰNG METAMETHOD VÀ CALLBACK TRỰC TIẾP
 function AutoYarthul.hookLootRemote()
+    -- Hook StarterGui:SetCore("SendNotification") qua hookmetamethod (__namecall)
     pcall(function()
         if not shared.ArcaneSetCoreHookInstalled and hookmetamethod then
             shared.ArcaneSetCoreHookInstalled = true
@@ -2119,28 +2019,18 @@ function AutoYarthul.hookLootRemote()
                     local coreData = args[2]
                     local title = tostring(coreData.Title or "")
                     local text = tostring(coreData.Text or "")
-                    local combined = (title .. " " .. text):lower()
-                    
-                    if combined:find("item") or combined:find("drop") or combined:find("roll") or combined:find("dice") or combined:find("artifact") then
-                        print(string.format("[AutoLoot Hook] ⚡ Bắt được Notification rơi đồ: '%s' ('%s') -> Auto Accept!", title, text))
+                    if title:lower():find("item") or title:lower():find("drop") or text:lower():find("dropped") or text:lower():find("roll") or text:lower():find("dice") then
+                        print(string.format("[AutoLoot Hook] ⚡ Bắt được SetCore Notification '%s' -> Tự động kích hoạt Callback 'Accept' trực tiếp (0ms)!", title))
                         if AutoYarthul and AutoYarthul.running then
                             AutoYarthul.updateHUD("🎁 Đã Accept vào Loot Roll Pool (0ms)!")
-                            if Library and Library.Notify then
-                                Library:Notify("🎁 Auto Accepted Loot Roll Pool!", 4)
-                            end
-                            pcall(function()
-                                AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
-                            end)
+                            Library:Notify("🎁 Auto Accepted Loot Roll Pool!", 4)
+                            AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
                         end
                         if coreData.Callback then
                             task.spawn(function()
                                 pcall(function()
-                                    if typeof(coreData.Callback) == "Instance" then
-                                        if coreData.Callback:IsA("BindableFunction") then
-                                            coreData.Callback:Invoke("Accept")
-                                        elseif coreData.Callback:IsA("BindableEvent") then
-                                            coreData.Callback:Fire("Accept")
-                                        end
+                                    if typeof(coreData.Callback) == "Instance" and coreData.Callback:IsA("BindableFunction") then
+                                        coreData.Callback:Fire("Accept")
                                     elseif typeof(coreData.Callback) == "function" then
                                         coreData.Callback("Accept")
                                     end
@@ -2151,7 +2041,7 @@ function AutoYarthul.hookLootRemote()
                 end
                 return oldNamecall(self, ...)
             end)
-            print("[AutoLoot] ⚡ Đã cài đặt Safe Hook SetCore SendNotification thành công!")
+            print("[AutoLoot] ⚡ Đã cài đặt Hook SetCore SendNotification thành công!")
         end
     end)
 
@@ -2164,7 +2054,7 @@ function AutoYarthul.hookLootRemote()
             AutoYarthul.refightConn = refightRemote.OnClientEvent:Connect(function(action, data)
                 if AutoYarthul.running and AutoYarthul.isInsideInstance() then
                     if action == "OpenGui" and type(data) == "table" and data.BattleID then
-                        print(string.format("[AutoRefight Remote] 🐉 Nhận OpenGui (BattleID: %s) -> Gửi Remote Accept tức thì!", tostring(data.BattleID)))
+                        print(string.format("[AutoRefight Remote] 🐉 [RefightBoss Remote] Nhận OpenGui (BattleID: %s) -> Gửi Remote Accept tức thì!", tostring(data.BattleID)))
                         task.wait(0.2)
                         pcall(function()
                             refightRemote:FireServer(data.BattleID, "Accept")
@@ -2177,8 +2067,6 @@ function AutoYarthul.hookLootRemote()
         end
     end)
 end
-
-AutoYarthul.hookLootRemote()
 
 -- 7. Kiểm tra xem bảng Refight đã xuất hiện VÀ THỰC SỰ ĐANG HIỆN TRÊN MÀN HÌNH (Main.Visible == true)
 function AutoYarthul.isRefightActive()
@@ -3070,6 +2958,8 @@ local AutoFight = {
     running = false,
     thread = nil,
 }
+
+local combatTurnLock = false
 
 local function executeDirectRemoteTurn()
     local pti = game.ReplicatedStorage:FindFirstChild("PlayerTurnInput")
@@ -5684,54 +5574,10 @@ StatsGroup:AddButton({
 -- Fully automated Level Farming (No manual buttons needed)
 
 HopGroup:AddToggle("AutoServerHop", {
-    Text = "Auto Server Hop (Farm Items)",
+    Text = "Auto Server Hop",
     Default = false,
     Tooltip = "Tự động đổi server khi lụm xong hoặc khi server không có nguyên liệu",
 })
-
-HopGroup:AddDivider()
-
-HopGroup:AddToggle("HuntCorruptServer", {
-    Text = "🔮 Auto Hop Hunt Corrupt Server",
-    Default = false,
-    Tooltip = "Tự động đổi server liên tục cho đến khi tìm thấy Corrupted Server (Event Server)!",
-})
-
-Toggles.HuntCorruptServer:OnChanged(function()
-    if Toggles.HuntCorruptServer.Value then
-        CorruptHunter.start()
-    else
-        CorruptHunter.stop()
-    end
-end)
-
-HopGroup:AddToggle("StayInCorruptServer", {
-    Text = "🛑 Stay In Corrupt Server When Found",
-    Default = true,
-    Tooltip = "Tự động dừng hop khi đã tìm thấy Corrupt Server",
-})
-
-HopGroup:AddToggle("CorruptPingRole", {
-    Text = "🔔 Webhook Ping @everyone on Corrupt",
-    Default = false,
-    Tooltip = "Gắn thẻ @everyone khi gửi thông báo tìm thấy Corrupt Server qua Discord",
-})
-
-HopGroup:AddButton({
-    Text = "🔍 Check Current Server Event",
-    Func = function()
-        local isCorrupt, evName = checkIsCorruptServer()
-        if isCorrupt then
-            Library:Notify(string.format("🔮 ĐANG LÀ CORRUPT SERVER: %s!", evName), 6)
-            sendCorruptServerWebhook(evName)
-        else
-            Library:Notify("ℹ️ Server hiện tại bình thường (Không có Event Corrupt).", 4)
-        end
-    end,
-    DoubleClick = false,
-})
-
-HopGroup:AddDivider()
 
 HopGroup:AddSlider("MaxPlayerBuffer", {
     Text = "Free Slots Required",
@@ -6197,450 +6043,9 @@ TownWarpGroup:AddButton("👁️ Metrom (Dungeon Entrance)", function() teleport
 -- -----------------------------------------------------------------------------
 local ESPGroup = Tabs.Visuals:AddLeftGroupbox("👁️ Ingredient ESP")
 local FilterGroup = Tabs.Visuals:AddLeftGroupbox("🎯 Filters & Categories")
-
--- =============================================================================
--- ENEMY SKILL PREDICTOR & COMBAT HUD ENGINE (QOL VISUAL SUITE)
--- =============================================================================
-local EnemyPredictor = {
-    running = false,
-    thread = nil,
-    gui = nil,
-    billboards = {},
-    skillsCache = {},
-    npcCache = {},
-    lastIndicatedSkill = nil,
-    lastIndicatedTime = 0,
-    currentDecidingEnemy = nil,
-}
-
--- Khởi tạo Cache dữ liệu Kỹ năng và NPC từ ReplicatedStorage
-local function initPredictorData()
-    pcall(function()
-        local skillsMod = ReplicatedStorage:FindFirstChild("Constants") and ReplicatedStorage.Constants:FindFirstChild("Skills")
-        if skillsMod then
-            local ok, data = pcall(require, skillsMod)
-            if ok and type(data) == "table" then
-                EnemyPredictor.skillsCache = data
-            end
-        end
-    end)
-
-    pcall(function()
-        local npcFolder = ReplicatedStorage:FindFirstChild("NPCs")
-        if npcFolder then
-            for _, mod in ipairs(npcFolder:GetChildren()) do
-                if mod:IsA("ModuleScript") then
-                    local ok, data = pcall(require, mod)
-                    if ok and type(data) == "table" then
-                        EnemyPredictor.npcCache[mod.Name] = data
-                    end
-                end
-            end
-        end
-    end)
-end
-initPredictorData()
-
--- Lắng nghe AttackIndicate và Deciding từ Server để bắt chiêu sớm nhất
-pcall(function()
-    local fightRemotes = ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild("Fight")
-    if fightRemotes then
-        local atkInd = fightRemotes:FindFirstChild("AttackIndicate")
-        if atkInd and atkInd:IsA("RemoteEvent") then
-            atkInd.OnClientEvent:Connect(function(skillName)
-                if not skillName then return end
-                EnemyPredictor.lastIndicatedSkill = tostring(skillName)
-                EnemyPredictor.lastIndicatedTime = os.clock()
-                EnemyPredictor.currentDecidingEnemy = nil
-
-                if Toggles.EnemyAttackPredictor and Toggles.EnemyAttackPredictor.Value then
-                    local skInfo = EnemyPredictor.skillsCache[tostring(skillName)]
-                    local aff = skInfo and skInfo.Affinity or "Unknown"
-                    local dmg = skInfo and skInfo.Damage or "?"
-                    local sType = skInfo and skInfo.Type or "Attack"
-
-                    print(string.format("[Predictor] ⚡ QUÁI TUNG CHIÊU: '%s' | Hệ: %s | Sát thương: %s | Loại: %s", tostring(skillName), aff, tostring(dmg), sType))
-
-                    -- Cảnh báo âm thanh nếu là chiêu nguy hiểm
-                    if Toggles.PredictorSoundAlert and Toggles.PredictorSoundAlert.Value then
-                        local lowerS = tostring(skillName):lower()
-                        if lowerS:find("pillar") or lowerS:find("inferno") or lowerS:find("armageddon") or lowerS:find("beam") or lowerS:find("eruption") or lowerS:find("crush") then
-                            local sound = Instance.new("Sound")
-                            sound.SoundId = "rbxassetid://6534948092" -- Warning beep
-                            sound.Volume = 1.5
-                            sound.Parent = game:GetService("SoundService")
-                            sound:Play()
-                            game:GetService("Debris"):AddItem(sound, 3)
-                        end
-                    end
-                end
-            end)
-        end
-
-        local deciding = fightRemotes:FindFirstChild("Deciding")
-        if deciding and deciding:IsA("RemoteEvent") then
-            deciding.OnClientEvent:Connect(function(enemyName)
-                EnemyPredictor.currentDecidingEnemy = enemyName
-            end)
-        end
-    end
-end)
-
--- Tạo Giao diện HUD trên màn hình
-local function createPredictorScreenHUD()
-    if EnemyPredictor.gui then return EnemyPredictor.gui end
-
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "ArcaneEnemyPredictorHUD"
-    sg.ResetOnSpawn = false
-    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 320, 0, 180)
-    mainFrame.Position = UDim2.new(0.02, 0, 0.45, 0)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-    mainFrame.BackgroundTransparency = 0.15
-    mainFrame.BorderSizePixel = 0
-    mainFrame.Visible = false
-    mainFrame.Parent = sg
-
-    local uiCorner = Instance.new("UICorner")
-    uiCorner.CornerRadius = UDim.new(0, 8)
-    uiCorner.Parent = mainFrame
-
-    local uiStroke = Instance.new("UIStroke")
-    uiStroke.Color = Color3.fromRGB(155, 89, 182) -- Purple neon
-    uiStroke.Thickness = 1.5
-    uiStroke.Parent = mainFrame
-
-    local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.Size = UDim2.new(1, -20, 0, 26)
-    title.Position = UDim2.new(0, 10, 0, 6)
-    title.BackgroundTransparency = 1
-    title.Text = "🔮 ENEMY SKILL PREDICTOR"
-    title.TextColor3 = Color3.fromRGB(240, 240, 255)
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 13
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = mainFrame
-
-    local contentLabel = Instance.new("TextLabel")
-    contentLabel.Name = "Content"
-    contentLabel.Size = UDim2.new(1, -20, 1, -38)
-    contentLabel.Position = UDim2.new(0, 10, 0, 32)
-    contentLabel.BackgroundTransparency = 1
-    contentLabel.Text = "Đang quét trận đấu..."
-    contentLabel.TextColor3 = Color3.fromRGB(200, 200, 210)
-    contentLabel.Font = Enum.Font.Gotham
-    contentLabel.TextSize = 11
-    contentLabel.TextXAlignment = Enum.TextXAlignment.Left
-    contentLabel.TextYAlignment = Enum.TextYAlignment.Top
-    contentLabel.TextWrapped = true
-    contentLabel.RichText = true
-    contentLabel.Parent = mainFrame
-
-    -- Hỗ trợ kéo thả HUD
-    local dragging, dragInput, dragStart, startPos
-    mainFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    mainFrame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-
-    pcall(function()
-        local coreGui = game:GetService("CoreGui")
-        sg.Parent = coreGui
-    end)
-    if not sg.Parent then
-        sg.Parent = PlayerGui
-    end
-
-    EnemyPredictor.gui = sg
-    return sg
-end
-
--- Tính toán dự đoán chiêu thức cho 1 quái vật
-local function predictEnemySkills(enemyModel)
-    if not enemyModel or not enemyModel.Parent then return nil end
-
-    local enemyName = enemyModel.Name
-    local cleanName = enemyName:gsub("%s*%(.*%)", ""):gsub("%d+$", ""):gsub("^%s*(.-)%s*$", "%1")
-
-    -- 1. Lấy thông tin máu
-    local hum = enemyModel:FindFirstChildOfClass("Humanoid")
-    local curHp = hum and math.floor(hum.Health) or 0
-    local maxHp = hum and math.floor(hum.MaxHealth) or 100
-
-    -- 2. Lấy thông tin Năng lượng (Energy)
-    local energyVal = enemyModel:FindFirstChild("Status") and enemyModel.Status:FindFirstChild("Energy")
-    local curEnergy = energyVal and energyVal.Value or 0
-
-    -- 3. Lấy chiêu vừa dùng
-    local lastAttackVal = enemyModel:FindFirstChild("Effects") and enemyModel.Effects:FindFirstChild("LastUsedAttack")
-    local lastAttack = lastAttackVal and lastAttackVal.Value or "Chưa rõ"
-
-    -- 4. Tìm dữ liệu NPC gốc
-    local npcData = EnemyPredictor.npcCache[cleanName] or EnemyPredictor.npcCache[enemyName]
-    local maxEnergy = npcData and npcData.MaxEnergy or 6
-    local attackPool = npcData and npcData.Attacks or {}
-
-    local damageSkills = attackPool.Damage or {}
-    local specialSkills = attackPool.Special or {}
-    local noEnergySkills = attackPool.NoEnergy or {}
-
-    -- 5. Thuật toán dự đoán dựa trên Energy và Cooldown
-    local predictedList = {}
-    
-    if curEnergy == 0 then
-        -- Chắc chắn chỉ có thể dùng NoEnergy skills hoặc Strike
-        if #noEnergySkills > 0 then
-            for _, sk in ipairs(noEnergySkills) do
-                table.insert(predictedList, { name = sk, chance = "Cao (100% khi hết Energy)", danger = false })
-            end
-        else
-            table.insert(predictedList, { name = "Strike (Đánh thường)", chance = "Cao (100%)", danger = false })
-        end
-    else
-        -- Có Energy: Lọc các chiêu có Cost <= curEnergy
-        for _, sk in ipairs(damageSkills) do
-            local skInfo = EnemyPredictor.skillsCache[sk]
-            local cost = skInfo and skInfo.Cost or 1
-            if cost <= curEnergy then
-                local isRecent = (lastAttack == sk)
-                local chanceStr = isRecent and "Trung bình (Vừa dùng)" or "Rất Cao"
-                local isDanger = (sk:lower():find("pillar") or sk:lower():find("beam") or sk:lower():find("hellfire") or sk:lower():find("crush"))
-                table.insert(predictedList, { name = sk, cost = cost, chance = chanceStr, danger = isDanger })
-            end
-        end
-
-        for _, sk in ipairs(specialSkills) do
-            local skInfo = EnemyPredictor.skillsCache[sk]
-            local cost = skInfo and skInfo.Cost or 2
-            if cost <= curEnergy then
-                local isRecent = (lastAttack == sk)
-                local chanceStr = isRecent and "Thấp (Cooldown)" or "Cao (Special)"
-                table.insert(predictedList, { name = sk, cost = cost, chance = chanceStr, danger = true })
-            end
-        end
-
-        if #predictedList == 0 then
-            table.insert(predictedList, { name = "Strike (Đánh thường)", chance = "100%", danger = false })
-        end
-    end
-
-    return {
-        model = enemyModel,
-        name = enemyName,
-        curHp = curHp,
-        maxHp = maxHp,
-        curEnergy = curEnergy,
-        maxEnergy = maxEnergy,
-        lastAttack = lastAttack,
-        predictions = predictedList
-    }
-end
-
--- Vòng lặp cập nhật Predictor
-function EnemyPredictor.start()
-    if EnemyPredictor.running then return end
-    EnemyPredictor.running = true
-    createPredictorScreenHUD()
-
-    EnemyPredictor.thread = task.spawn(function()
-        while EnemyPredictor.running do
-            local inCombat = isInCombat()
-            local hud = EnemyPredictor.gui and EnemyPredictor.gui:FindFirstChild("MainFrame")
-
-            if inCombat and Toggles.EnemyAttackPredictor and Toggles.EnemyAttackPredictor.Value then
-                if hud then hud.Visible = true end
-
-                -- Lấy danh sách quái trong trận
-                local activeEnemies = {}
-                local living = workspace:FindFirstChild("Living")
-                local char = LocalPlayer.Character
-                local myFightVal = char and char:FindFirstChild("FightInProgress")
-                local myFightId = myFightVal and myFightVal.Value
-
-                if living then
-                    for _, m in ipairs(living:GetChildren()) do
-                        if m ~= char and m:FindFirstChildOfClass("Humanoid") then
-                            local fVal = m:FindFirstChild("FightInProgress")
-                            if not myFightId or not fVal or fVal.Value == myFightId then
-                                local hum = m:FindFirstChildOfClass("Humanoid")
-                                if hum and hum.Health > 0 and not Players:GetPlayerFromCharacter(m) then
-                                    table.insert(activeEnemies, m)
-                                end
-                            end
-                        end
-                    end
-                end
-
-                -- Xây dựng văn bản hiển thị HUD
-                local hudLines = {}
-
-                -- Hiển thị cảnh báo thời gian thực nếu vừa có AttackIndicate (< 2.5s)
-                local now = os.clock()
-                if EnemyPredictor.lastIndicatedSkill and (now - EnemyPredictor.lastIndicatedTime < 2.5) then
-                    local skName = EnemyPredictor.lastIndicatedSkill
-                    local skInfo = EnemyPredictor.skillsCache[skName]
-                    local aff = skInfo and skInfo.Affinity or "Fire/Physical"
-                    table.insert(hudLines, string.format("⚡ <b><font color='#FF5555'>ĐANG TUNG CHIÊU: %s</font></b> <font color='#F1C40F'>[%s]</font>", skName, aff))
-                    table.insert(hudLines, "────────────────────────────")
-                elseif EnemyPredictor.currentDecidingEnemy then
-                    table.insert(hudLines, string.format("⏳ <i><font color='#F39C12'>%s đang suy nghĩ lượt...</font></i>", EnemyPredictor.currentDecidingEnemy))
-                    table.insert(hudLines, "────────────────────────────")
-                end
-
-                for idx, enemyModel in ipairs(activeEnemies) do
-                    local pData = predictEnemySkills(enemyModel)
-                    if pData then
-                        local hpPercent = math.clamp(pData.curHp / math.max(1, pData.maxHp), 0, 1)
-                        local hpColor = hpPercent > 0.5 and "#2ECC71" or (hpPercent > 0.25 and "#F39C12" or "#E74C3C")
-                        local energyStr = string.format("⚡ Energy: <font color='#3498DB'><b>%d / %d</b></font>", pData.curEnergy, pData.maxEnergy)
-
-                        table.insert(hudLines, string.format("👹 <b>%s</b> (<font color='%s'>%d/%d HP</font>) | %s", pData.name, hpColor, pData.curHp, pData.maxHp, energyStr))
-                        table.insert(hudLines, string.format("  • <i>Chiêu vừa ra:</i> <font color='#BDC3C7'>%s</font>", pData.lastAttack))
-                        
-                        local predStrList = {}
-                        for _, pr in ipairs(pData.predictions) do
-                            local color = pr.danger and "#FF7675" or "#55EFC4"
-                            table.insert(predStrList, string.format("<font color='%s'>%s</font>", color, pr.name))
-                        end
-                        table.insert(hudLines, "  • 🔮 <b>Dự đoán:</b> " .. table.concat(predStrList, " | "))
-                        if idx < #activeEnemies then
-                            table.insert(hudLines, "")
-                        end
-
-                        -- Cập nhật World Billboard trên đầu quái
-                        if Toggles.PredictorWorldESP and Toggles.PredictorWorldESP.Value then
-                            local head = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
-                            if head then
-                                local bb = EnemyPredictor.billboards[enemyModel]
-                                if not bb or not bb.Parent then
-                                    bb = Instance.new("BillboardGui")
-                                    bb.Name = "EnemyPredictorBB"
-                                    bb.Size = UDim2.new(0, 160, 0, 45)
-                                    bb.StudsOffset = Vector3.new(0, 3.2, 0)
-                                    bb.AlwaysOnTop = true
-                                    bb.Adornee = head
-                                    
-                                    local bbLabel = Instance.new("TextLabel")
-                                    bbLabel.Name = "Label"
-                                    bbLabel.Size = UDim2.new(1, 0, 1, 0)
-                                    bbLabel.BackgroundTransparency = 0.4
-                                    bbLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-                                    bbLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                                    bbLabel.Font = Enum.Font.GothamBold
-                                    bbLabel.TextSize = 10
-                                    bbLabel.RichText = true
-                                    bbLabel.Parent = bb
-
-                                    local crn = Instance.new("UICorner")
-                                    crn.CornerRadius = UDim.new(0, 4)
-                                    crn.Parent = bbLabel
-
-                                    bb.Parent = head
-                                    EnemyPredictor.billboards[enemyModel] = bb
-                                end
-
-                                if bb and bb:FindFirstChild("Label") then
-                                    local topPred = pData.predictions[1] and pData.predictions[1].name or "Strike"
-                                    bb.Label.Text = string.format("⚡ <b>%d/%d Energy</b>\n🔮 <b>Next: %s</b>", pData.curEnergy, pData.maxEnergy, topPred)
-                                end
-                            end
-                        end
-                    end
-                end
-
-                if #activeEnemies == 0 then
-                    table.insert(hudLines, "<i>Đang tìm mục tiêu quái trong trận...</i>")
-                end
-
-                local contentLabel = hud and hud:FindFirstChild("Content")
-                if contentLabel then
-                    contentLabel.Text = table.concat(hudLines, "\n")
-                end
-            else
-                if hud then hud.Visible = false end
-                -- Ẩn hoặc dọn dẹp billboards
-                for model, bb in pairs(EnemyPredictor.billboards) do
-                    if bb and bb.Parent then pcall(function() bb:Destroy() end) end
-                end
-                EnemyPredictor.billboards = {}
-            end
-
-            task.wait(0.25)
-        end
-    end)
-end
-
-function EnemyPredictor.stop()
-    EnemyPredictor.running = false
-    if EnemyPredictor.thread then
-        task.cancel(EnemyPredictor.thread)
-        EnemyPredictor.thread = nil
-    end
-    if EnemyPredictor.gui then
-        pcall(function() EnemyPredictor.gui:Destroy() end)
-        EnemyPredictor.gui = nil
-    end
-    for model, bb in pairs(EnemyPredictor.billboards) do
-        if bb and bb.Parent then pcall(function() bb:Destroy() end) end
-    end
-    EnemyPredictor.billboards = {}
-end
-
 local QOLGroup = Tabs.Visuals:AddRightGroupbox("✨ Quality of Life (QOL)")
 local FPSGroup = Tabs.Visuals:AddRightGroupbox("⚡ FPS Booster")
 local OptGroup = Tabs.Visuals:AddRightGroupbox("🛠️ Optimization & RAM")
-
-QOLGroup:AddToggle("EnemyAttackPredictor", {
-    Text = "🔮 Enemy Skill Predictor & Combat HUD",
-    Default = false,
-    Tooltip = "Hiển thị bảng phân tích dự đoán chiêu thức tiếp theo của quái, thanh Energy thời gian thực và bắt chiêu ngay khi quái vung đòn",
-})
-
-Toggles.EnemyAttackPredictor:OnChanged(function()
-    if Toggles.EnemyAttackPredictor.Value then
-        EnemyPredictor.start()
-    else
-        EnemyPredictor.stop()
-    end
-end)
-
-QOLGroup:AddToggle("PredictorWorldESP", {
-    Text = "🏷️ Show Predictor On Enemy Heads (ESP)",
-    Default = false,
-    Tooltip = "Hiển thị thanh Energy & Chiêu dự đoán trực tiếp dạng Billboard trên đầu quái vật",
-})
-
-QOLGroup:AddToggle("PredictorSoundAlert", {
-    Text = "🔔 Sound Alert On Danger Skills",
-    Default = false,
-    Tooltip = "Phát chuông cảnh báo âm thanh khi boss/quái bắt đầu tung chiêu nguy hiểm (Magma Pillar, Inferno, v.v.)",
-})
-
-QOLGroup:AddDivider()
 
 QOLGroup:AddToggle("BypassNoPainHP", {
     Text = "Reveal 'I Feel No Pain' HP & Mana",
@@ -7104,9 +6509,7 @@ local function unloadHub()
             FlightController.noclipConn = nil
         end
     end
-    if EnemyPredictor then EnemyPredictor.stop() end
-        if CorruptHunter then CorruptHunter.stop() end
-        if ServerHopper then
+    if ServerHopper then
         ServerHopper.isHopping = false
     end
 
