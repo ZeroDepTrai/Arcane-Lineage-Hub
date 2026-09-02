@@ -2146,7 +2146,7 @@ function AutoYarthul.sendWebhook(eventType, extraData)
             local snapCount = 0
             for _ in pairs(snap) do snapCount = snapCount + 1 end
             embed = {
-                title = "🧪 [TEST] YAR'THUL DISCORD WEBHOOK HOẠT ĐỘNG TỐT! ",
+                title = " [TEST] YAR'THUL DISCORD WEBHOOK HOẠT ĐỘNG TỐT! ",
                 description = "Kết nối Discord Webhook của Auto Farm Boss Yar'thul đã được kiểm tra và hoạt động hoàn hảo!",
                 color = 0x00FF88, -- Bright Emerald Green
                 fields = {
@@ -5198,10 +5198,10 @@ local KeyLocations = {
     [" Icerift Approach"] = Vector3.new(5328.2, 742.7, -6530.2),
     [" Volcano (Mount Thul)"] = Vector3.new(98.9, 577.0, -4115.9),
 
-    -- 📜 Sub Class Trainers (5)
+    --  Sub Class Trainers (5)
     ["🎶 Sub: Cantia (Bard)"] = Vector3.new(2845.8, 624.1, -3222.9),
     [" Sub: Thorin (Beastmaster)"] = Vector3.new(4253.1, 653.8, -3369.2),
-    ["🧪 Sub: Selia (Alchemist)"] = Vector3.new(8116.2, 822.5, -5456.4),
+    [" Sub: Selia (Alchemist)"] = Vector3.new(8116.2, 822.5, -5456.4),
     [" Sub: Adelma (Blacksmith Subclass)"] = Vector3.new(-425.4, 2712.7, -3388.1),
     [" Sub: Vanio (Miner)"] = Vector3.new(7572.0, 593.2, -2674.0),
 
@@ -5462,7 +5462,7 @@ YarthulGroup:AddToggle("AutoFarmYarthul", {
     end
 })
 
-YarthulGroup:AddLabel("📜 Strat: Sense (Alternating) > Carnage > Strike + Med")
+YarthulGroup:AddLabel(" Strat: Sense (Alternating) > Carnage > Strike + Med")
 
 YarthulGroup:AddToggle("YarthulMeditateSubAction", {
     Text = "Use Meditate Sub-Action on Strike",
@@ -5485,27 +5485,9 @@ YarthulGroup:AddSlider("YarthulTweenSpeed", {
     Tooltip = "Tốc độ bay Sky-Tween tới cổng Mount Thul (mặc định 220 studs/s)",
 })
 
-YarthulGroup:AddToggle("YarthulSendWebhook", {
-    Text = "Enable Discord Webhook",
-    Default = false,
-    Tooltip = "Tự động gửi thông báo Discord Embed chi tiết danh sách tất cả vật phẩm rơi (Loot Drops) nhận được vào kho đồ sau khi diệt Boss Yar'thul",
-})
 
-YarthulGroup:AddInput("YarthulWebhook", {
-    Default = "",
-    Numeric = false,
-    Finished = false,
-    Text = "Discord Webhook URL",
-    Tooltip = "Dán link Discord Webhook URL của bạn vào đây để nhận thông báo realtime",
-    Placeholder = "https://discord.com/api/webhooks/...",
-})
 
 YarthulGroup:AddButton({
-    Text = "🧪 Test Yar'thul Webhook Now",
-    Func = function()
-        AutoYarthul.sendWebhook("Test")
-    end
-})
 
 YarthulGroup:AddButton({
     Text = "Tween to Mount Thul Door Now",
@@ -5515,11 +5497,6 @@ YarthulGroup:AddButton({
 })
 
 YarthulGroup:AddButton({
-    Text = "Check Current Place & Instance ID",
-    Func = function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/Check_Place_Info.lua?t=" .. tick()))()
-    end
-})
 
 YarthulGroup:AddButton({
     Text = "Stop Auto Farm Yar'thul",
@@ -5786,11 +5763,6 @@ HopGroup:AddToggle("StayInCorruptServer", {
     Tooltip = "Tự động dừng hop khi đã tìm thấy Corrupt Server",
 })
 
-HopGroup:AddToggle("CorruptPingRole", {
-    Text = "Webhook Ping @everyone on Corrupt",
-    Default = false,
-    Tooltip = "Gắn thẻ @everyone khi gửi thông báo tìm thấy Corrupt Server qua Discord",
-})
 
 HopGroup:AddButton({
     Text = "Check Current Server Event",
@@ -5824,18 +5796,7 @@ HopGroup:AddSlider("TeleportTimeout", {
     Rounding = 0,
 })
 
-HopGroup:AddInput("DiscordWebhook", {
-    Default = "",
-    Numeric = false,
-    Finished = false,
-    Text = "Discord Webhook URL",
-    Placeholder = "https://discord.com/api/webhooks/...",
-})
 
-HopGroup:AddToggle("NotifyOnHarvest", {
-    Text = "Notify On Harvest Success",
-    Default = false,
-})
 
 HopGroup:AddButton({
     Text = "Hop Server Now",
