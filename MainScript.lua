@@ -9416,4 +9416,180 @@ end
 
 -- Vòng lặp cập nhật Enemy Status
 function EnemyStatusEngine.start()
+    if EnemyStatusEngine.running then return end
+    EnemyStatusEngine.running = true
+    createEnemyStatusScreenHUD()
 
+    EnemyStatusEngine.thread = task.spawn(function()
+        while EnemyStatusEngine.running do
+            local inCombat = isInCombat()
+            local hud = EnemyStatusEngine.gui and EnemyStatusEngine.gui:FindFirstChild("MainFrame")
+
+            if inCombat and (Toggles.ShowEnemyStatusHUD and Toggles.ShowEnemyStatusHUD.Value or Toggles.ShowEnemyStatusHead and Toggles.ShowEnemyStatusHead.Value) then
+                if hud and Toggles.ShowEnemyStatusHUD and Toggles.ShowEnemyStatusHUD.Value then
+                    hud.Visible = true
+                elseif hud then
+                    hud.Visible = false
+                end
+
+                -- Lọc quái vật CHÍNH XÁC trong trận đấu của người chơi
+                local activeEnemies = {}
+                local living = workspace:FindFirstChild("Living")
+                local char = LocalPlayer.Character
+                local myFightVal = char and char:FindFirstChild("FightInProgress")
+                local myFightId = myFightVal and myFightVal.Value
+                local myRoot = char and (char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso"))
+
+                if living and myRoot then
+                    for _, m in ipairs(living:GetChildren()) do
+                        if m ~= char and m:FindFirstChildOfClass("Humanoid") and not Players:GetPlayerFromCharacter(m) then
+                            local fVal = m:FindFirstChild("FightInProgress")
+                            local hum = m:FindFirstChildOfClass("Humanoid")
+                            local root = m:FindFirstChild("HumanoidRootPart") or m:FindFirstChild("Torso")
+                            
+                            local isMyEnemy = false
+                            if myFightId and fVal and fVal.Value == myFightId then
+                                isMyEnemy = true
+                            elseif root and (root.Position - myRoot.Position).Magnitude < 40 then
+                                isMyEnemy = true
+                            end
+
+                            if isMyEnemy and hum and hum.Health > 0 then
+                                table.insert(activeEnemies, m)
+                            end
+                        end
+                    end
+                end
+
+                -- Xây dựng nội dung hiển thị HUD
+                local hudLines = {}
+                local now = os.clock()
+                if EnemyStatusEngine.lastIndicatedSkill and (now - EnemyStatusEngine.lastIndicatedTime < 2.5) then
+                    local skName = EnemyStatusEngine.lastIndicatedSkill
+                    table.insert(hudLines, string.format("⚠️ <b><font color='#FF5555'>ĐANG CHUẨN BỊ: %s</font></b>", skName))
+                    table.insert(hudLines, "────────────────────────────")
+                elseif EnemyStatusEngine.currentDecidingEnemy then
+                    table.insert(hudLines, string.format("⏳ <i><font color='#F39C12'>%s đang suy nghĩ lượt...</font></i>", EnemyStatusEngine.currentDecidingEnemy))
+                    table.insert(hudLines, "────────────────────────────")
+                end
+
+                for idx, enemyModel in ipairs(activeEnemies) do
+                    local sData = analyzeEnemyStatus(enemyModel)
+                    if sData then
+                        local hpPercent = math.clamp(sData.curHp / math.max(1, sData.maxHp), 0, 1)
+                        local hpColor = hpPercent > 0.5 and "#2ECC71" or (hpPercent > 0.25 and "#F39C12" or "#E74C3C")
+                        local energyStr = string.format("⚡ Energy: <font color='#3498DB'><b>%d / %d</b></font>", sData.curEnergy, sData.maxEnergy)
+
+                        table.insert(hudLines, string.format("<b>%s</b> (<font color='%s'>%d/%d HP</font>) | %s", sData.name, hpColor, sData.curHp, sData.maxHp, energyStr))
+                        table.insert(hudLines, string.format("  • <i>Chiêu trước:</i> <font color='#BDC3C7'>%s</font>", sData.lastAttack))
+                        table.insert(hudLines, "  • <b>Chiêu thức & Trạng thái:</b>")
+                        for _, skLine in ipairs(sData.skills) do
+                            table.insert(hudLines, "    " .. skLine)
+                        end
+                        if idx < #activeEnemies then
+                            table.insert(hudLines, "")
+                        end
+
+                        -- Cập nhật Billboard trên đầu quái
+                        if Toggles.ShowEnemyStatusHead and Toggles.ShowEnemyStatusHead.Value then
+                            local head = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
+                            if head then
+                                local bb = EnemyStatusEngine.billboards[enemyModel]
+                                if not bb or not bb.Parent then
+                                    bb = Instance.new("BillboardGui")
+                                    bb.Name = "EnemyStatusBB"
+                                    bb.Size = UDim2.new(0, 200, 0, 60)
+                                    bb.StudsOffset = Vector3.new(0, 3.2, 0)
+                                    bb.AlwaysOnTop = true
+                                    bb.Adornee = head
+                                    bb.MaxDistance = 150
+
+                                    local frame = Instance.new("Frame")
+                                    frame.Size = UDim2.new(1, 0, 1, 0)
+                                    frame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+                                    frame.BackgroundTransparency = 0.25
+                                    frame.BorderSizePixel = 0
+                                    frame.Parent = bb
+
+                                    local corner = Instance.new("UICorner")
+                                    corner.CornerRadius = UDim.new(0, 6)
+                                    corner.Parent = frame
+
+                                    local stroke = Instance.new("UIStroke")
+                                    stroke.Color = Color3.fromRGB(6, 182, 212)
+                                    stroke.Thickness = 1
+                                    stroke.Parent = frame
+
+                                    local lbl = Instance.new("TextLabel")
+                                    lbl.Name = "Info"
+                                    lbl.Size = UDim2.new(1, -8, 1, -6)
+                                    lbl.Position = UDim2.new(0, 4, 0, 3)
+                                    lbl.BackgroundTransparency = 1
+                                    lbl.TextColor3 = Color3.fromRGB(240, 240, 240)
+                                    lbl.Font = Enum.Font.GothamMedium
+                                    lbl.TextSize = 10
+                                    lbl.TextWrapped = true
+                                    lbl.RichText = true
+                                    lbl.Parent = frame
+
+                                    pcall(function()
+                                        local coreGui = game:GetService("CoreGui")
+                                        bb.Parent = coreGui
+                                    end)
+                                    if not bb.Parent then bb.Parent = PlayerGui end
+                                    EnemyStatusEngine.billboards[enemyModel] = bb
+                                end
+
+                                local infoLbl = bb:FindFirstChild("Info", true)
+                                if infoLbl then
+                                    local shortSkills = {}
+                                    for i = 1, math.min(3, #sData.skills) do
+                                        local skClean = sData.skills[i]:gsub("•%s*", "")
+                                        table.insert(shortSkills, skClean)
+                                    end
+                                    infoLbl.Text = string.format("<b>%s</b> (<font color='%s'>%d HP</font>) | ⚡ %d/%d E\nLast: %s\n%s", 
+                                        sData.name, hpColor, sData.curHp, sData.curEnergy, sData.maxEnergy, sData.lastAttack, table.concat(shortSkills, "\n"))
+                                end
+                            end
+                        end
+                    end
+                end
+
+                if #activeEnemies == 0 then
+                    table.insert(hudLines, "<i>Đang đợi quái vật xuất hiện...</i>")
+                end
+
+                local cLbl = hud and hud:FindFirstChild("Content")
+                if cLbl then
+                    cLbl.Text = table.concat(hudLines, "\n")
+                end
+            else
+                if hud then hud.Visible = false end
+                for m, bb in pairs(EnemyStatusEngine.billboards) do
+                    if bb and bb.Parent then bb:Destroy() end
+                end
+                table.clear(EnemyStatusEngine.billboards)
+            end
+
+            task.wait(0.2)
+        end
+    end)
+end
+
+function EnemyStatusEngine.stop()
+    EnemyStatusEngine.running = false
+    if EnemyStatusEngine.thread then
+        task.cancel(EnemyStatusEngine.thread)
+        EnemyStatusEngine.thread = nil
+    end
+    if EnemyStatusEngine.gui then
+        EnemyStatusEngine.gui:Destroy()
+        EnemyStatusEngine.gui = nil
+    end
+    for _, bb in pairs(EnemyStatusEngine.billboards) do
+        if bb and bb.Parent then bb:Destroy() end
+    end
+    table.clear(EnemyStatusEngine.billboards)
+end
+
+EnemyStatusEngine.start()
