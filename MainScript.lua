@@ -6025,40 +6025,72 @@ local function executeDirectRemoteTurn()
     local fip = char and char:FindFirstChild("FightInProgress")
     if not fip then return false end
 
-    -- 1. Tim mobs muc tieu tu GetOtherTeam
+    local pgui = PlayerGui
+    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    local actionChoice = (Options.CombatAction and Options.CombatAction.Value) or "Auto Smart"
+    local shouldMeditateIfNoSkill = (Toggles.CombatMeditate and Toggles.CombatMeditate.Value) or false
+    local targetPrio = (Options.TargetPriority and Options.TargetPriority.Value) or "First Enemy"
+    local subAction = (Options.CombatSubAction and Options.CombatSubAction.Value) or "None"
+
+    -- 1. Detect if this turn belongs to a summon (e.g. Sylph, Skeleton, Minion)
+    local isSummon = false
+    local deciding = combatGui and combatGui:FindFirstChild("Deciding")
+    if deciding and deciding.Visible then
+        local txt = deciding:FindFirstChildWhichIsA("TextLabel", true) and deciding:FindFirstChildWhichIsA("TextLabel", true).Text:lower() or ""
+        if txt ~= "" and not txt:find(LocalPlayer.Name:lower()) then
+            isSummon = true
+        end
+    end
+
+    -- 2. Find target enemy
     local targetEnemy = nil
     pcall(function()
-        local otherTeam = game.ReplicatedStorage.Remotes.Data.GetOtherTeam:InvokeServer(fip.Value)
-        if otherTeam and #otherTeam > 0 then
-            local aliveEnemies = {}
-            for _, e in ipairs(otherTeam) do
-                if e and e.Parent and e:FindFirstChild("Humanoid") and e.Humanoid.Health > 0 then
-                    table.insert(aliveEnemies, e)
+        local getOtherTeam = game.ReplicatedStorage:FindFirstChild("Remotes") and game.ReplicatedStorage.Remotes:FindFirstChild("Data") and game.ReplicatedStorage.Remotes.Data:FindFirstChild("GetOtherTeam")
+        if getOtherTeam then
+            local otherTeam = getOtherTeam:InvokeServer(fip.Value)
+            if otherTeam and #otherTeam > 0 then
+                local aliveEnemies = {}
+                for _, e in ipairs(otherTeam) do
+                    if e and e.Parent and e:FindFirstChildOfClass("Humanoid") and e:FindFirstChildOfClass("Humanoid").Health > 0 then
+                        table.insert(aliveEnemies, e)
+                    end
                 end
-            end
-            if #aliveEnemies > 0 then
-                local prio = Options.TargetPriority and Options.TargetPriority.Value or "First Enemy"
-                if prio == "Last Enemy" then
-                    targetEnemy = aliveEnemies[#aliveEnemies]
-                elseif prio == "Random Enemy" then
-                    targetEnemy = aliveEnemies[math.random(1, #aliveEnemies)]
-                else
-                    targetEnemy = aliveEnemies[1]
+                if #aliveEnemies > 0 then
+                    if targetPrio == "Last Enemy" then
+                        targetEnemy = aliveEnemies[#aliveEnemies]
+                    elseif targetPrio == "Random Enemy" then
+                        targetEnemy = aliveEnemies[math.random(1, #aliveEnemies)]
+                    else
+                        targetEnemy = aliveEnemies[1]
+                    end
                 end
             end
         end
     end)
 
-    -- 2. Doc list skill ready tu ActionBG.AttacksPage hoac UI
-    local pgui = PlayerGui
-    local combatGui = pgui and pgui:FindFirstChild("Combat")
+    if not targetEnemy then
+        local living = workspace:FindFirstChild("Living")
+        if living then
+            for _, m in ipairs(living:GetChildren()) do
+                if m ~= char and m:FindFirstChildOfClass("Humanoid") and m:FindFirstChildOfClass("Humanoid").Health > 0 then
+                    local mfip = m:FindFirstChild("FightInProgress")
+                    if mfip and mfip.Value == fip.Value then
+                        targetEnemy = m
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    -- 3. Read skill availability from in-game AttacksPage ScrollingFrame if open, or from player skills
     local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
     local atkPage = actionBG and actionBG:FindFirstChild("AttacksPage")
     local scrollFrame = atkPage and atkPage:FindFirstChild("Attack") and atkPage.Attack:FindFirstChild("ScrollingFrame")
 
     local function isSkillAvailable(skillName)
         if not skillName or skillName == "" or skillName == "None" then return false end
-        if skillName == "Strike" then return true end
+        if skillName == "Strike" or skillName == "Wind Bolt" or skillName == "Smack" then return true end
         if scrollFrame then
             local btn = scrollFrame:FindFirstChild(skillName)
             if btn then
@@ -6076,111 +6108,9 @@ local function executeDirectRemoteTurn()
         return true
     end
 
-    local skillToUse = "Strike"
+    local skillToUse = isSummon and "Wind Bolt" or "Strike"
 
-    -- =========================================================================
-    -- CHIEN THUAT AUTO BOSS YAR'THUL (TICH HOP TRUC TIEP VAO ENGINE COMBAT)
-    -- =========================================================================
-    if AutoYarthul and AutoYarthul.running then
-        AutoYarthul.turnExecutionLock = true
-
-        local curEnergy = AutoYarthul.getPlayerEnergy()
-        local hasPillar = AutoYarthul.hasFlamePillar()
-        local isSenseReady = AutoYarthul.isSkillReady("Sense Expansion") and (AutoYarthul.lastUsedSkill ~= "Sense Expansion")
-        local isCarnageReady = AutoYarthul.isSkillReady("Carnage")
-
-        -- 1. Uu tien so 1 TUYET DOI: Sense Expansion (Chi can don danh before not PHAI Sense Expansion & Sense has hoi CD la dung)
-        if isSenseReady then
-            skillToUse = "Sense Expansion"
-            AutoYarthul.lastUsedSkill = "Sense Expansion"
-            hubLog("[AutoYarthul]  [Priority 1] activate SENSE EXPANSION (Don before not yet dung Sense & ready)!")
-            AutoYarthul.updateHUD("Turn Action:  Sense Expansion")
-
-        -- 2. Uu tien so 2: Carnage (Chi dung khi enough Energy >= 3 VA Carnage has HOI CD VA HOAN TOAN not CO Flame Pillar tren san, TUYET DOI not MEDITATE)
-        elseif curEnergy >= 3 and isCarnageReady and (not hasPillar) then
-            skillToUse = "Carnage"
-            AutoYarthul.lastUsedSkill = "Carnage"
-            hubLog(string.format("[AutoYarthul]  [Priority 2 - Energy: %d >= 3 | Carnage Ready | No Pillar] activate CARNAGE (Dut khoat not Meditate)!", curEnergy))
-            AutoYarthul.updateHUD(string.format("Turn Action:  Carnage (Energy: %d)", curEnergy))
-
-        -- 3. Uu tien so 3 / Mac dinh: Strike (Dung STRIKE load Energy + Kem Sub-Action Meditate cung turn khi Carnage is CD hoac co Pillar)
-        else
-            skillToUse = "Strike"
-            AutoYarthul.lastUsedSkill = "Strike"
-            if not isCarnageReady then
-                hubLog(string.format("[AutoYarthul] ⏳ [Priority 3 - CARNAGE ON COOLDOWN | Energy: %d] Carnage is hoi CD -> Dung STRIKE + Meditate de load & giam CD!", curEnergy))
-                AutoYarthul.updateHUD(string.format("Turn Action:  Meditate +  Strike (Carnage CD | E: %d)", curEnergy))
-            elseif hasPillar then
-                hubLog(string.format("[AutoYarthul] 🔥 [Priority 3 - FLAME PILLAR ACTIVE | Energy: %d] is co Flame Pillar -> Dung STRIKE + Meditate (Khoa Carnage)!", curEnergy))
-                AutoYarthul.updateHUD("Turn Action:  Meditate +  Strike (Pillar Active)")
-            else
-                hubLog(string.format("[AutoYarthul]  [Priority 3 - Building Energy: %d/3] Dung STRIKE + Meditate!", curEnergy))
-                AutoYarthul.updateHUD(string.format("Turn Action:  Meditate +  Strike (Energy: %d/3)", curEnergy))
-            end
-        end
-
-        -- Tim muc tieu Yar'thul Boss
-        if otherTeam and #otherTeam > 0 then
-            for _, e in ipairs(otherTeam) do
-                if e and e.Parent then
-                    local ename = e.Name:lower()
-                    if ename:find("yar") or ename:find("thul") or ename:find("dragon") then
-                        targetEnemy = e
-                        break
-                    end
-                end
-            end
-            if not targetEnemy then targetEnemy = otherTeam[1] end
-        end
-
-        if not targetEnemy then
-            local living = workspace:FindFirstChild("Living")
-            if living then
-                for _, m in ipairs(living:GetChildren()) do
-                    if m:IsA("Model") and (m.Name:lower():find("yar") or m.Name:lower():find("thul") or m.Name:lower():find("dragon")) then
-                        targetEnemy = m
-                        break
-                    end
-                end
-            end
-        end
-
-        -- BUOC 1: GUI DON DANH CHINH (ATTACK) before TIEN DE SERVER XAC receive turn DANH
-        hubLog(string.format("[AutoYarthul]  [Direct Remote] Gui don: '%s' -> Muc tieu: %s", skillToUse, targetEnemy and targetEnemy.Name or "Boss"))
-        task.spawn(function()
-            pcall(function()
-                if targetEnemy then
-                    pti:InvokeServer("Attack", skillToUse, { Attacking = targetEnemy })
-                else
-                    pti:InvokeServer("Attack", skillToUse, {})
-                end
-            end)
-        end)
-
-        -- BUOC 2: CHI GUI SUB-ACTION MEDITATE KHI DUNG STRIKE (Carnage va Sense Expansion TUYET DOI not gui Meditate)
-        local useMed = (Toggles.YarthulMeditateSubAction == nil or Toggles.YarthulMeditateSubAction.Value)
-        if useMed and skillToUse == "Strike" then
-            hubLog("[AutoYarthul]  [Sub-Action] Gui Meditate di kem now after don Strike de toi uu load Energy!")
-            task.spawn(function()
-                pcall(function()
-                    pti:InvokeServer("Meditate", false)
-                end)
-            end)
-        end
-
-        -- wait cho den khi Server ket thuc turn dau (ActionBG.Visible = false)
-        local waitTurnElapsed = 0
-        while isPlayerTurn() and waitTurnElapsed < 2.0 do
-            task.wait(0.05)
-            waitTurnElapsed = waitTurnElapsed + 0.05
-        end
-
-        return true
-    end
-
-    local actionChoice = Options.SelectedCombatAction and Options.SelectedCombatAction.Value or "Auto Smart (Best Skill -> Strike)"
-    local shouldMeditateIfNoSkill = Toggles.AutoMeditateInCombat and Toggles.AutoMeditateInCombat.Value
-
+    -- Mode 1: Custom Priority Skills
     if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
         local slots = {
             Options.CustomSkillSlot1 and Options.CustomSkillSlot1.Value,
@@ -6190,71 +6120,89 @@ local function executeDirectRemoteTurn()
         }
         local matched = false
         for _, s in ipairs(slots) do
-            if s and s ~= "" and s ~= "None" and isSkillAvailable(s) then
-                skillToUse = s
-                matched = true
-                break
+            if s and s ~= "" and s ~= "None" then
+                local cleanS = s:gsub("%[Summon%]%s*", "")
+                if isSkillAvailable(cleanS) or isSkillAvailable(s) then
+                    skillToUse = cleanS
+                    matched = true
+                    break
+                end
             end
         end
-        if not matched and shouldMeditateIfNoSkill then
-            hubLog("[DirectRemote]  not co skill available -> Gui Remote Meditate...")
+        if not matched and not isSummon and shouldMeditateIfNoSkill then
+            hubLog("[DirectRemote] 🧘 No custom skill ready -> Direct Remote Meditate...")
             task.spawn(function()
                 pcall(function() pti:InvokeServer("Meditate", false) end)
             end)
             task.wait(0.2)
             return true
         end
-    elseif actionChoice:find("Auto Smart") and scrollFrame then
+
+    -- Mode 2: Auto Smart
+    elseif actionChoice:find("Auto Smart") then
         local bestSkill = nil
         local maxCost = -1
-        for _, btn in ipairs(scrollFrame:GetChildren()) do
-            if btn:IsA("GuiButton") and btn.Name ~= "Strike" and btn.Name ~= "Magic Missile" and btn.Name ~= "Frame" and btn.Name ~= "Template" and isSkillAvailable(btn.Name) then
-                local costText = btn:FindFirstChild("Cost") and btn.Cost:FindFirstChild("TextLabel") and btn.Cost.TextLabel.Text or "0"
-                local costNum = tonumber(costText:match("%d+")) or 0
-                if costNum > maxCost then
-                    maxCost = costNum
-                    bestSkill = btn.Name
+        if scrollFrame then
+            for _, btn in ipairs(scrollFrame:GetChildren()) do
+                if (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name ~= "Strike" and btn.Name ~= "Magic Missile" and btn.Name ~= "Frame" and btn.Name ~= "Template" and isSkillAvailable(btn.Name) then
+                    local costObj = btn:FindFirstChild("Cost", true)
+                    local costLabel = costObj and (costObj:IsA("TextLabel") and costObj or costObj:FindFirstChildWhichIsA("TextLabel", true))
+                    local costText = costLabel and costLabel.Text or "0"
+                    local costNum = tonumber(costText:match("%d+")) or 0
+                    if costNum > maxCost then
+                        maxCost = costNum
+                        bestSkill = btn.Name
+                    end
                 end
             end
         end
+
         if bestSkill then
             skillToUse = bestSkill
+        elseif isSummon then
+            skillToUse = "Wind Bolt"
+        else
+            skillToUse = "Strike"
         end
+
+    -- Mode 3: Strike / Basic Attack
+    else
+        skillToUse = isSummon and "Wind Bolt" or "Strike"
     end
 
-    hubLog(string.format("[DirectRemote]  Gui Remote chinh: '%s' -> Muc tieu: %s", skillToUse, targetEnemy and targetEnemy.Name or "None"))
+    local actionRemoteName = isSummon and "AttackSummoned" or "Attack"
+    hubLog(string.format("[DirectRemote] ⚡ Sending Direct Remote '%s': '%s' -> Target: %s", actionRemoteName, skillToUse, targetEnemy and targetEnemy.Name or "None"))
 
-    -- 3. Gui don danh chinh
+    -- 4. Send Main Attack Remote packet directly to server
     task.spawn(function()
         pcall(function()
             if targetEnemy then
-                pti:InvokeServer("Attack", skillToUse, { Attacking = targetEnemy })
+                pti:InvokeServer(actionRemoteName, skillToUse, { Attacking = targetEnemy })
             else
-                pti:InvokeServer("Attack", skillToUse, {})
+                pti:InvokeServer(actionRemoteName, skillToUse, {})
             end
         end)
     end)
 
-    -- 4. SUB-ACTIONS (Gui them Meditate / Guard now trong cung turn!)
-    local subAction = Options.CombatSubAction and Options.CombatSubAction.Value or "None"
-    if subAction == "Auto Meditate (Recover Energy)" or subAction:find("Meditate") then
-        hubLog("[DirectRemote]  Gui Sub-Action: Meditate now trong cung turn!")
-        task.spawn(function()
-            pcall(function()
-                pti:InvokeServer("Meditate", false)
+    -- 5. Sub-Actions for player in same turn (Meditate / Guard)
+    if not isSummon then
+        if subAction == "Auto Meditate (Recover Energy)" or subAction:find("Meditate") then
+            hubLog("[DirectRemote] 🧘 Sending same-turn Sub-Action: Meditate!")
+            task.spawn(function()
+                pcall(function() pti:InvokeServer("Meditate", false) end)
             end)
-        end)
-    elseif subAction == "Auto Guard (Defend)" or subAction:find("Guard") then
-        hubLog("[DirectRemote]  Gui Sub-Action: Guard now trong cung turn!")
-        task.spawn(function()
-            pcall(function()
-                if targetEnemy then
-                    pti:InvokeServer("Guard", false, { ProtectTarget = char })
-                else
-                    pti:InvokeServer("Guard", false)
-                end
+        elseif subAction == "Auto Guard (Defend)" or subAction:find("Guard") then
+            hubLog("[DirectRemote] 🛡️ Sending same-turn Sub-Action: Guard!")
+            task.spawn(function()
+                pcall(function()
+                    if targetEnemy then
+                        pti:InvokeServer("Guard", false, { ProtectTarget = char })
+                    else
+                        pti:InvokeServer("Guard", false)
+                    end
+                end)
             end)
-        end)
+        end
     end
 
     task.wait(0.2)
@@ -6266,6 +6214,19 @@ local function executeCombatTurn()
     combatTurnLock = true
 
     local ok, err = pcall(function()
+        local execMode = (Options.CombatExecutionMode and Options.CombatExecutionMode.Value) or "Direct Remote (Fastest + Sub-actions)"
+        
+        -- IF DIRECT REMOTE MODE IS SELECTED: SEND INSTANT REMOTE PACKETS DIRECTLY WITHOUT TOUCHING UI
+        if execMode:find("Direct Remote") then
+            executeDirectRemoteTurn()
+            local endWait = os.clock()
+            while isPlayerTurn() and os.clock() - endWait < 1.2 do
+                task.wait(0.05)
+            end
+            return
+        end
+
+        -- OTHERWISE FALLBACK TO UI EMULATION (CLASSIC)
         local pgui = PlayerGui
         local combatGui = pgui and pgui:FindFirstChild("Combat")
         if not combatGui or not combatGui.Enabled then return end
@@ -6279,7 +6240,6 @@ local function executeCombatTurn()
         local shouldMeditateIfNoSkill = (Toggles.CombatMeditate and Toggles.CombatMeditate.Value) or false
         local targetPrio = (Options.TargetPriority and Options.TargetPriority.Value) or "First Enemy"
 
-        -- Detect if this turn belongs to a summon (e.g. Sylph, Skeleton, Minion)
         local isSummon = false
         local deciding = combatGui:FindFirstChild("Deciding")
         if deciding and deciding.Visible then
@@ -6289,7 +6249,6 @@ local function executeCombatTurn()
             end
         end
 
-        -- Helper function to perform meditation in combat (Players only, summons cannot meditate)
         local function doCombatMeditate()
             if isSummon then return end
             hubLog("[Combat] 🧘 Performing Combat Meditation...")
@@ -6316,7 +6275,6 @@ local function executeCombatTurn()
             task.wait(0.5)
         end
 
-        -- Switch from ContextPage to AttacksPage
         if ctxPage and ctxPage.Visible and not (atkPage and atkPage.Visible) then
             local atkBtn = ctxPage:FindFirstChild("AttackButton")
             if atkBtn and atkBtn.Visible then
@@ -6329,36 +6287,28 @@ local function executeCombatTurn()
             end
         end
 
-        -- Select Skill from AttacksPage ScrollingFrame
         local attackFrame = atkPage and atkPage:FindFirstChild("Attack")
         local scrollFrame = attackFrame and attackFrame:FindFirstChild("ScrollingFrame")
 
         if scrollFrame and scrollFrame.Visible then
             local selectedSkillBtn = nil
 
-            -- Test if button is ready to use
             local function isSkillReady(btn)
                 if not btn or not btn.Parent then return false end
                 if not btn:IsA("GuiButton") and not btn:IsA("TextButton") and not btn:IsA("ImageButton") then return false end
                 if btn.Name == "Template" or btn.Name == "Return" or btn.Name == "Frame" then return false end
 
-                -- A. Cooldown check
                 local cd = btn:FindFirstChild("CD", true) or btn:FindFirstChild("Cooldown", true)
                 if cd and cd.Visible == true then
                     if cd:IsA("TextLabel") and (cd.Text == "" or cd.Text == "0" or cd.Text == "0s") then
-                        -- Ready
                     else
                         return false
                     end
                 end
 
-                -- B. Sealed check
                 local sealed = btn:FindFirstChild("Sealed", true) or btn:FindFirstChild("Disabled", true)
-                if sealed and sealed.Visible == true then
-                    return false
-                end
+                if sealed and sealed.Visible == true then return false end
 
-                -- C. Energy check (Only for player, summons use their own turn rules)
                 if not isSummon then
                     local char = LocalPlayer and LocalPlayer.Character
                     local status = char and char:FindFirstChild("Status")
@@ -6368,16 +6318,12 @@ local function executeCombatTurn()
                         local costLabel = costObj and (costObj:IsA("TextLabel") and costObj or costObj:FindFirstChildWhichIsA("TextLabel", true))
                         local costText = costLabel and costLabel.Text or (costObj and costObj.Name) or ""
                         local costNum = tonumber(costText:match("%d+"))
-                        if costNum and costNum > curEnergy then
-                            return false
-                        end
+                        if costNum and costNum > curEnergy then return false end
                     end
                 end
-
                 return true
             end
 
-            -- Find Basic Attack or fallback move
             local function findBasicAttackBtn()
                 local basicNames = {
                     "wind bolt", "gale pulse", "light bolt", "sylph's prayer", "gale uplift",
@@ -6393,13 +6339,10 @@ local function executeCombatTurn()
                         local label = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
                         local txt = (label and label.Text ~= "" and label.Text) or btn.Name
                         for _, bName in ipairs(basicNames) do
-                            if txt:lower() == bName:lower() then
-                                return btn
-                            end
+                            if txt:lower() == bName:lower() then return btn end
                         end
                     end
                 end
-                -- Fallback to ANY first ready skill
                 for _, btn in ipairs(scrollFrame:GetChildren()) do
                     if isSkillReady(btn) and (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name ~= "Frame" and btn.Name ~= "Template" and btn.Name ~= "Return" then
                         return btn
@@ -6408,7 +6351,6 @@ local function executeCombatTurn()
                 return nil
             end
 
-            -- Find Skill by Name
             local function findSkillByName(targetName)
                 if not targetName or targetName == "" or targetName == "None" then return nil end
                 local cleanTarget = targetName:gsub("%[Summon%]%s*", ""):gsub("^%s*(.-)%s*$", "%1"):lower()
@@ -6419,12 +6361,9 @@ local function executeCombatTurn()
                         local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
                         local labelText = nameLabel and nameLabel.Text and nameLabel.Text:gsub("^%s*(.-)%s*$", "%1"):lower() or ""
                         local btnName = btn.Name:gsub("^%s*(.-)%s*$", "%1"):lower()
-                        if labelText == cleanTarget or btnName == cleanTarget then
-                            return btn
-                        end
+                        if labelText == cleanTarget or btnName == cleanTarget then return btn end
                     end
                 end
-
                 for _, btn in ipairs(scrollFrame:GetChildren()) do
                     if isSkillReady(btn) then
                         local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
@@ -6436,11 +6375,9 @@ local function executeCombatTurn()
                         end
                     end
                 end
-
                 return nil
             end
 
-            -- Mode 1: Custom Priority Skills
             if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
                 local slots = {
                     Options.CustomSkillSlot1 and Options.CustomSkillSlot1.Value,
@@ -6448,7 +6385,6 @@ local function executeCombatTurn()
                     Options.CustomSkillSlot3 and Options.CustomSkillSlot3.Value,
                     Options.CustomSkillSlot4 and Options.CustomSkillSlot4.Value,
                 }
-
                 for slotIdx, slotName in ipairs(slots) do
                     if slotName and slotName ~= "" and slotName ~= "None" then
                         local foundBtn = findSkillByName(slotName)
@@ -6459,7 +6395,6 @@ local function executeCombatTurn()
                         end
                     end
                 end
-
                 if not selectedSkillBtn then
                     if isSummon then
                         selectedSkillBtn = findBasicAttackBtn()
@@ -6471,8 +6406,6 @@ local function executeCombatTurn()
                         selectedSkillBtn = findBasicAttackBtn()
                     end
                 end
-
-            -- Mode 2: Auto Smart
             elseif actionChoice:find("Auto Smart") then
                 local bestSkill = nil
                 local maxCost = -1
@@ -6488,7 +6421,6 @@ local function executeCombatTurn()
                         end
                     end
                 end
-
                 if bestSkill then
                     selectedSkillBtn = bestSkill
                 elseif not isSummon and shouldMeditateIfNoSkill then
@@ -6497,13 +6429,10 @@ local function executeCombatTurn()
                 else
                     selectedSkillBtn = findBasicAttackBtn()
                 end
-
-            -- Mode 3: Strike / Basic Attack
             else
                 selectedSkillBtn = findBasicAttackBtn()
             end
 
-            -- Ultimate Fallback: Any ready skill button
             if not selectedSkillBtn then
                 selectedSkillBtn = findBasicAttackBtn()
             end
@@ -6525,7 +6454,6 @@ local function executeCombatTurn()
             end
         end
 
-        -- Select Enemy Target
         local enemiesFrame = atkPage and atkPage:FindFirstChild("Enemies")
         local enemiesScroll = enemiesFrame and (enemiesFrame:FindFirstChild("ScrollingFrame") or enemiesFrame)
 
@@ -6557,7 +6485,6 @@ local function executeCombatTurn()
             end
         end
 
-        -- Click Go button if visible
         goBtn = combatGui:FindFirstChild("Go")
         if goBtn and goBtn.Visible then
             hubLog("[Combat] 🚀 Confirming Go button...")
@@ -6565,7 +6492,6 @@ local function executeCombatTurn()
             task.wait(0.25)
         end
 
-        -- Wait for turn completion
         local endWait = os.clock()
         while isPlayerTurn() and os.clock() - endWait < 1.5 do
             task.wait(0.05)
@@ -6578,7 +6504,6 @@ local function executeCombatTurn()
 
     combatTurnLock = false
 end
-
 function AutoFight.start()
     if AutoFight.running then return end
     AutoFight.running = true
