@@ -8390,6 +8390,8 @@ registerConnection(RunService.RenderStepped:Connect(function()
     -- A. Player ESP Updates
     local pEspEnabled = Toggles.PlayerESP and Toggles.PlayerESP.Value
     local pMaxDist = Options.PlayerESPMaxDist and Options.PlayerESPMaxDist.Value or 3500
+    local pColor = Options.PlayerESPColor and Options.PlayerESPColor.Value or Color3.fromRGB(6, 182, 212)
+
     for p, data in pairs(activePlayerESP) do
         if data.Billboard then
             local pChar = p.Character
@@ -8400,6 +8402,7 @@ registerConnection(RunService.RenderStepped:Connect(function()
                 if dist <= pMaxDist then
                     local hpPct = math.clamp(pHum.Health / math.max(1, pHum.MaxHealth), 0, 1)
                     local hpColor = hpPct > 0.5 and Color3.fromRGB(80, 255, 120) or (hpPct > 0.25 and Color3.fromRGB(255, 200, 50) or Color3.fromRGB(255, 70, 70))
+                    data.Label.TextColor3 = pColor
                     data.InfoLabel.Text = string.format("%d%% HP [%d/%d] • %dm", math.floor(hpPct * 100), math.floor(pHum.Health), math.floor(pHum.MaxHealth), math.floor(dist))
                     data.InfoLabel.TextColor3 = hpColor
                     data.Billboard.Enabled = true
@@ -8412,15 +8415,40 @@ registerConnection(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- B. NPC ESP Updates
+    -- B. NPC & Trainer ESP Updates
+    local trainerEspEnabled = Toggles.Trainer_ESP and Toggles.Trainer_ESP.Value
     local npcEspEnabled = Toggles.NPC_ESP and Toggles.NPC_ESP.Value
     local npcMaxDist = Options.NPC_ESPMaxDist and Options.NPC_ESPMaxDist.Value or 2500
+    local trainerMaxDist = Options.Trainer_ESPMaxDist and Options.Trainer_ESPMaxDist.Value or 3500
+    local trainerColor = Options.TrainerESPColor and Options.TrainerESPColor.Value or Color3.fromRGB(168, 85, 247)
+    local npcColor = Options.NPCESPColor and Options.NPCESPColor.Value or Color3.fromRGB(251, 191, 36)
+
     for m, data in pairs(activeNpcESP) do
         if data.billboard and data.head and data.head.Parent then
-            if npcEspEnabled then
+            local isTrainer = TrainerList[data.name] ~= nil or data.name:find("Trainer") ~= nil
+            local shouldShow = false
+            local curDistLimit = npcMaxDist
+            local curColor = npcColor
+
+            if isTrainer then
+                if trainerEspEnabled then
+                    shouldShow = true
+                    curDistLimit = trainerMaxDist
+                    curColor = trainerColor
+                end
+            else
+                if npcEspEnabled then
+                    shouldShow = true
+                    curDistLimit = npcMaxDist
+                    curColor = npcColor
+                end
+            end
+
+            if shouldShow then
                 local dist = (localRoot.Position - data.head.Position).Magnitude
-                if dist <= npcMaxDist then
-                    data.label.Text = string.format("[NPC] %s [%dm]", data.name, math.floor(dist))
+                if dist <= curDistLimit then
+                    data.label.Text = string.format("[%s] %s [%dm]", isTrainer and "TRAINER" or "NPC", data.name, math.floor(dist))
+                    data.label.TextColor3 = curColor
                     data.billboard.Enabled = true
                 else
                     data.billboard.Enabled = false
@@ -8431,15 +8459,18 @@ registerConnection(RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- C. Location ESP Updates
+    -- C. Location & Waypoint ESP Updates
     local locEspEnabled = Toggles.Location_ESP and Toggles.Location_ESP.Value
     local locMaxDist = Options.Location_ESPMaxDist and Options.Location_ESPMaxDist.Value or 6000
+    local locColor = Options.LocationESPColor and Options.LocationESPColor.Value or Color3.fromRGB(34, 197, 94)
+
     for name, data in pairs(activeLocationESP) do
         if data.billboard then
             if locEspEnabled then
                 local dist = (localRoot.Position - data.pos).Magnitude
                 if dist <= locMaxDist then
                     data.label.Text = string.format("[POI] %s [%dm]", data.name, math.floor(dist))
+                    data.label.TextColor3 = locColor
                     data.billboard.Enabled = true
                 else
                     data.billboard.Enabled = false
@@ -8456,6 +8487,8 @@ registerConnection(RunService.RenderStepped:Connect(function()
     local showDist = Toggles.ESPShowDistance and Toggles.ESPShowDistance.Value
     local maxDist = Options.ESPMaxDistance and Options.ESPMaxDistance.Value or 10000
     local whitelist = (Options.ESPWhitelist and Options.ESPWhitelist.Value) or {}
+    local cryColor = Options.CrylightESPColor and Options.CrylightESPColor.Value or Color3.fromRGB(56, 189, 248)
+    local oreColor = Options.OreESPColor and Options.OreESPColor.Value or Color3.fromRGB(245, 158, 11)
 
     for inst, data in pairs(activeESP) do
         if not inst or not inst.Parent then
@@ -8481,7 +8514,13 @@ registerConnection(RunService.RenderStepped:Connect(function()
                     local text = data.name
                     if showDist then text = string.format("%s [%dm]", data.name, math.floor(dist)) end
                     data.label.Text = text
-                    data.label.TextColor3 = data.color
+                    if data.name == "Crylight" then
+                        data.label.TextColor3 = cryColor
+                    elseif data.name == "Ferrus" or data.name == "Aestic" or data.name == "Laneus" then
+                        data.label.TextColor3 = oreColor
+                    else
+                        data.label.TextColor3 = data.color
+                    end
                     data.billboard.Enabled = true
                 else
                     data.billboard.Enabled = false
@@ -9510,9 +9549,15 @@ QOLGroup:AddToggle("RevealRealHpMana", {
 })
 
 QOLGroup:AddToggle("RevealUnidentified", {
-    Text = "Reveal Unidentified Items",
+    Text = "Reveal Unidentified Item Names",
     Default = false,
-    Tooltip = "Reveal true item names, enchants, tiers, and rolled stats for unidentified items in your inventory",
+    Tooltip = "Reveal true item names of unidentified artifacts and gear in your inventory instead of generic 'Unidentified'",
+})
+
+QOLGroup:AddToggle("ShowItemStats", {
+    Text = "Show Inventory Item Tiers & Stats",
+    Default = false,
+    Tooltip = "Display exact Tier and rolled TierStats/Enchants directly on your inventory item buttons (e.g. [T4] Shifting Hourglass (+2 Spe, +2 Arc))",
 })
 
 local FPSGroup = Tabs.Visuals:AddRightGroupbox("FPS Booster")
@@ -10172,20 +10217,20 @@ end
 initAntiAFK()
 
 -- =============================================================================
--- QOL: REAL HP/MANA REVEAL & UNIDENTIFIED ITEMS REVEALER
+-- QOL: REAL HP/MANA REVEAL & UNIDENTIFIED ITEMS / ITEM STATS REVEALER
 -- =============================================================================
 task.spawn(function()
     local blueEnergyColor = Color3.fromRGB(106, 192, 242)
-    local RS = game:GetService("ReplicatedStorage")
-    local ItemModifiers = nil
-    pcall(function() ItemModifiers = require(RS.Libraries.ItemModifiers) end)
 
     while HubState.running do
         task.wait(0.25)
         if not HubState.running then break end
 
-        -- 1. solve VA HIEN name real + FULL STATS KHI identify (UNIDENTIFIED REVEALER WITH STATS)
-        if Toggles.RevealUnidentified and Toggles.RevealUnidentified.Value then
+        -- 1. REVEAL UNIDENTIFIED ITEM NAMES & SHOW INVENTORY ITEM STATS
+        local revealUnidentified = Toggles.RevealUnidentified and Toggles.RevealUnidentified.Value
+        local showStats = Toggles.ShowItemStats and Toggles.ShowItemStats.Value
+
+        if revealUnidentified or showStats then
             pcall(function()
                 local pgui = PlayerGui
                 local inv = pgui and pgui:FindFirstChild("Inventory")
@@ -10202,83 +10247,59 @@ task.spawn(function()
                         end)
                     end
 
-                    local ItemRegistry = nil
-                    pcall(function() ItemRegistry = require(RS.ItemRegistry) end)
-
                     for _, btn in ipairs(inv:GetDescendants()) do
                         if btn:IsA("TextButton") and itemDict and itemDict[btn.Name] then
                             local itemObj = itemDict[btn.Name]
                             local itemData = itemObj and (itemObj.ItemData or itemObj)
-                            if itemData and itemData.Config and itemData.Config.Unidentified then
-                                local realName = itemData.Name or itemData.Tool
-                                if realName then
-                                    local statList = {}
-                                    local cfg = itemData.Config
+                            if itemData then
+                                local cfg = itemData.Config or {}
+                                local rawName = itemData.Name or itemData.Tool or btn.Name:gsub("#%d+$", "")
 
-                                    if cfg.Enchant and tostring(cfg.Enchant) ~= "" then
-                                        table.insert(statList, "Enchant: " .. tostring(cfg.Enchant))
+                                if cfg.Unidentified then
+                                    if revealUnidentified then
+                                        btn.Text = rawName .. " [Unidentified]"
                                     end
-                                    if cfg.Tier then
-                                        table.insert(statList, "T" .. tostring(cfg.Tier))
-                                    end
-
-                                    -- Quet stats rolled stats tu Config
-                                    for k, v in pairs(cfg) do
-                                        if type(v) == "number" and v ~= 0 and k ~= "Unidentified" and k ~= "Tier" and k ~= "Cost" and k ~= "ID" then
-                                            table.insert(statList, string.format("+%d %s", v, tostring(k):sub(1, 3)))
-                                        elseif type(v) == "table" and tostring(k):lower():find("stat") then
-                                            for sk, sv in pairs(v) do
-                                                if type(sv) == "number" and sv ~= 0 then
-                                                    table.insert(statList, string.format("+%d %s", sv, tostring(sk):sub(1, 3)))
+                                else
+                                    if showStats then
+                                        local statList = {}
+                                        if cfg.TierStats and type(cfg.TierStats) == "table" then
+                                            for k, v in pairs(cfg.TierStats) do
+                                                if type(v) == "number" and v ~= 0 then
+                                                    local shortK = tostring(k):sub(1, 3)
+                                                    table.insert(statList, string.format("+%d %s", v, shortK))
                                                 end
                                             end
                                         end
-                                    end
 
-                                    -- Quet stats BaseStats tu ItemRegistry neu co
-                                    if ItemRegistry and ItemRegistry.GetItem then
-                                        local regData = ItemRegistry:GetItem(realName:gsub(" ", ""))
-                                        if regData then
-                                            if regData.Stats and type(regData.Stats) == "table" then
-                                                for sk, sv in pairs(regData.Stats) do
-                                                    if type(sv) == "number" and sv ~= 0 then
-                                                        table.insert(statList, string.format("+%d %s", sv, tostring(sk):sub(1, 3)))
-                                                    end
-                                                end
-                                            end
-                                            if regData.Damage then table.insert(statList, string.format("%d Dmg", regData.Damage)) end
-                                            if regData.Defense then table.insert(statList, string.format("%d Def", regData.Defense)) end
+                                        if cfg.Enchant and tostring(cfg.Enchant) ~= "" then
+                                            table.insert(statList, tostring(cfg.Enchant))
                                         end
-                                    end
 
-                                    local statsStr = #statList > 0 and (" [" .. table.concat(statList, ", ") .. "]") or ""
-                                    btn.Text = realName .. statsStr
+                                        local prefix = cfg.Tier and string.format("[T%d] ", cfg.Tier) or ""
+                                        local suffix = #statList > 0 and (" (" .. table.concat(statList, ", ") .. ")") or ""
+                                        btn.Text = prefix .. rawName .. suffix
+                                    end
                                 end
                             end
                         end
                     end
 
-                    -- solve luon ToolTip khi di chuot vao mon do not yet identify
+                    -- ToolTip Handlers
                     local tooltip = inv:FindFirstChild("ToolTip", true)
-                    if tooltip and tooltip.Visible then
+                    if tooltip and tooltip.Visible and revealUnidentified then
                         local textLbl = tooltip:FindFirstChildWhichIsA("TextLabel", true)
                         if textLbl and textLbl.Text:find("You have no idea what this does") then
-                            textLbl.Text = "[Real Item & Stats Revealed by Arcane Hub]"
+                            textLbl.Text = "[Real Item Revealed by Arcane Hub]"
                         end
                     end
 
                     local advTooltip = inv:FindFirstChild("AdvancedTooltip", true)
-                    if advTooltip and advTooltip.Visible then
+                    if advTooltip and advTooltip.Visible and revealUnidentified then
                         local descLbl = advTooltip:FindFirstChild("Desc")
                         if descLbl and descLbl:IsA("TextLabel") and descLbl.Text:find("You have no idea what this does") then
                             local nameLbl = advTooltip:FindFirstChild("ItemName")
-                            local realItemName = nameLbl and nameLbl.Text:gsub(" ", "")
-                            if realItemName and ItemRegistry then
-                                local regData = ItemRegistry:GetItem(realItemName)
-                                if regData then
-                                    local descText = (regData.GearDesc and (regData.GearDesc .. " | ") or "") .. (regData.ToolTip or "")
-                                    descLbl.Text = "[Stats Revealed] " .. descText
-                                end
+                            if nameLbl and nameLbl:IsA("TextLabel") then
+                                descLbl.Text = "[Real Item Revealed] " .. nameLbl.Text
                             end
                         end
                     end
@@ -10286,46 +10307,42 @@ task.spawn(function()
             end)
         end
 
-        -- 2. solve VA HIEN MANA/ENERGY real (REAL ENERGY / MANA)
-        pcall(function()
-            local char = LocalPlayer.Character
-            local pgui = PlayerGui
-            local combatGui = pgui and pgui:FindFirstChild("Combat")
-            local holder = combatGui and combatGui:FindFirstChild("Holder")
-            if char and holder then
-                local status = char:FindFirstChild("Status")
-                local energyVal = status and status:FindFirstChild("Energy")
-                if energyVal then
-                    local curEnergy = energyVal.Value
-                    local maxEnergy = energyVal.MaxValue or 6
+        -- 2. REVEAL REAL MANA / ENERGY IN COMBAT
+        if Toggles.RevealRealHpMana and Toggles.RevealRealHpMana.Value then
+            pcall(function()
+                local char = LocalPlayer.Character
+                local pgui = PlayerGui
+                local combatGui = pgui and pgui:FindFirstChild("Combat")
+                local holder = combatGui and combatGui:FindFirstChild("Holder")
+                if char and holder then
+                    local status = char:FindFirstChild("Status")
+                    local energyVal = status and status:FindFirstChild("Energy")
+                    if energyVal then
+                        local curEnergy = energyVal.Value
+                        local maxEnergy = energyVal.MaxValue or 6
 
-                    -- Cap nhat chu CurrentEnergy.Amount (VD: 1/6 instead of ???)
-                    local currentEnergyFrame = holder:FindFirstChild("CurrentEnergy")
-                    local energyAmountLabel = currentEnergyFrame and currentEnergyFrame:FindFirstChild("Amount")
-                    if energyAmountLabel and energyAmountLabel:IsA("TextLabel") then
-                        if energyAmountLabel.Text == "???" or energyAmountLabel.Text:find("%?") then
-                            energyAmountLabel.Text = string.format("%d/%d", curEnergy, maxEnergy)
+                        local currentEnergyFrame = holder:FindFirstChild("CurrentEnergy")
+                        local energyAmountLabel = currentEnergyFrame and currentEnergyFrame:FindFirstChild("Amount")
+                        if energyAmountLabel and energyAmountLabel:IsA("TextLabel") then
+                            if energyAmountLabel.Text == "???" or energyAmountLabel.Text:find("%?") then
+                                energyAmountLabel.Text = string.format("%d/%d", curEnergy, maxEnergy)
+                            end
                         end
-                    end
 
-                    -- Cap nhat cac o vach Energy xanh sang
-                    local energyBarsContainer = holder:FindFirstChild("Energy")
-                    if energyBarsContainer then
-                        for i = 1, maxEnergy do
-                            local bar = energyBarsContainer:FindFirstChild(tostring(i))
-                            if bar and bar:IsA("GuiObject") then
-                                bar.BackgroundColor3 = blueEnergyColor
-                                if i <= curEnergy then
-                                    bar.Visible = true
-                                else
-                                    bar.Visible = false
+                        local energyBarsContainer = holder:FindFirstChild("Energy")
+                        if energyBarsContainer then
+                            for i = 1, maxEnergy do
+                                local bar = energyBarsContainer:FindFirstChild(tostring(i))
+                                if bar and bar:IsA("GuiObject") then
+                                    bar.BackgroundColor3 = blueEnergyColor
+                                    bar.Visible = (i <= curEnergy)
                                 end
                             end
                         end
                     end
                 end
-            end
-        end)
+            end)
+        end
     end
 end)
 
