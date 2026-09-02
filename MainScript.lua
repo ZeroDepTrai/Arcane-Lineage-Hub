@@ -4594,7 +4594,44 @@ local function scanPlayerSkills()
         ["Info"] = true, ["Template"] = true, ["Return"] = true, ["Shadow Form"] = true, ["SKILL NAME"] = true,
     }
 
-    -- 1. Scan from Combat AttacksPage ScrollingFrame (if in combat)
+    -- 1. Scan from SkillDisplay (Player's unlocked Active Skills)
+    pcall(function()
+        local skillDisplay = pgui and pgui:FindFirstChild("SkillDisplay")
+        if skillDisplay then
+            local skillsFolder = skillDisplay:FindFirstChild("Skills", true)
+            if skillsFolder then
+                for _, c in ipairs(skillsFolder:GetChildren()) do
+                    if (c:IsA("TextButton") or c:IsA("GuiButton") or c:IsA("TextLabel")) and not blacklist[c.Name] then
+                        local name = c:IsA("TextButton") and c.Text or c.Name
+                        if #name > 1 and not blacklist[name] then
+                            skillSet[name] = true
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 2. Scan from Inventory GUI (Category Skills)
+    pcall(function()
+        local inv = pgui and pgui:FindFirstChild("Inventory")
+        if inv then
+            local invSkills = inv:FindFirstChild("Skills", true)
+            local toolCont = invSkills and invSkills:FindFirstChild("ToolContainer")
+            if toolCont then
+                for _, child in ipairs(toolCont:GetChildren()) do
+                    if (child:IsA("TextButton") or child:IsA("GuiButton") or child:IsA("TextLabel")) and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+                        local name = child:IsA("TextButton") and child.Text or child.Name
+                        if #name > 1 and not blacklist[name] then
+                            skillSet[name] = true
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    -- 3. Scan from in-combat AttacksPage
     pcall(function()
         local combatGui = pgui and pgui:FindFirstChild("Combat")
         local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
@@ -4614,58 +4651,26 @@ local function scanPlayerSkills()
         end
     end)
 
-    -- 2. Scan from SkillDisplay GUI (Passive and Active skills)
-    pcall(function()
-        local skillDisplay = pgui and pgui:FindFirstChild("SkillDisplay")
-        if skillDisplay then
-            for _, d in ipairs(skillDisplay:GetDescendants()) do
-                if (d:IsA("TextButton") or d:IsA("TextLabel")) and not blacklist[d.Name] and not blacklist[d.Text] then
-                    local parentName = d.Parent and d.Parent.Name
-                    if parentName == "Skills" or parentName == "Passives" or parentName == "ToolContainer" or parentName == "Container" then
-                        local txt = (d:IsA("TextButton") and d.Text) or d.Name
-                        if #txt > 1 and not blacklist[txt] then
-                            skillSet[txt] = true
-                        end
-                    end
-                end
+    -- 4. Summon Skills Integration (Detect summon moves based on spells / active summons)
+    local summonSpells = {
+        ["Call Skeleton"] = {"Smack", "Bone Spray"},
+        ["Raise Dead"] = {"Rotten Swipe", "Shriek", "Double Slam", "Smack"},
+        ["Call Sylph"] = {"Sylph's Prayer", "Light Bolt", "Gale Uplift"},
+    }
+    for spellName, moves in pairs(summonSpells) do
+        if skillSet[spellName] then
+            for _, move in ipairs(moves) do
+                skillSet[string.format("[Summon] %s", move)] = true
+                skillSet[move] = true
             end
         end
-    end)
+    end
 
-    -- 3. Scan from Inventory GUI (Category Skills)
-    pcall(function()
-        local inv = pgui and pgui:FindFirstChild("Inventory")
-        if inv then
-            local invSkills = inv:FindFirstChild("Skills", true)
-            local toolCont = invSkills and invSkills:FindFirstChild("ToolContainer")
-            if toolCont then
-                for _, child in ipairs(toolCont:GetChildren()) do
-                    if (child:IsA("TextButton") or child:IsA("GuiButton") or child:IsA("TextLabel")) and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
-                        local name = child:IsA("TextButton") and child.Text or child.Name
-                        if #name > 1 and not blacklist[name] then
-                            skillSet[name] = true
-                        end
-                    end
-                end
-            end
-        end
-    end)
-
-    -- 4. Complete with all Game Skills from Constants.Skills (Ensures all 300+ skills are available for selection in dropdowns)
-    pcall(function()
-        local rep = game:GetService("ReplicatedStorage")
-        local SkillsModule = require(rep.Constants.Skills)
-        if SkillsModule and type(SkillsModule) == "table" then
-            for sName, sData in pairs(SkillsModule) do
-                if type(sData) == "table" and not sData.NoShow and sName ~= "Summon" and sName ~= "Template" and not blacklist[sName] then
-                    skillSet[sName] = true
-                end
-            end
-        end
-    end)
+    -- Always include basic attack Strike
+    skillSet["Strike"] = true
 
     local list = {}
-    for name, _ in pairs(skillSet) do
+    for name in pairs(skillSet) do
         table.insert(list, name)
     end
     table.sort(list)
@@ -6381,16 +6386,27 @@ local function executeCombatTurn()
                 end
 
                 -- C. Energy / Cost check
-                local char = LocalPlayer and LocalPlayer.Character
-                local status = char and char:FindFirstChild("Status")
-                local curEnergy = status and status:FindFirstChild("Energy") and tonumber(status.Energy.Value)
-                if curEnergy ~= nil then
-                    local costObj = btn:FindFirstChild("Cost", true)
-                    local costLabel = costObj and (costObj:IsA("TextLabel") and costObj or costObj:FindFirstChildWhichIsA("TextLabel", true))
-                    local costText = costLabel and costLabel.Text or (costObj and costObj.Name) or ""
-                    local costNum = tonumber(costText:match("%d+"))
-                    if costNum and costNum > curEnergy then
-                        return false -- not enough Energy de xuat skill
+                local isSummon = false
+                local deciding = combatGui and combatGui:FindFirstChild("Deciding")
+                if deciding and deciding.Visible then
+                    local txt = deciding:FindFirstChild("TextLabel") and deciding.TextLabel.Text:lower() or ""
+                    if not txt:find(LocalPlayer.Name:lower()) then
+                        isSummon = true
+                    end
+                end
+
+                if not isSummon then
+                    local char = LocalPlayer and LocalPlayer.Character
+                    local status = char and char:FindFirstChild("Status")
+                    local curEnergy = status and status:FindFirstChild("Energy") and tonumber(status.Energy.Value)
+                    if curEnergy ~= nil then
+                        local costObj = btn:FindFirstChild("Cost", true)
+                        local costLabel = costObj and (costObj:IsA("TextLabel") and costObj or costObj:FindFirstChildWhichIsA("TextLabel", true))
+                        local costText = costLabel and costLabel.Text or (costObj and costObj.Name) or ""
+                        local costNum = tonumber(costText:match("%d+"))
+                        if costNum and costNum > curEnergy then
+                            return false -- not enough Energy de xuat skill
+                        end
                     end
                 end
 
@@ -6418,10 +6434,10 @@ local function executeCombatTurn()
                 return nil
             end
 
-            -- Ham tim button skill theo name voi co che STRICT EXACT MATCH
+            -- Ham tim button skill theo name voi co che STRICT EXACT MATCH (Support ca [Summon] prefix)
             local function findSkillByName(targetName)
                 if not targetName or targetName == "" or targetName == "None" then return nil end
-                local cleanTarget = targetName:gsub("^%s*(.-)%s*$", "%1"):lower()
+                local cleanTarget = targetName:gsub("%[Summon%]%s*", ""):gsub("^%s*(.-)%s*$", "%1"):lower()
                 if cleanTarget == "" or cleanTarget == "none" then return nil end
 
                 -- 1. Exact Match Pass (Uu tien tuyet doi name khop 100%)
@@ -7330,6 +7346,21 @@ end
 local originalQTEFunctions = {}
 local qteHookInstalled = false
 
+local qteTargetHandlers = {
+    ["DodgeQTE"] = function(params) return { true, true } end,
+    ["YarthulQTE"] = function(params) return { true, 0 } end,
+    ["ThorianQTE"] = function(params) return true end,
+    ["SwordQTE"] = function(params) return true end,
+    ["DaggerQTE"] = function(params) return true end,
+    ["MagicQTE"] = function(params) return true end,
+    ["SpearQTE"] = function(params) return true end,
+    ["FistQTE"] = function(params) return true end,
+    ["HammerQTE"] = function(params) return true end,
+    ["AxeQTE"] = function(params) return true end,
+    ["LockpickQTE"] = function(params) return true end,
+    ["WG_GospelQTE"] = function(params) return true end,
+}
+
 local function installBlatantQTEHook()
     if qteHookInstalled then return end
     pcall(function()
@@ -7343,38 +7374,24 @@ local function installBlatantQTEHook()
                 local uvs = getupvalues(fn)
                 if uvs and type(uvs[1]) == "table" and uvs[1].DodgeQTE then
                     local qteTable = uvs[1]
-                    for qName, qFn in pairs(qteTable) do
-                        if not originalQTEFunctions[qName] then
-                            originalQTEFunctions[qName] = qFn
-                        end
+                    for qName, handler in pairs(qteTargetHandlers) do
+                        local origFn = qteTable[qName]
+                        if type(origFn) == "function" and not originalQTEFunctions[qName] then
+                            originalQTEFunctions[qName] = origFn
+                            
+                            qteTable[qName] = function(params)
+                                local masterOn = Toggles.MasterQTE and Toggles.MasterQTE.Value
+                                local isBlatant = Options.QTEMode and Options.QTEMode.Value == "Blatant"
 
-                        qteTable[qName] = function(params)
-                            local masterOn = Toggles.MasterQTE and Toggles.MasterQTE.Value
-                            local isBlatant = Options.QTEMode and Options.QTEMode.Value == "Blatant"
-
-                            if masterOn and isBlatant then
-                                if qName == "DodgeQTE" then
-                                    -- Perfect Dodge + Perfect Block (100% khong ton mau va chan don hoan hao)
-                                    return { true, true }
-                                elseif qName == "YarthulQTE" then
-                                    -- Perfect Yar'thul Meteor Dodge (0 hits taken, thang 100% trong 0ms)
-                                    return { true, 0 }
-                                elseif qName == "ThorianQTE" then
-                                    -- Perfect Thorian Boss QTE (100% thanh cong)
-                                    return true
-                                else
-                                    -- 100% Perfect Hit cho tat ca minigame tan cong & mo ruong (Sword, Dagger, Spear, Fist, Magic, Hammer, Axe, Lockpick, Gospel...)
-                                    return true
+                                if masterOn and isBlatant then
+                                    return handler(params)
                                 end
-                            end
 
-                            if originalQTEFunctions[qName] then
                                 return originalQTEFunctions[qName](params)
                             end
                         end
                     end
                     qteHookInstalled = true
-                    hubLog("[QTE]  Authentic Blatant Remote Hook activated successfully!")
                     break
                 end
             end
@@ -7383,12 +7400,8 @@ local function installBlatantQTEHook()
 end
 
 task.spawn(function()
-    while HubState.running do
-        if not qteHookInstalled then
-            installBlatantQTEHook()
-        end
-        task.wait(1)
-    end
+    task.wait(1)
+    installBlatantQTEHook()
 end)
 
 -- AUTO COMBAT QTE ENGINE (SINGLE-CLICK, 0.25S DEBOUNCED SWEET SPOT ENGINE)
