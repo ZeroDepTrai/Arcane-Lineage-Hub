@@ -5485,18 +5485,12 @@ YarthulGroup:AddSlider("YarthulTweenSpeed", {
     Tooltip = "Tốc độ bay Sky-Tween tới cổng Mount Thul (mặc định 220 studs/s)",
 })
 
-
-
-YarthulGroup:AddButton({
-
 YarthulGroup:AddButton({
     Text = "Tween to Mount Thul Door Now",
     Func = function()
         teleportToLocation(AutoYarthul.gatePosition)
     end
 })
-
-YarthulGroup:AddButton({
 
 YarthulGroup:AddButton({
     Text = "Stop Auto Farm Yar'thul",
