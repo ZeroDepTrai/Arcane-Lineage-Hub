@@ -4527,43 +4527,51 @@ local function isPlayerTurn()
     local char = LocalPlayer and LocalPlayer.Character
     if not char then return false end
 
-    -- 1. required phai is trong tran chien
     if not isInCombat() then return false end
 
     local pgui = PlayerGui
     local combatGui = pgui and pgui:FindFirstChild("Combat")
     if not combatGui or not combatGui.Enabled then return false end
 
-    -- 2. Neu is co doi thu khac is thinking (Deciding), not phai turn cua minh
+    -- Check if Deciding belongs to Player OR Player's Summons (e.g. Skeletons, Minions)
     local deciding = combatGui:FindFirstChild("Deciding")
     if deciding and deciding.Visible then
         local label = deciding:FindFirstChild("TextLabel")
         local text = label and label.Text or ""
-        if text ~= "" and not text:find(LocalPlayer.Name) then
-            return false
+        if text ~= "" then
+            local isMyTurn = text:find(LocalPlayer.Name) ~= nil
+            if not isMyTurn and char:FindFirstChild("Summons") then
+                for _, s in ipairs(char.Summons:GetChildren()) do
+                    if text:find(s.Name) then
+                        isMyTurn = true
+                        break
+                    end
+                end
+            end
+            if not isMyTurn and (text:lower():find("skeleton") or text:lower():find("summon") or text:lower():find("minion")) then
+                isMyTurn = true
+            end
+            if not isMyTurn then
+                return false
+            end
         end
     end
 
-    -- 3. Neu is trong giai doan QTE (Dodge/Block, Minigames), not phai turn ra lenh
     local dodge = combatGui:FindFirstChild("DodgeQTE")
     if dodge and dodge.Visible then return false end
 
-    -- 4. button Go xac receive is hien thi
     local goBtn = combatGui:FindFirstChild("Go")
     if goBtn and goBtn.Visible then return true end
 
-    -- 5. ActionBG phai is Visible (Server set Visible = true khi toi turn, false khi out of turn)
     local actionBG = combatGui:FindFirstChild("ActionBG")
     if not actionBG or not actionBG.Visible then return false end
 
-    -- 6. test Header.Title tren UI Combat (Turn 1, Turn 2, Turn 3...)
     local header = actionBG:FindFirstChild("Header")
     local title = header and header:FindFirstChild("Title")
-    if title and title.Text and title.Text:find("Turn") then
+    if title and title.Text and (title.Text:find("Turn") or title.Text:find("Action")) then
         return true
     end
 
-    -- 7. ContextPage hoac AttacksPage is hien thi ben trong ActionBG
     local ctx = actionBG:FindFirstChild("ContextPage")
     local atk = actionBG:FindFirstChild("AttacksPage")
     if (ctx and ctx.Visible) or (atk and atk.Visible) then
@@ -6375,7 +6383,7 @@ local function executeCombatTurn()
 
             -- Ham tim button Basic Attack (Strike / Magic Missile / Slash...)
             local function findBasicAttackBtn()
-                local basicNames = {"Strike", "Magic Missile", "Basic Attack", "Slash", "Punch", "Shoot"}
+                local basicNames = {"Strike", "Smack", "Magic Missile", "Basic Attack", "Slash", "Punch", "Shoot", "Bite", "Claw"}
                 for _, name in ipairs(basicNames) do
                     local btn = scrollFrame:FindFirstChild(name)
                     if btn and isSkillReady(btn) then return btn end
@@ -6444,8 +6452,22 @@ local function executeCombatTurn()
                         local foundBtn = findSkillByName(slotName)
                         if foundBtn then
                             selectedSkillBtn = foundBtn
-                            hubLog(string.format("[Combat]  Custom Skill Match: Slot %d ('%s')", slotIdx, slotName))
+                            hubLog(string.format("[Combat] Custom Skill Match: Slot %d ('%s')", slotIdx, slotName))
                             break
+                        end
+                    end
+                end
+
+                -- Summon AI Support: If controlling a summon (e.g. Skeleton) that doesn't have the player's custom skill slots, auto-select summon's best skill
+                if not selectedSkillBtn then
+                    for _, btn in ipairs(scrollFrame:GetChildren()) do
+                        if isSkillReady(btn) and btn:IsA("GuiButton") and btn.Name ~= "Frame" and btn.Name ~= "Template" and btn.Name ~= "Return" then
+                            local bName = btn.Name:lower()
+                            if bName ~= "strike" and bName ~= "smack" and bName ~= "basic attack" then
+                                selectedSkillBtn = btn
+                                hubLog(string.format("[Combat] Summon Smart Ability Selected: '%s'", btn.Name))
+                                break
+                            end
                         end
                     end
                 end
@@ -7293,18 +7315,6 @@ local DaggerArcSizes = { 20, 25, 30, 35, 40, 45, 55, 65, 75, 85, 95, 105 }
 
 local function isQTEActive(qteName)
     if Toggles.MasterQTE and not Toggles.MasterQTE.Value then return false end
-    local qteMap = Options.EnabledQTEList and Options.EnabledQTEList.Value
-    if qteMap then
-        if qteName == "Dodge" then return qteMap["Auto Dodge / Block"] == true end
-        if qteName == "Sword" then return qteMap["Sword (Window Strike)"] == true end
-        if qteName == "Dagger" then return qteMap["Dagger (Weakpoints)"] == true end
-        if qteName == "Hammer" then return qteMap["Hammer (Power Bar)"] == true end
-        if qteName == "Axe" then return qteMap["Axe (Equilibrium)"] == true end
-        if qteName == "Magic" or qteName == "Staff" then return qteMap["Staff / Magic (Rune Matching)"] == true end
-        if qteName == "Fist" then return qteMap["Fist / Cestus (Combos)"] == true end
-        if qteName == "Spear" then return qteMap["Spear (Taps, Lines & Curves)"] == true end
-        if qteName == "Lockpick" then return qteMap["Chest Lockpick"] == true end
-    end
     return true
 end
 
@@ -7337,7 +7347,24 @@ local function handleDodgeQTE(dodgeQTE)
     local blockZone = inset:FindFirstChild("Block")
     if not indicator or not indicator.Visible then return end
 
-    local targetZone = (Toggles.PreferPerfectDodge and Toggles.PreferPerfectDodge.Value and dodgeZone and dodgeZone.Visible) and dodgeZone or blockZone
+    local isBlatant = Options.QTEMode and Options.QTEMode.Value == "Blatant"
+    if isBlatant then
+        local now = os.clock()
+        if now - AutoQTE.lastDodgeHit > 0.15 then
+            AutoQTE.lastDodgeHit = now
+            singleClick(stopBtn)
+            pcall(function()
+                local RS = game:GetService("ReplicatedStorage")
+                local dRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Fight") and RS.Remotes.Fight:FindFirstChild("DodgeMiniGame")
+                if dRemote and dRemote:IsA("RemoteEvent") then
+                    dRemote:FireServer("Dodge")
+                end
+            end)
+        end
+        return
+    end
+
+    local targetZone = (dodgeZone and dodgeZone.Visible) and dodgeZone or blockZone
     if not targetZone then return end
 
     local indLeft = indicator.AbsolutePosition.X
@@ -7412,16 +7439,23 @@ local function handleSwordQTE(swordQTE)
         end)
     end
 
-    -- Chi bam khi Indicator has actually tien vao vung center cua Window (Tranh bam som o cac super class nhu Berserker)
-    if (indCenter >= sweetSpotMin and indCenter <= sweetSpotMax) or (isColliding and indLeft >= winLeft and indRight <= winRight + 5) then
+    local isBlatant = Options.QTEMode and Options.QTEMode.Value == "Blatant"
+    if isBlatant or (indCenter >= sweetSpotMin and indCenter <= sweetSpotMax) or (isColliding and indLeft >= winLeft and indRight <= winRight + 5) then
         AutoQTE.lastSwordHit = os.clock()
         AutoQTE.swordHitTable[targetInd] = true
         AutoQTE.currentSwordIndex = AutoQTE.currentSwordIndex + 1
 
-        local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
+        local delayMs = (not isBlatant and Options.ReactionDelayMs and Options.ReactionDelayMs.Value) or 0
         if delayMs > 0 then task.wait(delayMs / 1000) end
 
         singleClick(stopBtn)
+        if isBlatant then
+            pcall(function()
+                local RS = game:GetService("ReplicatedStorage")
+                local sRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Fight") and RS.Remotes.Fight:FindFirstChild("SwordQTE")
+                if sRemote and sRemote:IsA("RemoteEvent") then sRemote:FireServer(true) end
+            end)
+        end
     end
 end
 
@@ -7454,11 +7488,19 @@ local function handleDaggerQTE(daggerQTE)
             local arcSize = DaggerArcSizes[arcIndex] or 25
             local maxTolerance = (arcSize * 0.5) * 0.85
 
-            if math.abs(diff) <= maxTolerance then
+            local isBlatant = Options.QTEMode and Options.QTEMode.Value == "Blatant"
+            if isBlatant or math.abs(diff) <= maxTolerance then
                 AutoQTE.hitWeakpoints[wp] = true
-                local delayMs = Options.ReactionDelayMs and Options.ReactionDelayMs.Value or 0
+                local delayMs = (not isBlatant and Options.ReactionDelayMs and Options.ReactionDelayMs.Value) or 0
                 if delayMs > 0 then task.wait(delayMs / 1000) end
                 if stopBtn then singleClick(stopBtn) else pressKey(Enum.KeyCode.Space) end
+                if isBlatant then
+                    pcall(function()
+                        local RS = game:GetService("ReplicatedStorage")
+                        local dRemote = RS:FindFirstChild("Remotes") and RS.Remotes:FindFirstChild("Fight") and RS.Remotes.Fight:FindFirstChild("DaggerQTE")
+                        if dRemote and dRemote:IsA("RemoteEvent") then dRemote:FireServer(true) end
+                    end)
+                end
                 break
             end
         end
@@ -8962,30 +9004,15 @@ local FightGroup  = Tabs.AutoQTE:AddRightGroupbox("Auto Fight & Skill Priority")
 CombatGroup:AddToggle("MasterQTE", {
     Text = "Enable Auto Combat QTE",
     Default = false,
-    Tooltip = "auto giai va finished toan bo QTE khi combat / open ruong",
+    Tooltip = "Automatically solve all combat QTEs (Dodge, Sword, Dagger, Hammer, Axe, Magic, Fist, Spear, Chest Lockpick) with 100% Perfect Dodge",
 })
 
-CombatGroup:AddDropdown("EnabledQTEList", {
-    Values = {
-        "Auto Dodge / Block",
-        "Sword (Window Strike)",
-        "Dagger (Weakpoints)",
-        "Hammer (Power Bar)",
-        "Axe (Equilibrium)",
-        "Staff / Magic (Rune Matching)",
-        "Fist / Cestus (Combos)",
-        "Spear (Taps, Lines & Curves)",
-        "Chest Lockpick"
-    },
-    Default = {},
-    Multi = true,
-    Text = "Active QTE Minigames",
-})
-
-CombatGroup:AddToggle("PreferPerfectDodge", {
-    Text = "Prefer Perfect Dodge (100% Invuln)",
-    Default = false,
-    Tooltip = "Uu tien canh chuan o Dodge (Ne hoan hao 100% not mat mau), du phong Block",
+CombatGroup:AddDropdown("QTEMode", {
+    Values = { "Legit", "Blatant" },
+    Default = 1,
+    Multi = false,
+    Text = "QTE Completion Mode",
+    Tooltip = "• Legit: Human-like smooth precision timing and pixel tracking\n• Blatant: Instant remote packet execution completing minigames in 0ms",
 })
 
 CombatGroup:AddSlider("ReactionDelayMs", {
@@ -8994,7 +9021,7 @@ CombatGroup:AddSlider("ReactionDelayMs", {
     Min = 0,
     Max = 150,
     Rounding = 0,
-    Tooltip = "Do tre mo phong phan xa player (0 = accurate tuc thi)",
+    Tooltip = "Reaction delay for Legit mode (0 = instant response)",
 })
 
 FightGroup:AddToggle("AutoFight", {
