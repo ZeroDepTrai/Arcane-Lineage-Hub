@@ -5864,166 +5864,80 @@ function AutoYarthul.sendWebhook(eventType, extraData)
     end)
 end
 
--- 6. UNIVERSAL AUTO-ACCEPT & LOOT NOTIFICATION HOOK ENGINE
-local AutoAcceptEngine = {
-    keywords = { "accept", "accpet", "acc", "yes", "confirm", "ok", "take", "roll", "claim", "agree", "equip", "loot" },
-}
-
-local function getAcceptOption(data)
-    if type(data) ~= "table" then return nil end
-    for _, btnText in ipairs({ data.Button1, data.Button2 }) do
-        if type(btnText) == "string" then
-            local lower = btnText:lower()
-            for _, kw in ipairs(AutoAcceptEngine.keywords) do
-                if lower:find(kw) then
-                    return btnText
-                end
-            end
-        end
-    end
-    return data.Button1 or "Accept"
-end
-
-local function handleNotification(data)
-    if type(data) ~= "table" or not data.Callback then return end
-
-    local targetButton = getAcceptOption(data)
-    if not targetButton then return end
-
-    local title = tostring(data.Title or "")
-    local text = tostring(data.Text or "")
-
-    task.defer(function()
-        task.wait(0.04)
-        local success = false
-        pcall(function()
-            if typeof(data.Callback) == "Instance" then
-                if data.Callback:IsA("BindableFunction") then
-                    data.Callback:Invoke(targetButton)
-                    success = true
-                elseif data.Callback:IsA("BindableEvent") then
-                    data.Callback:Fire(targetButton)
-                    success = true
-                end
-            elseif type(data.Callback) == "function" then
-                data.Callback(targetButton)
-                success = true
-            end
-        end)
-
-        if success then
-            local displayInfo = (title ~= "" and title ~= "Item dropped!") and title or text
-            print(string.format("[AutoLoot] ✅ Successfully pressed '%s' for drop notification: '%s' (%s)!", targetButton, title, text))
-            
-            pcall(function()
-                ZeroLib:Notify({
-                    Title = "Auto Loot Success",
-                    Content = string.format("Auto received: %s", displayInfo),
-                    Type = "Success",
-                    Duration = 4
-                })
-            end)
-
-            if AutoYarthul and AutoYarthul.running then
-                AutoYarthul.updateHUD(string.format("🎁 Auto Accepted: %s", displayInfo))
-                pcall(function()
-                    AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
-                end)
-            end
-        end
-    end)
-end
-
-shared.ArcaneHandleNotification = handleNotification
-
+-- 6. DIRECT HOOK ENGINE: TỰ ĐỘNG CHẤP NHẬN LOOT POOL / ITEM DROP (SAFE & NON-INTRUSIVE)
 function AutoYarthul.hookLootRemote()
-    -- 1. Direct Server ItemDrop Hook (ReplicatedStorage.Remotes.Information.ItemDrop)
     pcall(function()
-        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-        local info = remotes and remotes:FindFirstChild("Information")
-        local itemDrop = info and info:FindFirstChild("ItemDrop")
-        if itemDrop and itemDrop:IsA("RemoteFunction") then
-            itemDrop.OnClientInvoke = function(mobName, itemName)
-                local mobStr = tostring(mobName or "Boss")
-                local itemStr = tostring(itemName or "Item")
-                
-                print(string.format("[AutoLoot] 🎁 Server ItemDrop: %s dropped '%s' -> Auto-Accepted successfully!", mobStr, itemStr))
-                
-                pcall(function()
-                    ZeroLib:Notify({
-                        Title = "Auto Loot Success",
-                        Content = string.format("Received item: %s (%s)", itemStr, mobStr),
-                        Type = "Success",
-                        Duration = 4
-                    })
-                end)
-
-                if AutoYarthul and AutoYarthul.running then
-                    AutoYarthul.updateHUD(string.format("🎁 Auto Accepted: %s", itemStr))
-                    pcall(function()
-                        AutoYarthul.sendWebhook("Loot", { itemName = itemStr, droppedBy = mobStr })
-                    end)
-                end
-
-                return true
-            end
-        end
-    end)
-
-    if shared.ArcaneSetCoreHookInstalled then return end
-    shared.ArcaneSetCoreHookInstalled = true
-
-    -- 2. Hook game __namecall on StarterGui:SetCore("SendNotification")
-    pcall(function()
-        if hookmetamethod then
+        if not shared.ArcaneSetCoreHookInstalled and hookmetamethod then
+            shared.ArcaneSetCoreHookInstalled = true
             local oldNamecall
             oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 local method = getnamecallmethod()
-                local args = { ... }
-
-                if (self == StarterGui or tostring(self) == "StarterGui") and (method == "SetCore" or method == "setCore") then
-                    if args[1] == "SendNotification" and type(args[2]) == "table" then
-                        if shared.ArcaneHandleNotification then
-                            shared.ArcaneHandleNotification(args[2])
+                local args = {...}
+                if (method == "SetCore" or method == "setCore") and args[1] == "SendNotification" and type(args[2]) == "table" then
+                    local coreData = args[2]
+                    local title = tostring(coreData.Title or "")
+                    local text = tostring(coreData.Text or "")
+                    local combined = (title .. " " .. text):lower()
+                    
+                    if combined:find("item") or combined:find("drop") or combined:find("roll") or combined:find("dice") or combined:find("artifact") then
+                        print(string.format("[AutoLoot Hook] ⚡ Bắt được Notification rơi đồ: '%s' ('%s') -> Auto Accept!", title, text))
+                        if AutoYarthul and AutoYarthul.running then
+                            AutoYarthul.updateHUD("🎁 Đã Accept vào Loot Roll Pool (0ms)!")
+                            pcall(function()
+                                ZeroLib:Notify({
+                                    Title = "Auto Loot Success",
+                                    Content = string.format("Received item: %s", (title ~= "" and title ~= "Item dropped!") and title or text),
+                                    Type = "Success",
+                                    Duration = 4
+                                })
+                            end)
+                            pcall(function()
+                                AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
+                            end)
+                        end
+                        if coreData.Callback then
+                            task.spawn(function()
+                                pcall(function()
+                                    if typeof(coreData.Callback) == "Instance" then
+                                        if coreData.Callback:IsA("BindableFunction") then
+                                            coreData.Callback:Invoke("Accept")
+                                        elseif coreData.Callback:IsA("BindableEvent") then
+                                            coreData.Callback:Fire("Accept")
+                                        end
+                                    elseif typeof(coreData.Callback) == "function" then
+                                        coreData.Callback("Accept")
+                                    end
+                                end)
+                            end)
                         end
                     end
                 end
-
                 return oldNamecall(self, ...)
             end)
+            print("[AutoLoot] ⚡ Đã cài đặt Safe Hook SetCore SendNotification thành công!")
         end
     end)
 
-    -- 3. Hook function index fallback on StarterGui.SetCore
+    -- Hook ReplicatedStorage.Remotes.Fight.RefightBoss
     pcall(function()
-        if hookfunction and StarterGui.SetCore then
-            local oldSetCore
-            oldSetCore = hookfunction(StarterGui.SetCore, function(self, coreName, data, ...)
-                if (coreName == "SendNotification" or tostring(coreName) == "SendNotification") and type(data) == "table" then
-                    if shared.ArcaneHandleNotification then
-                        shared.ArcaneHandleNotification(data)
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+        local fight = remotes and remotes:FindFirstChild("Fight")
+        local refightRemote = fight and fight:FindFirstChild("RefightBoss")
+        if refightRemote and refightRemote:IsA("RemoteEvent") and not AutoYarthul.refightConn then
+            AutoYarthul.refightConn = refightRemote.OnClientEvent:Connect(function(action, data)
+                if AutoYarthul.running and AutoYarthul.isInsideInstance() then
+                    if action == "OpenGui" and type(data) == "table" and data.BattleID then
+                        print(string.format("[AutoRefight Remote] 🐉 Nhận OpenGui (BattleID: %s) -> Gửi Remote Accept tức thì!", tostring(data.BattleID)))
+                        task.wait(0.2)
+                        pcall(function()
+                            refightRemote:FireServer(data.BattleID, "Accept")
+                        end)
+                        AutoYarthul.updateHUD("🐉 Đã gửi Remote Accept Refight Boss!")
                     end
                 end
-                return oldSetCore(self, coreName, data, ...)
             end)
+            print("[AutoRefight] ⚡ Đã gắn Direct Remote Hook vào ReplicatedStorage.Remotes.Fight.RefightBoss!")
         end
-    end)
-
-    -- 4. Visual cleanup: Remove lingering notification card from CoreGui
-    task.spawn(function()
-        pcall(function()
-            local coreGui = game:GetService("CoreGui")
-            local robloxGui = coreGui:WaitForChild("RobloxGui", 10)
-            local notificationFrame = robloxGui and robloxGui:WaitForChild("NotificationFrame", 10)
-            if not notificationFrame then return end
-
-            notificationFrame.ChildAdded:Connect(function(card)
-                task.wait(0.2)
-                if card and card.Parent then
-                    pcall(function() card:Destroy() end)
-                end
-            end)
-        end)
     end)
 end
 
