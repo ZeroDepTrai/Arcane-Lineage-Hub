@@ -3970,37 +3970,28 @@ local function safeClickButton(btn)
     if not btn then return false end
     local clicked = false
 
-    -- 1. firesignal on all click events
-    if firesignal then
-        pcall(function() firesignal(btn.MouseButton1Click) end)
-        pcall(function() firesignal(btn.MouseButton1Down) end)
-        pcall(function() firesignal(btn.MouseButton1Up) end)
-        pcall(function() firesignal(btn.Activated) end)
-        clicked = true
+    if getconnections then
+        local conns = getconnections(btn.MouseButton1Click)
+        if conns and #conns > 0 then
+            for _, c in ipairs(conns) do
+                if c.Function then
+                    task.spawn(c.Function)
+                    clicked = true
+                elseif c.Fire then
+                    pcall(function() c:Fire() end)
+                    clicked = true
+                end
+            end
+            if clicked then return true end
+        end
     end
 
-    -- 2. getconnections callback triggers
-    if getconnections then
-        pcall(function()
-            for _, c in ipairs(getconnections(btn.MouseButton1Click)) do
-                if c.Function then c.Function() clicked = true
-                elseif c.Fire then c:Fire() clicked = true end
-            end
-        end)
-        pcall(function()
-            for _, c in ipairs(getconnections(btn.MouseButton1Down)) do
-                if c.Function then c.Function() clicked = true
-                elseif c.Fire then c:Fire() clicked = true end
-            end
-        end)
-        pcall(function()
-            for _, c in ipairs(getconnections(btn.Activated)) do
-                if c.Function then c.Function() clicked = true
-                elseif c.Fire then c:Fire() clicked = true end
-            end
-        end)
+    if firesignal then
+        pcall(function() firesignal(btn.MouseButton1Click) end)
+        return true
     end
-    return clicked
+
+    return false
 end
 
 local function getCurrentStats()
@@ -6275,65 +6266,47 @@ local function executeCombatTurn()
     combatTurnLock = true
 
     local ok, err = pcall(function()
-        if not isPlayerTurn() then return end
-
-        local mode = Options.CombatExecutionMode and Options.CombatExecutionMode.Value or "Direct Remote (Fastest + Sub-actions)"
-        if mode:find("Direct Remote") then
-            local success = executeDirectRemoteTurn()
-            if success then
-                local endWait = os.clock()
-                while isPlayerTurn() and os.clock() - endWait < 1.0 do
-                    task.wait(0.05)
-                end
-                return
-            end
-        end
-
         local pgui = PlayerGui
         local combatGui = pgui and pgui:FindFirstChild("Combat")
         if not combatGui or not combatGui.Enabled then return end
 
-        local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
-        if not actionBG then return end
-
-        local actionChoice = Options.SelectedCombatAction and Options.SelectedCombatAction.Value or "Auto Smart (Best Skill -> Strike)"
-        local targetPrio = Options.TargetPriority and Options.TargetPriority.Value or "First Enemy"
-        local shouldMeditateIfNoSkill = Toggles.AutoMeditateInCombat and Toggles.AutoMeditateInCombat.Value
-
-        local ctxPage = actionBG:FindFirstChild("ContextPage")
-        local atkPage = actionBG:FindFirstChild("AttacksPage")
-        local header = actionBG:FindFirstChild("Header")
-
-        -- 1. Neu is co button Go xac receive hien thi san (VD: has select skill/muc tieu before do)
+        local actionBG = combatGui:FindFirstChild("ActionBG")
+        local ctxPage = actionBG and actionBG:FindFirstChild("ContextPage")
+        local atkPage = actionBG and actionBG:FindFirstChild("AttacksPage")
         local goBtn = combatGui:FindFirstChild("Go")
-        if goBtn and goBtn.Visible then
-            hubLog("[Combat]  detected button Go ready -> Bam Go xac receive don danh...")
-            safeClickButton(goBtn)
-            task.wait(0.25)
-            return
+
+        local actionChoice = (Options.CombatAction and Options.CombatAction.Value) or "Auto Smart"
+        local shouldMeditateIfNoSkill = (Toggles.CombatMeditate and Toggles.CombatMeditate.Value) or false
+        local targetPrio = (Options.TargetPriority and Options.TargetPriority.Value) or "First Enemy"
+
+        -- Detect if this turn belongs to a summon (e.g. Sylph, Skeleton, Minion)
+        local isSummon = false
+        local deciding = combatGui:FindFirstChild("Deciding")
+        if deciding and deciding.Visible then
+            local txt = deciding:FindFirstChildWhichIsA("TextLabel", true) and deciding:FindFirstChildWhichIsA("TextLabel", true).Text:lower() or ""
+            if txt ~= "" and not txt:find(LocalPlayer.Name:lower()) then
+                isSummon = true
+            end
         end
 
-        -- 2. Ham activate Meditate trong tran (recover Energy / Mana / Stamina)
+        -- Helper function to perform meditation in combat (Players only, summons cannot meditate)
         local function doCombatMeditate()
-            hubLog("[Combat]  not co skill available -> is activate Meditate trong tran de recover Energy / Stamina...")
-
-            -- 1. Neu is o AttacksPage hoac bang phu, bam Return ve ContextPage
-            local returnBtn = header and header:FindFirstChild("Return")
-            if returnBtn and returnBtn.Visible then
-                safeClickButton(returnBtn)
-                task.wait(0.3)
+            if isSummon then return end
+            hubLog("[Combat] 🧘 Performing Combat Meditation...")
+            if atkPage and atkPage.Visible then
+                local retBtn = atkPage:FindFirstChild("Return", true) or (atkPage:FindFirstChild("Attack") and atkPage.Attack:FindFirstChild("Return"))
+                if retBtn and retBtn.Visible then
+                    safeClickButton(retBtn)
+                    task.wait(0.2)
+                end
             end
 
             local medBtn = ctxPage and ctxPage:FindFirstChild("MeditateButton")
             if medBtn and medBtn.Visible then
                 safeClickButton(medBtn)
                 task.wait(0.2)
-                if firesignal then
-                    pcall(function() firesignal(medBtn.MouseButton1Click) end)
-                end
             end
 
-            -- 2. Du phong remote truc tiep cua game
             pcall(function()
                 local pti = game.ReplicatedStorage:FindFirstChild("PlayerTurnInput")
                 if pti and pti:IsA("RemoteFunction") then
@@ -6343,27 +6316,27 @@ local function executeCombatTurn()
             task.wait(0.5)
         end
 
-        -- 3. switch sang AttacksPage neu is o ContextPage de doc list skill
+        -- Switch from ContextPage to AttacksPage
         if ctxPage and ctxPage.Visible and not (atkPage and atkPage.Visible) then
             local atkBtn = ctxPage:FindFirstChild("AttackButton")
             if atkBtn and atkBtn.Visible then
                 safeClickButton(atkBtn)
                 local waitAtk = os.clock()
-                while (not (atkPage and atkPage.Visible)) and os.clock() - waitAtk < 0.6 do
+                while (not (atkPage and atkPage.Visible)) and os.clock() - waitAtk < 0.8 do
                     task.wait(0.05)
                 end
-                task.wait(0.1)
+                task.wait(0.15)
             end
         end
 
-        -- 4. Lua select skill thuc trong AttacksPage
+        -- Select Skill from AttacksPage ScrollingFrame
         local attackFrame = atkPage and atkPage:FindFirstChild("Attack")
         local scrollFrame = attackFrame and attackFrame:FindFirstChild("ScrollingFrame")
 
         if scrollFrame and scrollFrame.Visible then
             local selectedSkillBtn = nil
 
-            -- test xem 1 button skill co is ready su dung (not bi CD, not bi Sealed, enough Energy)
+            -- Test if button is ready to use
             local function isSkillReady(btn)
                 if not btn or not btn.Parent then return false end
                 if not btn:IsA("GuiButton") and not btn:IsA("TextButton") and not btn:IsA("ImageButton") then return false end
@@ -6373,7 +6346,7 @@ local function executeCombatTurn()
                 local cd = btn:FindFirstChild("CD", true) or btn:FindFirstChild("Cooldown", true)
                 if cd and cd.Visible == true then
                     if cd:IsA("TextLabel") and (cd.Text == "" or cd.Text == "0" or cd.Text == "0s") then
-                        -- not bi CD
+                        -- Ready
                     else
                         return false
                     end
@@ -6385,16 +6358,7 @@ local function executeCombatTurn()
                     return false
                 end
 
-                -- C. Energy / Cost check
-                local isSummon = false
-                local deciding = combatGui and combatGui:FindFirstChild("Deciding")
-                if deciding and deciding.Visible then
-                    local txt = deciding:FindFirstChild("TextLabel") and deciding.TextLabel.Text:lower() or ""
-                    if not txt:find(LocalPlayer.Name:lower()) then
-                        isSummon = true
-                    end
-                end
-
+                -- C. Energy check (Only for player, summons use their own turn rules)
                 if not isSummon then
                     local char = LocalPlayer and LocalPlayer.Character
                     local status = char and char:FindFirstChild("Status")
@@ -6405,7 +6369,7 @@ local function executeCombatTurn()
                         local costText = costLabel and costLabel.Text or (costObj and costObj.Name) or ""
                         local costNum = tonumber(costText:match("%d+"))
                         if costNum and costNum > curEnergy then
-                            return false -- not enough Energy de xuat skill
+                            return false
                         end
                     end
                 end
@@ -6413,15 +6377,19 @@ local function executeCombatTurn()
                 return true
             end
 
-            -- Ham tim button Basic Attack (Strike / Magic Missile / Slash...)
+            -- Find Basic Attack or fallback move
             local function findBasicAttackBtn()
-                local basicNames = {"Strike", "Smack", "Magic Missile", "Basic Attack", "Slash", "Punch", "Shoot", "Bite", "Claw"}
+                local basicNames = {
+                    "wind bolt", "gale pulse", "light bolt", "sylph's prayer", "gale uplift",
+                    "smack", "bone spray", "rotten swipe", "shriek", "double slam",
+                    "strike", "magic missile", "basic attack", "slash", "punch", "shoot", "bite", "claw"
+                }
                 for _, name in ipairs(basicNames) do
                     local btn = scrollFrame:FindFirstChild(name)
                     if btn and isSkillReady(btn) then return btn end
                 end
                 for _, btn in ipairs(scrollFrame:GetChildren()) do
-                    if isSkillReady(btn) and btn:IsA("GuiButton") and btn.Name ~= "Frame" and btn.Name ~= "Template" and btn.Name ~= "Return" then
+                    if isSkillReady(btn) and (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name ~= "Frame" and btn.Name ~= "Template" and btn.Name ~= "Return" then
                         local label = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
                         local txt = (label and label.Text ~= "" and label.Text) or btn.Name
                         for _, bName in ipairs(basicNames) do
@@ -6431,16 +6399,21 @@ local function executeCombatTurn()
                         end
                     end
                 end
+                -- Fallback to ANY first ready skill
+                for _, btn in ipairs(scrollFrame:GetChildren()) do
+                    if isSkillReady(btn) and (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name ~= "Frame" and btn.Name ~= "Template" and btn.Name ~= "Return" then
+                        return btn
+                    end
+                end
                 return nil
             end
 
-            -- Ham tim button skill theo name voi co che STRICT EXACT MATCH (Support ca [Summon] prefix)
+            -- Find Skill by Name
             local function findSkillByName(targetName)
                 if not targetName or targetName == "" or targetName == "None" then return nil end
                 local cleanTarget = targetName:gsub("%[Summon%]%s*", ""):gsub("^%s*(.-)%s*$", "%1"):lower()
                 if cleanTarget == "" or cleanTarget == "none" then return nil end
 
-                -- 1. Exact Match Pass (Uu tien tuyet doi name khop 100%)
                 for _, btn in ipairs(scrollFrame:GetChildren()) do
                     if isSkillReady(btn) then
                         local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
@@ -6452,7 +6425,6 @@ local function executeCombatTurn()
                     end
                 end
 
-                -- 2. Whole Word / Prefix Pass (Neu not co exact match)
                 for _, btn in ipairs(scrollFrame:GetChildren()) do
                     if isSkillReady(btn) then
                         local nameLabel = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
@@ -6468,9 +6440,7 @@ local function executeCombatTurn()
                 return nil
             end
 
-            -- =========================================================================
-            -- A. mode 1: CUSTOM SKILL (STRICT PRIORITY SLOT 1 -> 2 -> 3 -> 4)
-            -- =========================================================================
+            -- Mode 1: Custom Priority Skills
             if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
                 local slots = {
                     Options.CustomSkillSlot1 and Options.CustomSkillSlot1.Value,
@@ -6490,42 +6460,27 @@ local function executeCombatTurn()
                     end
                 end
 
-                -- Summon AI Support: If controlling a summon (e.g. Skeleton) that doesn't have the player's custom skill slots, auto-select summon's best skill
                 if not selectedSkillBtn then
-                    for _, btn in ipairs(scrollFrame:GetChildren()) do
-                        if isSkillReady(btn) and btn:IsA("GuiButton") and btn.Name ~= "Frame" and btn.Name ~= "Template" and btn.Name ~= "Return" then
-                            local bName = btn.Name:lower()
-                            if bName ~= "strike" and bName ~= "smack" and bName ~= "basic attack" then
-                                selectedSkillBtn = btn
-                                hubLog(string.format("[Combat] Summon Smart Ability Selected: '%s'", btn.Name))
-                                break
-                            end
-                        end
-                    end
-                end
-
-                -- STRICT RULE: Neu toan bo 4 slot has select not ready (is CD, missing Energy, Sealed...)
-                if not selectedSkillBtn then
-                    if shouldMeditateIfNoSkill then
-                        hubLog("[Combat]  Toan bo Custom Skill is CD/missing Energy -> auto Meditate theo cau hinh.")
+                    if isSummon then
+                        selectedSkillBtn = findBasicAttackBtn()
+                    elseif shouldMeditateIfNoSkill then
+                        hubLog("[Combat] 🧘 Custom Skills on cooldown/no energy -> Meditating.")
                         doCombatMeditate()
                         return
                     else
-                        -- STRICT FALLBACK: Chi danh thuong (Strike / Basic Attack), TUYET DOI not dung skill khac!
-                        hubLog("[Combat]  Toan bo Custom Skill not available -> Strict Fallback ve danh thuong (Basic Attack).")
                         selectedSkillBtn = findBasicAttackBtn()
                     end
                 end
 
-            -- =========================================================================
-            -- B. mode 2: AUTO SMART (select SKILL MANH NHAT is READY)
-            -- =========================================================================
+            -- Mode 2: Auto Smart
             elseif actionChoice:find("Auto Smart") then
                 local bestSkill = nil
                 local maxCost = -1
                 for _, btn in ipairs(scrollFrame:GetChildren()) do
-                    if isSkillReady(btn) and btn.Name ~= "Strike" and btn.Name ~= "Magic Missile" and btn.Name ~= "Frame" then
-                        local costText = btn:FindFirstChild("Cost") and btn.Cost:FindFirstChild("TextLabel") and btn.Cost.TextLabel.Text or "0"
+                    if isSkillReady(btn) and (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name ~= "Strike" and btn.Name ~= "Magic Missile" and btn.Name ~= "Frame" and btn.Name ~= "Template" and btn.Name ~= "Return" then
+                        local costObj = btn:FindFirstChild("Cost", true)
+                        local costLabel = costObj and (costObj:IsA("TextLabel") and costObj or costObj:FindFirstChildWhichIsA("TextLabel", true))
+                        local costText = costLabel and costLabel.Text or "0"
                         local costNum = tonumber(costText:match("%d+")) or 0
                         if costNum > maxCost then
                             maxCost = costNum
@@ -6536,68 +6491,48 @@ local function executeCombatTurn()
 
                 if bestSkill then
                     selectedSkillBtn = bestSkill
+                elseif not isSummon and shouldMeditateIfNoSkill then
+                    doCombatMeditate()
+                    return
                 else
-                    if shouldMeditateIfNoSkill then
-                        doCombatMeditate()
-                        return
-                    else
-                        selectedSkillBtn = findBasicAttackBtn()
-                    end
+                    selectedSkillBtn = findBasicAttackBtn()
                 end
 
-            -- =========================================================================
-            -- C. mode 3: STRIKE (BASIC ATTACK)
-            -- =========================================================================
+            -- Mode 3: Strike / Basic Attack
             else
                 selectedSkillBtn = findBasicAttackBtn()
             end
 
-            -- Fallback safely cuoi cung:
+            -- Ultimate Fallback: Any ready skill button
             if not selectedSkillBtn then
-                if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
-                    if shouldMeditateIfNoSkill then
-                        doCombatMeditate()
-                        return
-                    else
-                        selectedSkillBtn = findBasicAttackBtn()
-                    end
-                else
-                    selectedSkillBtn = findBasicAttackBtn()
-                    if not selectedSkillBtn then
-                        for _, btn in ipairs(scrollFrame:GetChildren()) do
-                            if isSkillReady(btn) and btn:IsA("GuiButton") and btn.Name ~= "Frame" and btn.Name ~= "Template" and btn.Name ~= "Return" then
-                                selectedSkillBtn = btn
-                                break
-                            end
-                        end
-                    end
-                end
+                selectedSkillBtn = findBasicAttackBtn()
             end
 
             if selectedSkillBtn then
                 local skillName = selectedSkillBtn.Name
-                hubLog(string.format("[Combat]  is activate don danh: '%s'", skillName))
+                hubLog(string.format("[Combat] ⚔️ Executing action: '%s'", skillName))
                 safeClickButton(selectedSkillBtn)
+                
                 local waitSkill = os.clock()
                 local enemiesFrame = atkPage and atkPage:FindFirstChild("Enemies")
-                while (not (enemiesFrame and enemiesFrame.Visible)) and (not (goBtn and goBtn.Visible)) and isPlayerTurn() and os.clock() - waitSkill < 0.5 do
+                while (not (enemiesFrame and enemiesFrame.Visible)) and (not (goBtn and goBtn.Visible)) and isPlayerTurn() and os.clock() - waitSkill < 0.6 do
                     task.wait(0.05)
                 end
                 task.wait(0.1)
-            elseif shouldMeditateIfNoSkill then
+            elseif not isSummon and shouldMeditateIfNoSkill then
                 doCombatMeditate()
                 return
             end
         end
 
-        -- 5. select muc tieu mobs (neu la skill danh mobs open bang Enemies)
+        -- Select Enemy Target
         local enemiesFrame = atkPage and atkPage:FindFirstChild("Enemies")
         local enemiesScroll = enemiesFrame and (enemiesFrame:FindFirstChild("ScrollingFrame") or enemiesFrame)
 
         if enemiesFrame and enemiesFrame.Visible and enemiesScroll then
             local enemyButtons = {}
             for _, btn in ipairs(enemiesScroll:GetChildren()) do
-                if btn:IsA("GuiButton") and btn.Visible and btn.Name ~= "Return" and btn.Name ~= "Template" then
+                if (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible and btn.Name ~= "Return" and btn.Name ~= "Template" then
                     table.insert(enemyButtons, btn)
                 end
             end
@@ -6611,10 +6546,10 @@ local function executeCombatTurn()
                 end
 
                 if chosenEnemy then
-                    hubLog(string.format("[Combat]  has select muc tieu mobs: '%s'", chosenEnemy.Name))
+                    hubLog(string.format("[Combat] 🎯 Enemy target selected: '%s'", chosenEnemy.Name))
                     safeClickButton(chosenEnemy)
                     local waitEnemy = os.clock()
-                    while (not (goBtn and goBtn.Visible)) and isPlayerTurn() and os.clock() - waitEnemy < 0.5 do
+                    while (not (goBtn and goBtn.Visible)) and isPlayerTurn() and os.clock() - waitEnemy < 0.6 do
                         task.wait(0.05)
                     end
                     task.wait(0.1)
@@ -6622,15 +6557,15 @@ local function executeCombatTurn()
             end
         end
 
-        -- 6. Click Go confirmation button neu appear
+        -- Click Go button if visible
         goBtn = combatGui:FindFirstChild("Go")
         if goBtn and goBtn.Visible then
-            hubLog("[Combat]  Bam button Go xac receive completed turn...")
+            hubLog("[Combat] 🚀 Confirming Go button...")
             safeClickButton(goBtn)
             task.wait(0.25)
         end
 
-        -- 7. wait switch turn completed (ActionBG close hoac TurnTimer bien mat)
+        -- Wait for turn completion
         local endWait = os.clock()
         while isPlayerTurn() and os.clock() - endWait < 1.5 do
             task.wait(0.05)
@@ -6638,7 +6573,7 @@ local function executeCombatTurn()
     end)
 
     if not ok then
-        warn("[Combat]  Loi trong executeCombatTurn:", tostring(err))
+        warn("[Combat] ⚠️ Error in executeCombatTurn:", tostring(err))
     end
 
     combatTurnLock = false
