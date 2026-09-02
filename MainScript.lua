@@ -7354,10 +7354,16 @@ local function installBlatantQTEHook()
 
                             if masterOn and isBlatant then
                                 if qName == "DodgeQTE" then
-                                    -- Tra ve ket qua Perfect Dodge (100% Ne hoan hao khong ton mau va chan don)
+                                    -- Perfect Dodge + Perfect Block (100% khong ton mau va chan don hoan hao)
                                     return { true, true }
+                                elseif qName == "YarthulQTE" then
+                                    -- Perfect Yar'thul Meteor Dodge (0 hits taken, thang 100% trong 0ms)
+                                    return { true, 0 }
+                                elseif qName == "ThorianQTE" then
+                                    -- Perfect Thorian Boss QTE (100% thanh cong)
+                                    return true
                                 else
-                                    -- Tra ve ket qua Perfect Hit 100% cho cac minigame tan cong
+                                    -- 100% Perfect Hit cho tat ca minigame tan cong & mo ruong (Sword, Dagger, Spear, Fist, Magic, Hammer, Axe, Lockpick, Gospel...)
                                     return true
                                 end
                             end
@@ -7818,19 +7824,55 @@ end
 
 -- 7. SPEAR QTE (INSTANT NATIVE CLOSURE RESOLVER FOR TAPS, LINES & CURVES)
 
+-- 9. YAR'THUL METEOR QTE (AUTO DODGE METEORS & POSITION SHIFT)
 local function handleYarthulQTE(yarthulQTE)
-    if not yarthulQTE or not yarthulQTE.Visible then return end
+    if not isQTEActive("Yarthul") or not yarthulQTE or not yarthulQTE.Visible then return end
     pcall(function()
         local gameFrame = yarthulQTE:FindFirstChild("Game")
         local arena = gameFrame and gameFrame:FindFirstChild("Arena")
-        if arena then
-            local playerFrame = arena:FindFirstChild("Player")
-            if playerFrame then
-                playerFrame.Position = UDim2.new(-50, 0, -50, 0)
+        local player = arena and arena:FindFirstChild("Player")
+        local otherControls = yarthulQTE:FindFirstChild("OtherControls")
+
+        -- Legit Smart AI: Jump or move away from falling meteors
+        if gameFrame and player then
+            local playerX = player.Position.X.Scale
+            local playerY = player.Position.Y.Scale
+
+            local incomingDanger = false
+            for _, child in ipairs(gameFrame:GetChildren()) do
+                if child:IsA("ImageLabel") and child.Visible and child:FindFirstChild("Hitbox") then
+                    local metX = child.Position.X.Scale
+                    local metY = child.Position.Y.Scale
+                    if math.abs(playerX - metX) < 0.18 and metY > 0.3 and metY < 0.85 then
+                        incomingDanger = true
+                        if otherControls and otherControls:FindFirstChild("Up") then
+                            singleClick(otherControls.Up)
+                        else
+                            pressKey(Enum.KeyCode.Space)
+                            pressKey(Enum.KeyCode.W)
+                        end
+                        if playerX > 0.5 then
+                            if otherControls and otherControls:FindFirstChild("Left") then
+                                singleClick(otherControls.Left)
+                            else
+                                pressKey(Enum.KeyCode.A)
+                            end
+                        else
+                            if otherControls and otherControls:FindFirstChild("Right") then
+                                singleClick(otherControls.Right)
+                            else
+                                pressKey(Enum.KeyCode.D)
+                            end
+                        end
+                        break
+                    end
+                end
             end
-            for _, obj in ipairs(arena:GetChildren()) do
-                if obj ~= playerFrame and obj:IsA("GuiObject") and obj.Name ~= "UIListLayout" and obj.Name ~= "UIGridLayout" then
-                    obj.Position = UDim2.new(50, 0, 50, 0)
+
+            -- If player is still trapped, safely snap position outside meteor zone
+            if arena then
+                if player then
+                    player.Position = UDim2.new(player.Position.X.Scale, player.Position.X.Offset, math.min(player.Position.Y.Scale, 0.4), player.Position.Y.Offset)
                 end
             end
         end
@@ -9080,7 +9122,7 @@ local FightGroup  = Tabs.AutoQTE:AddRightGroupbox("Auto Fight & Skill Priority")
 CombatGroup:AddToggle("MasterQTE", {
     Text = "Enable Auto Combat QTE",
     Default = false,
-    Tooltip = "Automatically solve all combat QTEs (Dodge, Sword, Dagger, Hammer, Axe, Magic, Fist, Spear, Chest Lockpick) with 100% Perfect Dodge",
+    Tooltip = "Automatically solve all combat QTEs (Dodge, Sword, Dagger, Hammer, Axe, Magic, Fist, Spear, Lockpick, Yar'thul Meteor QTE, Thorian QTE) with 100% Perfect Dodge",
 })
 
 CombatGroup:AddDropdown("QTEMode", {
