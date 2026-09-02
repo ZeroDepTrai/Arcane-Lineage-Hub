@@ -10656,62 +10656,47 @@ local function analyzeEnemyStatus(enemyModel)
     local maxEnergy = npcData and npcData.MaxEnergy or 6
     local attackPool = npcData and npcData.Attacks or {}
 
-    local damageSkills = attackPool.Damage or {}
-    local specialSkills = attackPool.Special or {}
-    local noEnergySkills = attackPool.NoEnergy or {}
-    local healingSkills = attackPool.Healing or {}
-
     local modelCDs = EnemyStatusEngine.cooldowns[enemyModel] or {}
     local skillBadges = {}
+    local seenSkills = {}
 
-    -- 1. Evaluate Special Skills
-    for _, sk in ipairs(specialSkills) do
-        local cost, baseCD = getSkillStats(sk)
-        local remCD = modelCDs[sk] or 0
-        local statusTag = ""
-        if remCD > 0 then
-            statusTag = string.format("<font color='#FFA500'>[CD: %d]</font>", remCD)
-        elseif curEnergy >= cost then
-            statusTag = "<font color='#2ECC71'>[READY]</font>"
-        else
-            statusTag = string.format("<font color='#E74C3C'>[Need %dE]</font>", cost)
+    -- Universal Skill Extractor: Iterates through ALL attack categories (Damage, Special, Healing, NoEnergy, Stun, Buff, Utility, etc.)
+    for categoryName, categoryMoves in pairs(attackPool) do
+        if type(categoryMoves) == "table" then
+            for _, skName in ipairs(categoryMoves) do
+                if type(skName) == "string" and not seenSkills[skName] and skName ~= "BaseClass" and skName ~= "SuperClass" and skName ~= "None" then
+                    seenSkills[skName] = true
+                    local cost, baseCD = getSkillStats(skName)
+                    local remCD = modelCDs[skName] or 0
+                    local statusTag = ""
+
+                    if remCD > 0 then
+                        statusTag = string.format("<font color='#FFA500'>[CD: %d]</font>", remCD)
+                    elseif curEnergy >= cost then
+                        statusTag = "<font color='#2ECC71'>[READY]</font>"
+                    else
+                        statusTag = string.format("<font color='#E74C3C'>[Need %dE]</font>", cost)
+                    end
+
+                    table.insert(skillBadges, string.format("<b>%s</b> (%dE) %s", skName, cost, statusTag))
+                end
+            end
+        elseif type(categoryMoves) == "string" and not seenSkills[categoryMoves] and categoryMoves ~= "BaseClass" and categoryMoves ~= "SuperClass" then
+            seenSkills[categoryMoves] = true
+            local cost, baseCD = getSkillStats(categoryMoves)
+            local remCD = modelCDs[categoryMoves] or 0
+            local statusTag = ""
+
+            if remCD > 0 then
+                statusTag = string.format("<font color='#FFA500'>[CD: %d]</font>", remCD)
+            elseif curEnergy >= cost then
+                statusTag = "<font color='#2ECC71'>[READY]</font>"
+            else
+                statusTag = string.format("<font color='#E74C3C'>[Need %dE]</font>", cost)
+            end
+
+            table.insert(skillBadges, string.format("<b>%s</b> (%dE) %s", categoryMoves, cost, statusTag))
         end
-        table.insert(skillBadges, string.format("<b>%s</b> (%dE) %s", sk, cost, statusTag))
-    end
-
-    -- 2. Evaluate Damage Skills
-    for _, sk in ipairs(damageSkills) do
-        local cost, baseCD = getSkillStats(sk)
-        local remCD = modelCDs[sk] or 0
-        local statusTag = ""
-        if remCD > 0 then
-            statusTag = string.format("<font color='#FFA500'>[CD: %d]</font>", remCD)
-        elseif curEnergy >= cost then
-            statusTag = "<font color='#2ECC71'>[READY]</font>"
-        else
-            statusTag = string.format("<font color='#E74C3C'>[Need %dE]</font>", cost)
-        end
-        table.insert(skillBadges, string.format("<b>%s</b> (%dE) %s", sk, cost, statusTag))
-    end
-
-    -- 3. Evaluate Healing Skills
-    for _, sk in ipairs(healingSkills) do
-        local cost, baseCD = getSkillStats(sk)
-        local remCD = modelCDs[sk] or 0
-        local statusTag = ""
-        if remCD > 0 then
-            statusTag = string.format("<font color='#FFA500'>[CD: %d]</font>", remCD)
-        elseif curEnergy >= cost then
-            statusTag = "<font color='#00FF88'>[READY]</font>"
-        else
-            statusTag = string.format("<font color='#E74C3C'>[Need %dE]</font>", cost)
-        end
-        table.insert(skillBadges, string.format("<b>%s</b> (%dE) %s", sk, cost, statusTag))
-    end
-
-    -- 4. Evaluate NoEnergy Skills
-    for _, sk in ipairs(noEnergySkills) do
-        table.insert(skillBadges, string.format("<b>%s</b> (0E) <font color='#2ECC71'>[READY]</font>", sk))
     end
 
     if #skillBadges == 0 then
@@ -10779,15 +10764,35 @@ function EnemyStatusEngine.start()
                         local head = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
                         if head then
                             local bb = EnemyStatusEngine.billboards[enemyModel]
+                            
+                            -- Find existing in-game HP Bar (StatDisplay)
+                            local statDisplay = nil
+                            for _, d in ipairs(enemyModel:GetDescendants()) do
+                                if d:IsA("BillboardGui") and d ~= bb and (d.Name == "StatDisplay" or d.Name:find("Health") or d.Name:find("Status")) then
+                                    statDisplay = d
+                                    break
+                                end
+                            end
+
+                            -- Dynamic Height Offset Calculation (Anchored above StatDisplay with 0 overlap)
+                            local adorneePart = (statDisplay and statDisplay.Parent and statDisplay.Parent:IsA("BasePart") and statDisplay.Parent) or head
+                            local baseOffsetY = statDisplay and statDisplay.StudsOffset.Y or 2.5
+                            local targetOffsetY = baseOffsetY + 3.2 -- Placed 3.2 studs above HP bar center
+
+                            local skillCount = #sData.skills
+                            local rows = math.max(1, math.ceil(skillCount / 2))
+                            local calculatedHeight = 26 + (rows * 15)
+
                             if not bb or not bb.Parent then
                                 bb = Instance.new("BillboardGui")
                                 bb.Name = "EnemyInfoBB"
-                                bb.Size = UDim2.new(0, 360, 0, 90)
+                                bb.Size = UDim2.new(0, 420, 0, calculatedHeight)
                                 bb.AlwaysOnTop = true
-                                bb.Adornee = head
+                                bb.Adornee = adorneePart
+                                bb.StudsOffset = Vector3.new(0, targetOffsetY, 0)
                                 bb.MaxDistance = 140
 
-                                -- Text-only Display (No border, No background, pure clean text)
+                                -- Clean Text Display without any bounding box or container
                                 local lbl = Instance.new("TextLabel")
                                 lbl.Name = "InfoText"
                                 lbl.Size = UDim2.new(1, 0, 1, 0)
@@ -10797,7 +10802,7 @@ function EnemyStatusEngine.start()
                                 lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
                                 lbl.TextStrokeTransparency = 0.15
                                 lbl.Font = Enum.Font.GothamMedium
-                                lbl.TextSize = 10.5
+                                lbl.TextSize = 10
                                 lbl.TextWrapped = true
                                 lbl.RichText = true
                                 lbl.TextYAlignment = Enum.TextYAlignment.Bottom
@@ -10811,22 +10816,9 @@ function EnemyStatusEngine.start()
                                 EnemyStatusEngine.billboards[enemyModel] = bb
                             end
 
-                            -- Dynamic Height Offset based on HP Bar (places right above HP bar without overlapping)
-                            local gameHPBar = nil
-                            for _, d in ipairs(enemyModel:GetDescendants()) do
-                                if d:IsA("BillboardGui") and d ~= bb and d.Name ~= "EnemyInfoBB" and d.Name ~= "EnemyStatusBB" then
-                                    gameHPBar = d
-                                    break
-                                end
-                            end
-
-                            if gameHPBar and gameHPBar.Adornee then
-                                bb.Adornee = gameHPBar.Adornee
-                                bb.StudsOffset = Vector3.new(0, gameHPBar.StudsOffset.Y + 2.4, 0)
-                            else
-                                bb.Adornee = head
-                                bb.StudsOffset = Vector3.new(0, 2.8, 0)
-                            end
+                            bb.Adornee = adorneePart
+                            bb.StudsOffset = Vector3.new(0, targetOffsetY, 0)
+                            bb.Size = UDim2.new(0, 420, 0, calculatedHeight)
 
                             local infoLbl = bb:FindFirstChild("InfoText", true)
                             if infoLbl then
