@@ -6012,6 +6012,51 @@ function AutoYarthul.stop(explicit)
     Library:Notify(" Auto Farm Yar'thul Stopped!", 3)
 end
 
+local isSummonTurnActive = false
+local currentTurnSkills = {}
+
+pcall(function()
+    local rep = game:GetService("ReplicatedStorage")
+    local remotes = rep:FindFirstChild("Remotes")
+    local fightRemotes = remotes and remotes:FindFirstChild("Fight")
+    local infoRemotes = remotes and remotes:FindFirstChild("Information")
+
+    if fightRemotes then
+        local startSummon = fightRemotes:FindFirstChild("StartSummonedAction")
+        if startSummon and startSummon:IsA("RemoteEvent") then
+            startSummon.OnClientEvent:Connect(function()
+                isSummonTurnActive = true
+            end)
+        end
+
+        local startAction = fightRemotes:FindFirstChild("StartAction")
+        if startAction and startAction:IsA("RemoteEvent") then
+            startAction.OnClientEvent:Connect(function()
+                isSummonTurnActive = false
+            end)
+        end
+
+        local endFight = fightRemotes:FindFirstChild("EndFight")
+        if endFight and endFight:IsA("RemoteEvent") then
+            endFight.OnClientEvent:Connect(function()
+                isSummonTurnActive = false
+                table.clear(currentTurnSkills)
+            end)
+        end
+    end
+
+    if infoRemotes then
+        local updateSkills = infoRemotes:FindFirstChild("UpdateSkills")
+        if updateSkills and updateSkills:IsA("RemoteEvent") then
+            updateSkills.OnClientEvent:Connect(function(skillsList)
+                if type(skillsList) == "table" then
+                    currentTurnSkills = skillsList
+                end
+            end)
+        end
+    end
+end)
+
 local AutoFight = {
     running = false,
     thread = nil,
@@ -6032,13 +6077,15 @@ local function executeDirectRemoteTurn()
     local targetPrio = (Options.TargetPriority and Options.TargetPriority.Value) or "First Enemy"
     local subAction = (Options.CombatSubAction and Options.CombatSubAction.Value) or "None"
 
-    -- 1. Detect if this turn belongs to a summon (e.g. Sylph, Skeleton, Minion)
-    local isSummon = false
-    local deciding = combatGui and combatGui:FindFirstChild("Deciding")
-    if deciding and deciding.Visible then
-        local txt = deciding:FindFirstChildWhichIsA("TextLabel", true) and deciding:FindFirstChildWhichIsA("TextLabel", true).Text:lower() or ""
-        if txt ~= "" and not txt:find(LocalPlayer.Name:lower()) then
-            isSummon = true
+    -- 1. Authoritative Summon Turn Detection
+    local isSummon = isSummonTurnActive
+    if not isSummon and combatGui then
+        local deciding = combatGui:FindFirstChild("Deciding")
+        if deciding and deciding.Visible then
+            local txt = deciding:FindFirstChildWhichIsA("TextLabel", true) and deciding:FindFirstChildWhichIsA("TextLabel", true).Text:lower() or ""
+            if txt ~= "" and not txt:find(LocalPlayer.Name:lower()) then
+                isSummon = true
+            end
         end
     end
 
@@ -6108,7 +6155,24 @@ local function executeDirectRemoteTurn()
         return true
     end
 
-    local skillToUse = isSummon and "Wind Bolt" or "Strike"
+    -- 3. Determine available skills for this unit
+    local activeSkillNames = {}
+    if #currentTurnSkills > 0 then
+        for _, s in ipairs(currentTurnSkills) do
+            if s ~= "Gate" and s ~= "Summon" then
+                table.insert(activeSkillNames, s)
+            end
+        end
+    end
+    if #activeSkillNames == 0 and scrollFrame then
+        for _, btn in ipairs(scrollFrame:GetChildren()) do
+            if (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name ~= "Frame" and btn.Name ~= "Template" and btn.Name ~= "Return" then
+                table.insert(activeSkillNames, btn.Name)
+            end
+        end
+    end
+
+    local skillToUse = nil
 
     -- Mode 1: Custom Priority Skills
     if actionChoice == "Custom Skill" or actionChoice == "Custom Priority Skills" then
@@ -6118,18 +6182,20 @@ local function executeDirectRemoteTurn()
             Options.CustomSkillSlot3 and Options.CustomSkillSlot3.Value,
             Options.CustomSkillSlot4 and Options.CustomSkillSlot4.Value,
         }
-        local matched = false
         for _, s in ipairs(slots) do
             if s and s ~= "" and s ~= "None" then
-                local cleanS = s:gsub("%[Summon%]%s*", "")
-                if isSkillAvailable(cleanS) or isSkillAvailable(s) then
-                    skillToUse = cleanS
-                    matched = true
-                    break
+                local cleanS = s:gsub("%[Summon%]%s*", ""):lower()
+                for _, avSkill in ipairs(activeSkillNames) do
+                    if avSkill:lower() == cleanS and isSkillAvailable(avSkill) then
+                        skillToUse = avSkill
+                        break
+                    end
                 end
+                if skillToUse then break end
             end
         end
-        if not matched and not isSummon and shouldMeditateIfNoSkill then
+
+        if not skillToUse and not isSummon and shouldMeditateIfNoSkill then
             hubLog("[DirectRemote] 🧘 No custom skill ready -> Direct Remote Meditate...")
             task.spawn(function()
                 pcall(function() pti:InvokeServer("Meditate", false) end)
@@ -6142,31 +6208,38 @@ local function executeDirectRemoteTurn()
     elseif actionChoice:find("Auto Smart") then
         local bestSkill = nil
         local maxCost = -1
-        if scrollFrame then
-            for _, btn in ipairs(scrollFrame:GetChildren()) do
-                if (btn:IsA("GuiButton") or btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Name ~= "Strike" and btn.Name ~= "Magic Missile" and btn.Name ~= "Frame" and btn.Name ~= "Template" and isSkillAvailable(btn.Name) then
-                    local costObj = btn:FindFirstChild("Cost", true)
-                    local costLabel = costObj and (costObj:IsA("TextLabel") and costObj or costObj:FindFirstChildWhichIsA("TextLabel", true))
-                    local costText = costLabel and costLabel.Text or "0"
-                    local costNum = tonumber(costText:match("%d+")) or 0
-                    if costNum > maxCost then
-                        maxCost = costNum
-                        bestSkill = btn.Name
-                    end
+        local SkillsModule = nil
+        pcall(function() SkillsModule = require(game.ReplicatedStorage.Constants.Skills) end)
+
+        for _, avSkill in ipairs(activeSkillNames) do
+            if avSkill ~= "Strike" and avSkill ~= "Magic Missile" and isSkillAvailable(avSkill) then
+                local cost = 0
+                if SkillsModule and SkillsModule[avSkill] then
+                    cost = tonumber(SkillsModule[avSkill].Cost) or 0
+                end
+                if cost > maxCost then
+                    maxCost = cost
+                    bestSkill = avSkill
                 end
             end
         end
 
         if bestSkill then
             skillToUse = bestSkill
-        elseif isSummon then
-            skillToUse = "Wind Bolt"
-        else
-            skillToUse = "Strike"
         end
+    end
 
-    -- Mode 3: Strike / Basic Attack
-    else
+    -- Fallback to first available skill or default
+    if not skillToUse then
+        for _, avSkill in ipairs(activeSkillNames) do
+            if isSkillAvailable(avSkill) then
+                skillToUse = avSkill
+                break
+            end
+        end
+    end
+
+    if not skillToUse then
         skillToUse = isSummon and "Wind Bolt" or "Strike"
     end
 
