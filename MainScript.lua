@@ -4685,68 +4685,121 @@ function AutoYarthul.sendWebhook(eventType, extraData)
     end)
 end
 
--- 6. DIRECT HOOK ENGINE: TỰ ĐỘNG CHẤP NHẬN LOOT POOL / ITEM DROP BẰNG METAMETHOD VÀ CALLBACK TRỰC TIẾP
+-- 6. UNIVERSAL AUTO-ACCEPT & LOOT NOTIFICATION HOOK ENGINE
+local AutoAcceptEngine = {
+    installed = false,
+    keywords = { "accept", "accpet", "acc", "yes", "confirm", "ok", "take", "roll", "claim", "agree", "equip", "loot" },
+}
+
+local function getAcceptOption(data)
+    if type(data) ~= "table" then return nil end
+    for _, btnText in ipairs({ data.Button1, data.Button2 }) do
+        if type(btnText) == "string" then
+            local lower = btnText:lower()
+            for _, kw in ipairs(AutoAcceptEngine.keywords) do
+                if lower:find(kw) then
+                    return btnText
+                end
+            end
+        end
+    end
+    return data.Button1 or "Accept"
+end
+
+local function handleNotification(data)
+    if type(data) ~= "table" or not data.Callback then return end
+
+    local targetButton = getAcceptOption(data)
+    if not targetButton then return end
+
+    local title = tostring(data.Title or "")
+    local text = tostring(data.Text or "")
+
+    hubLog(string.format("[AutoAccept] 🎁 Bắt được SetCore Notification '%s' ('%s') -> Auto Invoking '%s'!", title, text, targetButton))
+
+    if AutoYarthul and AutoYarthul.running then
+        AutoYarthul.updateHUD(string.format("🎁 Auto Accepted: %s", title ~= "" and title or targetButton))
+        pcall(function()
+            AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
+        end)
+    end
+
+    task.defer(function()
+        task.wait(0.05)
+        pcall(function()
+            if typeof(data.Callback) == "Instance" then
+                if data.Callback:IsA("BindableFunction") then
+                    data.Callback:Invoke(targetButton)
+                elseif data.Callback:IsA("BindableEvent") then
+                    data.Callback:Fire(targetButton)
+                end
+            elseif type(data.Callback) == "function" then
+                data.Callback(targetButton)
+            end
+        end)
+    end)
+end
+
 function AutoYarthul.hookLootRemote()
-    -- Hook StarterGui:SetCore("SendNotification") qua hookmetamethod (__namecall)
+    if AutoAcceptEngine.installed or shared.ArcaneSetCoreHookInstalled then return end
+    AutoAcceptEngine.installed = true
+    shared.ArcaneSetCoreHookInstalled = true
+
+    -- 1. Hook game __namecall
     pcall(function()
-        if not shared.ArcaneSetCoreHookInstalled and hookmetamethod then
-            shared.ArcaneSetCoreHookInstalled = true
+        if hookmetamethod then
             local oldNamecall
             oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 local method = getnamecallmethod()
-                local args = {...}
-                if (method == "SetCore" or method == "setCore") and args[1] == "SendNotification" and type(args[2]) == "table" then
-                    local coreData = args[2]
-                    local title = tostring(coreData.Title or "")
-                    local text = tostring(coreData.Text or "")
-                    if title:lower():find("item") or title:lower():find("drop") or text:lower():find("dropped") or text:lower():find("roll") or text:lower():find("dice") then
-                        hubLog(string.format("[AutoLoot Hook]  Bắt được SetCore Notification '%s' -> Tự động kích hoạt Callback 'Accept' trực tiếp (0ms)!", title))
-                        if AutoYarthul and AutoYarthul.running then
-                            AutoYarthul.updateHUD(" Đã Accept vào Loot Roll Pool (0ms)!")
-                            Library:Notify(" Auto Accepted Loot Roll Pool!", 4)
-                            AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
-                        end
-                        if coreData.Callback then
-                            task.spawn(function()
-                                pcall(function()
-                                    if typeof(coreData.Callback) == "Instance" and coreData.Callback:IsA("BindableFunction") then
-                                        coreData.Callback:Fire("Accept")
-                                    elseif typeof(coreData.Callback) == "function" then
-                                        coreData.Callback("Accept")
-                                    end
-                                end)
-                            end)
-                        end
+                local args = { ... }
+
+                if (self == StarterGui or tostring(self) == "StarterGui") and (method == "SetCore" or method == "setCore") then
+                    if args[1] == "SendNotification" and type(args[2]) == "table" then
+                        handleNotification(args[2])
                     end
                 end
+
                 return oldNamecall(self, ...)
             end)
-            hubLog("[AutoLoot]  Đã cài đặt Hook SetCore SendNotification thành công!")
+            hubLog("[AutoAccept] ✅ Hookmetamethod __namecall on SetCore installed!")
         end
     end)
 
-    -- Hook ReplicatedStorage.Remotes.Fight.RefightBoss
+    -- 2. Hook function index fallback
     pcall(function()
-        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-        local fight = remotes and remotes:FindFirstChild("Fight")
-        local refightRemote = fight and fight:FindFirstChild("RefightBoss")
-        if refightRemote and refightRemote:IsA("RemoteEvent") and not AutoYarthul.refightConn then
-            AutoYarthul.refightConn = refightRemote.OnClientEvent:Connect(function(action, data)
-                if AutoYarthul.running and AutoYarthul.isInsideInstance() then
-                    if action == "OpenGui" and type(data) == "table" and data.BattleID then
-                        hubLog(string.format("[AutoRefight Remote]  [RefightBoss Remote] Nhận OpenGui (BattleID: %s) -> Gửi Remote Accept tức thì!", tostring(data.BattleID)))
-                        task.wait(0.2)
-                        pcall(function()
-                            refightRemote:FireServer(data.BattleID, "Accept")
-                        end)
-                        AutoYarthul.updateHUD(" Đã gửi Remote Accept Refight Boss!")
-                    end
+        if hookfunction and StarterGui.SetCore then
+            local oldSetCore
+            oldSetCore = hookfunction(StarterGui.SetCore, function(self, coreName, data, ...)
+                if (coreName == "SendNotification" or tostring(coreName) == "SendNotification") and type(data) == "table" then
+                    handleNotification(data)
                 end
+                return oldSetCore(self, coreName, data, ...)
             end)
-            hubLog("[AutoRefight]  Đã gắn Direct Remote Hook vào ReplicatedStorage.Remotes.Fight.RefightBoss!")
+            hubLog("[AutoAccept] ✅ Hookfunction on StarterGui.SetCore installed!")
         end
     end)
+
+    -- 3. Visual cleanup: Remove lingering notification card from CoreGui
+    task.spawn(function()
+        pcall(function()
+            local coreGui = game:GetService("CoreGui")
+            local robloxGui = coreGui:WaitForChild("RobloxGui", 10)
+            local notificationFrame = robloxGui and robloxGui:WaitForChild("NotificationFrame", 10)
+            if not notificationFrame then return end
+
+            notificationFrame.ChildAdded:Connect(function(card)
+                task.wait(0.2)
+                if card and card.Parent then
+                    pcall(function() card:Destroy() end)
+                end
+            end)
+        end)
+    end)
+
+    hubLog("[AutoAccept] 🚀 Universal AutoAccept & Loot Hook Engine Fully Initialized!")
 end
+
+AutoYarthul.hookLootRemote()
 
 -- 7. Kiểm tra xem bảng Refight đã xuất hiện VÀ THỰC SỰ ĐANG HIỆN TRÊN MÀN HÌNH (Main.Visible == true)
 function AutoYarthul.isRefightActive()
