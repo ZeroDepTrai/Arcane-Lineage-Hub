@@ -10664,6 +10664,8 @@ EnemyStatusEngine.analyzeEnemyStatus = analyzeEnemyStatus
     }
 end
 
+EnemyStatusEngine.analyzeEnemyStatus = analyzeEnemyStatus
+
 function EnemyStatusEngine.start()
 _G.EnemyStatusEngine = EnemyStatusEngine
 shared.EnemyStatusEngine = EnemyStatusEngine
