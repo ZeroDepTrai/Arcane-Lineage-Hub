@@ -4573,7 +4573,18 @@ local function isPlayerTurn()
 end
 
 local function scanPlayerSkills()
-    local skillSet = {}
+    if not HubState.knownPlayerSkills then
+        HubState.knownPlayerSkills = {
+            ["Strike"] = true,
+            ["Magic Missile"] = true,
+            ["Call Skeleton"] = true,
+            ["Raise Dead"] = true,
+            ["Darklight Drain"] = true,
+            ["Call Sylph"] = true,
+        }
+    end
+
+    local skillSet = table.clone(HubState.knownPlayerSkills)
     local pgui = PlayerGui
     local blacklist = {
         ["Skills"] = true, ["Element"] = true, ["Physical"] = true, ["Magic"] = true, ["Fire"] = true,
@@ -4595,38 +4606,12 @@ local function scanPlayerSkills()
                     if (c:IsA("TextButton") or c:IsA("GuiButton") or c:IsA("TextLabel")) and not blacklist[c.Name] then
                         local name = c:IsA("TextButton") and c.Text or c.Name
                         if #name > 1 and not blacklist[name] then
-                            skillSet[name] = true
-                        end
-                    end
-                end
-            end
-        end
-    end)
-
-    -- 2. Detect Class from StatMenu & automatically inject permanent class skills
-    pcall(function()
-        local classSkillsDb = {
-            ["necromancer"] = {"Call Skeleton", "Raise Dead", "Darklight Drain", "Soul Ignition", "Dark Glare"},
-            ["wizard"] = {"Magic Missile", "Blaze", "Fireball", "Lightning Crash", "Thunder Trap"},
-            ["elementalist"] = {"Circuit Charge", "Wind Reflect", "Gale Uplift", "Blaze", "Lightning Crash"},
-            ["saint"] = {"Call Sylph", "Sylph's Prayer", "Light Bolt", "Holy Grace", "Cleansing Prayer"},
-            ["paladin"] = {"Skyward Bolt", "Holy Crash", "Pure Resonation", "Sacred Call"},
-            ["slayer"] = {"Carnage", "Sense Expansion", "Blood Thirst", "Bloody Burst"},
-            ["berserker"] = {"Rending Barrage", "Blood Eruption", "Triple Stab", "Tense Up"},
-            ["assassin"] = {"Backstab", "Toxic Dagger", "Assassinate"},
-            ["rogue"] = {"Steal", "Stab", "Poison Smoke"},
-            ["monk"] = {"Dragon Fist", "Iron Palm", "Chakra Burst"},
-        }
-
-        local sm = pgui and pgui:FindFirstChild("StatMenu")
-        if sm then
-            for _, d in ipairs(sm:GetDescendants()) do
-                if d:IsA("TextLabel") and d.Text ~= "" then
-                    local txt = d.Text:lower()
-                    for cName, moves in pairs(classSkillsDb) do
-                        if txt:find(cName) then
-                            for _, m in ipairs(moves) do
-                                skillSet[m] = true
+                            if name == "Smack" or name == "Bone Spray" or name == "Self Destruct" or name == "Rotten Swipe" then
+                                skillSet[string.format("[Summon] %s", name)] = true
+                                skillSet[name] = true
+                            else
+                                skillSet[name] = true
+                                HubState.knownPlayerSkills[name] = true
                             end
                         end
                     end
@@ -4635,26 +4620,7 @@ local function scanPlayerSkills()
         end
     end)
 
-    -- 3. Scan from Inventory GUI (Category Skills)
-    pcall(function()
-        local inv = pgui and pgui:FindFirstChild("Inventory")
-        if inv then
-            local invSkills = inv:FindFirstChild("Skills", true)
-            local toolCont = invSkills and invSkills:FindFirstChild("ToolContainer")
-            if toolCont then
-                for _, child in ipairs(toolCont:GetChildren()) do
-                    if (child:IsA("TextButton") or child:IsA("GuiButton") or child:IsA("TextLabel")) and not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
-                        local name = child:IsA("TextButton") and child.Text or child.Name
-                        if #name > 1 and not blacklist[name] then
-                            skillSet[name] = true
-                        end
-                    end
-                end
-            end
-        end
-    end)
-
-    -- 4. Scan from in-combat AttacksPage
+    -- 2. Scan from in-combat AttacksPage
     pcall(function()
         local combatGui = pgui and pgui:FindFirstChild("Combat")
         local actionBG = combatGui and combatGui:FindFirstChild("ActionBG")
@@ -4667,14 +4633,20 @@ local function scanPlayerSkills()
                     local label = btn:FindFirstChild("SkillName", true) or btn:FindFirstChildWhichIsA("TextLabel", true)
                     local sName = (label and label.Text ~= "" and label.Text) or btn.Name
                     if #sName > 1 and not blacklist[sName] then
-                        skillSet[sName] = true
+                        if sName == "Smack" or sName == "Bone Spray" or sName == "Self Destruct" or sName == "Rotten Swipe" then
+                            skillSet[string.format("[Summon] %s", sName)] = true
+                            skillSet[sName] = true
+                        else
+                            skillSet[sName] = true
+                            HubState.knownPlayerSkills[sName] = true
+                        end
                     end
                 end
             end
         end
     end)
 
-    -- 5. Summon Skills Integration (Detect summon moves based on spells / active summons)
+    -- 3. Summon Skills Integration (Detect summon moves based on spells / active summons)
     local summonSpells = {
         ["Call Skeleton"] = {"Smack", "Bone Spray", "Self Destruct"},
         ["Raise Dead"] = {"Rotten Swipe", "Shriek", "Double Slam", "Smack"},
