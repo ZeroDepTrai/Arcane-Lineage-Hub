@@ -9696,16 +9696,10 @@ FilterGroup:AddDropdown("ESPWhitelist", {
 
 local QOLGroup = Tabs.Visuals:AddRightGroupbox("Quality of Life (QOL)")
 
-QOLGroup:AddToggle("ShowEnemyStatusHUD", {
-    Text = "Show Enemies Status HUD",
+QOLGroup:AddToggle("ShowEnemyInfo", {
+    Text = "Show Enemy Info",
     Default = false,
-    Tooltip = "Display real-time combat HUD: accurate enemy HP, Energy, skill cooldowns, energy costs, and next move predictor",
-})
-
-QOLGroup:AddToggle("ShowEnemyStatusHead", {
-    Text = "Show Enemies Status Over Head",
-    Default = false,
-    Tooltip = "Display detailed 3D overhead status cards on active enemies: real HP, Energy, skill cooldowns, and costs",
+    Tooltip = "Display clean overhead text directly above enemy HP bars showing all enemy skills, cooldowns, energy requirements, and status without boxes",
 })
 
 QOLGroup:AddToggle("RevealRealHpMana", {
@@ -10613,122 +10607,6 @@ pcall(function()
     end
 end)
 
-local function createEnemyStatusScreenHUD()
-    if EnemyStatusEngine.gui then return EnemyStatusEngine.gui end
-
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "ArcaneEnemyStatusHUD"
-    sg.ResetOnSpawn = false
-    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-
-    local mainFrame = Instance.new("Frame")
-    mainFrame.Name = "MainFrame"
-    mainFrame.Size = UDim2.new(0, 420, 0, 0)
-    mainFrame.AutomaticSize = Enum.AutomaticSize.Y
-    mainFrame.Position = UDim2.new(0.02, 0, 0.42, 0)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
-    mainFrame.BackgroundTransparency = 0.12
-    mainFrame.BorderSizePixel = 0
-    mainFrame.Visible = false
-    mainFrame.Parent = sg
-
-    local pad = Instance.new("UIPadding")
-    pad.PaddingTop = UDim.new(0, 8)
-    pad.PaddingBottom = UDim.new(0, 10)
-    pad.PaddingLeft = UDim.new(0, 10)
-    pad.PaddingRight = UDim.new(0, 10)
-    pad.Parent = mainFrame
-
-    local uiCorner = Instance.new("UICorner")
-    uiCorner.CornerRadius = UDim.new(0, 8)
-    uiCorner.Parent = mainFrame
-
-    local uiStroke = Instance.new("UIStroke")
-    uiStroke.Color = Color3.fromRGB(6, 182, 212)
-    uiStroke.Thickness = 1.5
-    uiStroke.Parent = mainFrame
-
-    local title = Instance.new("TextLabel")
-    title.Name = "Title"
-    title.Size = UDim2.new(1, 0, 0, 20)
-    title.Position = UDim2.new(0, 0, 0, 0)
-    title.BackgroundTransparency = 1
-    title.Text = "ACTIVE ENEMIES STATUS & SKILL PREDICTOR"
-    title.TextColor3 = Color3.fromRGB(240, 245, 255)
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 11
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.Parent = mainFrame
-
-    local div = Instance.new("Frame")
-    div.Name = "Div"
-    div.Size = UDim2.new(1, 0, 0, 1)
-    div.Position = UDim2.new(0, 0, 0, 24)
-    div.BackgroundColor3 = Color3.fromRGB(35, 40, 55)
-    div.BorderSizePixel = 0
-    div.Parent = mainFrame
-
-    local contentLabel = Instance.new("TextLabel")
-    contentLabel.Name = "Content"
-    contentLabel.Size = UDim2.new(1, 0, 0, 0)
-    contentLabel.AutomaticSize = Enum.AutomaticSize.Y
-    contentLabel.Position = UDim2.new(0, 0, 0, 28)
-    contentLabel.BackgroundTransparency = 1
-    contentLabel.Text = "Scanning enemies status..."
-    contentLabel.TextColor3 = Color3.fromRGB(200, 210, 225)
-    contentLabel.Font = Enum.Font.Gotham
-    contentLabel.TextSize = 10.5
-    contentLabel.TextXAlignment = Enum.TextXAlignment.Left
-    contentLabel.TextYAlignment = Enum.TextYAlignment.Top
-    contentLabel.TextWrapped = true
-    contentLabel.RichText = true
-    contentLabel.Parent = mainFrame
-
-    local dragging, dragInput, dragStart, startPos
-    mainFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = mainFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    mainFrame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
-
-    pcall(function()
-        local parentGui = (gethui and gethui()) or (game:GetService("CoreGui"):FindFirstChild("RobloxGui")) or PlayerGui
-        sg.Parent = parentGui
-    end)
-
-    EnemyStatusEngine.gui = sg
-    return sg
-end
-
-local function getSkillStats(skillName)
-    local sk = EnemyStatusEngine.skillsCache[skillName]
-    local cost = 0
-    local cd = 0
-    if sk and type(sk) == "table" then
-        cost = tonumber(sk.Cost or sk.Energy or sk.CostEnergy) or 0
-        cd = tonumber(sk.Cooldown or sk.CD or sk.Turns) or 0
-    end
-    return cost, cd
-end
-
 local function analyzeEnemyStatus(enemyModel)
     if not enemyModel or not enemyModel.Parent then return nil end
 
@@ -10767,9 +10645,6 @@ local function analyzeEnemyStatus(enemyModel)
 
     local modelCDs = EnemyStatusEngine.cooldowns[enemyModel] or {}
     local skillBadges = {}
-    local predictedMove = nil
-    local predictedCost = 0
-    local predictedReason = ""
 
     -- 1. Evaluate Special Skills
     for _, sk in ipairs(specialSkills) do
@@ -10777,18 +10652,13 @@ local function analyzeEnemyStatus(enemyModel)
         local remCD = modelCDs[sk] or 0
         local statusTag = ""
         if remCD > 0 then
-            statusTag = string.format("<font color='#FFA500'>[CD:%d]</font>", remCD)
+            statusTag = string.format("<font color='#FFA500'>[CD: %d]</font>", remCD)
         elseif curEnergy >= cost then
-            statusTag = "<font color='#9B59B6'>[READY]</font>"
-            if not predictedMove then
-                predictedMove = sk
-                predictedCost = cost
-                predictedReason = "Special"
-            end
+            statusTag = "<font color='#2ECC71'>[READY]</font>"
         else
             statusTag = string.format("<font color='#E74C3C'>[Need %dE]</font>", cost)
         end
-        table.insert(skillBadges, string.format("<b>%s</b> (%dE)%s", sk, cost, statusTag))
+        table.insert(skillBadges, string.format("<b>%s</b> (%dE) %s", sk, cost, statusTag))
     end
 
     -- 2. Evaluate Damage Skills
@@ -10797,18 +10667,13 @@ local function analyzeEnemyStatus(enemyModel)
         local remCD = modelCDs[sk] or 0
         local statusTag = ""
         if remCD > 0 then
-            statusTag = string.format("<font color='#FFA500'>[CD:%d]</font>", remCD)
+            statusTag = string.format("<font color='#FFA500'>[CD: %d]</font>", remCD)
         elseif curEnergy >= cost then
             statusTag = "<font color='#2ECC71'>[READY]</font>"
-            if not predictedMove then
-                predictedMove = sk
-                predictedCost = cost
-                predictedReason = "Damage"
-            end
         else
             statusTag = string.format("<font color='#E74C3C'>[Need %dE]</font>", cost)
         end
-        table.insert(skillBadges, string.format("<b>%s</b> (%dE)%s", sk, cost, statusTag))
+        table.insert(skillBadges, string.format("<b>%s</b> (%dE) %s", sk, cost, statusTag))
     end
 
     -- 3. Evaluate Healing Skills
@@ -10817,44 +10682,22 @@ local function analyzeEnemyStatus(enemyModel)
         local remCD = modelCDs[sk] or 0
         local statusTag = ""
         if remCD > 0 then
-            statusTag = string.format("<font color='#FFA500'>[CD:%d]</font>", remCD)
+            statusTag = string.format("<font color='#FFA500'>[CD: %d]</font>", remCD)
         elseif curEnergy >= cost then
             statusTag = "<font color='#00FF88'>[READY]</font>"
-            if not predictedMove and (curHp / math.max(1, maxHp)) < 0.6 then
-                predictedMove = sk
-                predictedCost = cost
-                predictedReason = "Heal"
-            end
         else
             statusTag = string.format("<font color='#E74C3C'>[Need %dE]</font>", cost)
         end
-        table.insert(skillBadges, string.format("<b>%s</b> (%dE)%s", sk, cost, statusTag))
+        table.insert(skillBadges, string.format("<b>%s</b> (%dE) %s", sk, cost, statusTag))
     end
 
     -- 4. Evaluate NoEnergy Skills
     for _, sk in ipairs(noEnergySkills) do
-        table.insert(skillBadges, string.format("<b>%s</b> (0E)<font color='#2ECC71'>[READY]</font>", sk))
-        if not predictedMove then
-            predictedMove = sk
-            predictedCost = 0
-            predictedReason = "No Energy"
-        end
+        table.insert(skillBadges, string.format("<b>%s</b> (0E) <font color='#2ECC71'>[READY]</font>", sk))
     end
 
     if #skillBadges == 0 then
-        table.insert(skillBadges, "<b>Strike</b> (0E)<font color='#2ECC71'>[READY]</font>")
-    end
-
-    if not predictedMove then
-        if #noEnergySkills > 0 then
-            predictedMove = noEnergySkills[1]
-            predictedCost = 0
-            predictedReason = "0 Energy Move"
-        else
-            predictedMove = "Strike"
-            predictedCost = 0
-            predictedReason = "Basic Attack"
-        end
+        table.insert(skillBadges, "<b>Strike</b> (0E) <font color='#2ECC71'>[READY]</font>")
     end
 
     return {
@@ -10866,9 +10709,6 @@ local function analyzeEnemyStatus(enemyModel)
         curEnergy = curEnergy,
         maxEnergy = maxEnergy,
         lastAttack = lastAttack,
-        predictedMove = predictedMove,
-        predictedCost = predictedCost,
-        predictedReason = predictedReason,
         skills = skillBadges
     }
 end
@@ -10880,20 +10720,13 @@ function EnemyStatusEngine.start()
     shared.EnemyStatusEngine = EnemyStatusEngine
     if EnemyStatusEngine.running then return end
     EnemyStatusEngine.running = true
-    createEnemyStatusScreenHUD()
 
     EnemyStatusEngine.thread = task.spawn(function()
         while EnemyStatusEngine.running do
             local inCombat = isInCombat()
-            local hud = EnemyStatusEngine.gui and EnemyStatusEngine.gui:FindFirstChild("MainFrame")
+            local showEnemyInfo = (Toggles.ShowEnemyInfo and Toggles.ShowEnemyInfo.Value) or (Toggles.ShowEnemyStatusHead and Toggles.ShowEnemyStatusHead.Value)
 
-            if inCombat and (Toggles.ShowEnemyStatusHUD and Toggles.ShowEnemyStatusHUD.Value or Toggles.ShowEnemyStatusHead and Toggles.ShowEnemyStatusHead.Value) then
-                if hud and Toggles.ShowEnemyStatusHUD and Toggles.ShowEnemyStatusHUD.Value then
-                    hud.Visible = true
-                elseif hud then
-                    hud.Visible = false
-                end
-
+            if inCombat and showEnemyInfo then
                 local activeEnemies = {}
                 local living = workspace:FindFirstChild("Living")
                 local char = LocalPlayer.Character
@@ -10922,108 +10755,85 @@ function EnemyStatusEngine.start()
                     end
                 end
 
-                local hudLines = {}
-                local now = os.clock()
-                if EnemyStatusEngine.lastIndicatedSkill and (now - EnemyStatusEngine.lastIndicatedTime < 2.5) then
-                    local skName = EnemyStatusEngine.lastIndicatedSkill
-                    table.insert(hudLines, string.format("⚠️ <b><font color='#FF5555'>CASTING NOW: %s</font></b>", skName))
-                    table.insert(hudLines, "<font color='#374151'>────────────────────────────────────────</font>")
-                elseif EnemyStatusEngine.currentDecidingEnemy then
-                    table.insert(hudLines, string.format("⏳ <i><font color='#F39C12'>%s is deciding move...</font></i>", EnemyStatusEngine.currentDecidingEnemy))
-                    table.insert(hudLines, "<font color='#374151'>────────────────────────────────────────</font>")
-                end
-
                 for idx, enemyModel in ipairs(activeEnemies) do
                     local sData = analyzeEnemyStatus(enemyModel)
                     if sData then
-                        local hpPercent = math.clamp(sData.curHp / math.max(1, sData.maxHp), 0, 1)
-                        local hpColor = hpPercent > 0.5 and "#2ECC71" or (hpPercent > 0.25 and "#F39C12" or "#E74C3C")
-                        local energyStr = string.format("⚡ <font color='#06B6D4'><b>%d/%d E</b></font>", sData.curEnergy, sData.maxEnergy)
+                        local head = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
+                        if head then
+                            local bb = EnemyStatusEngine.billboards[enemyModel]
+                            if not bb or not bb.Parent then
+                                bb = Instance.new("BillboardGui")
+                                bb.Name = "EnemyInfoBB"
+                                bb.Size = UDim2.new(0, 360, 0, 90)
+                                bb.AlwaysOnTop = true
+                                bb.Adornee = head
+                                bb.MaxDistance = 140
 
-                        -- Clean 2-Line Compact Layout per Mob
-                        table.insert(hudLines, string.format("<b>%s</b> (<font color='%s'>%d/%d HP</font>) | %s | 🎯 <b>Next:</b> <font color='#00FFFF'><b>%s</b></font> (%dE)", 
-                            sData.name, hpColor, sData.curHp, sData.maxHp, energyStr, sData.predictedMove, sData.predictedCost))
-                        table.insert(hudLines, string.format("  <i>Last: %s</i> | %s", sData.lastAttack, table.concat(sData.skills, " • ")))
+                                -- Text-only Display (No border, No background, pure clean text)
+                                local lbl = Instance.new("TextLabel")
+                                lbl.Name = "InfoText"
+                                lbl.Size = UDim2.new(1, 0, 1, 0)
+                                lbl.Position = UDim2.new(0, 0, 0, 0)
+                                lbl.BackgroundTransparency = 1
+                                lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+                                lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+                                lbl.TextStrokeTransparency = 0.15
+                                lbl.Font = Enum.Font.GothamMedium
+                                lbl.TextSize = 10.5
+                                lbl.TextWrapped = true
+                                lbl.RichText = true
+                                lbl.TextYAlignment = Enum.TextYAlignment.Bottom
+                                lbl.TextXAlignment = Enum.TextXAlignment.Center
+                                lbl.Parent = bb
 
-                        if idx < #activeEnemies then
-                            table.insert(hudLines, "<font color='#252A36'>────────────────────────────────────────</font>")
-                        end
+                                pcall(function()
+                                    local parentGui = (gethui and gethui()) or (game:GetService("CoreGui"):FindFirstChild("RobloxGui")) or PlayerGui
+                                    bb.Parent = parentGui
+                                end)
+                                EnemyStatusEngine.billboards[enemyModel] = bb
+                            end
 
-                        -- Elevated Overhead 3D Billboard (Zero Overlap with Health Bar)
-                        if Toggles.ShowEnemyStatusHead and Toggles.ShowEnemyStatusHead.Value then
-                            local head = enemyModel:FindFirstChild("Head") or enemyModel:FindFirstChild("HumanoidRootPart")
-                            if head then
-                                local bb = EnemyStatusEngine.billboards[enemyModel]
-                                if not bb or not bb.Parent then
-                                    bb = Instance.new("BillboardGui")
-                                    bb.Name = "EnemyStatusBB"
-                                    bb.Size = UDim2.new(0, 230, 0, 68)
-                                    bb.StudsOffset = Vector3.new(0, 14, 0) -- Elevated to 14 studs above in-game HP bar
-                                    bb.AlwaysOnTop = true
-                                    bb.Adornee = head
-                                    bb.MaxDistance = 150
-
-                                    local frame = Instance.new("Frame")
-                                    frame.Size = UDim2.new(1, 0, 1, 0)
-                                    frame.BackgroundColor3 = Color3.fromRGB(15, 17, 23)
-                                    frame.BackgroundTransparency = 0.15
-                                    frame.BorderSizePixel = 0
-                                    frame.Parent = bb
-
-                                    local corner = Instance.new("UICorner")
-                                    corner.CornerRadius = UDim.new(0, 6)
-                                    corner.Parent = frame
-
-                                    local stroke = Instance.new("UIStroke")
-                                    stroke.Color = Color3.fromRGB(6, 182, 212)
-                                    stroke.Thickness = 1.2
-                                    stroke.Parent = frame
-
-                                    local lbl = Instance.new("TextLabel")
-                                    lbl.Name = "Info"
-                                    lbl.Size = UDim2.new(1, -8, 1, -6)
-                                    lbl.Position = UDim2.new(0, 4, 0, 3)
-                                    lbl.BackgroundTransparency = 1
-                                    lbl.TextColor3 = Color3.fromRGB(240, 245, 255)
-                                    lbl.Font = Enum.Font.GothamMedium
-                                    lbl.TextSize = 9.5
-                                    lbl.TextWrapped = true
-                                    lbl.RichText = true
-                                    lbl.Parent = frame
-
-                                    pcall(function()
-                                        local parentGui = (gethui and gethui()) or (game:GetService("CoreGui"):FindFirstChild("RobloxGui")) or PlayerGui
-                                        bb.Parent = parentGui
-                                    end)
-                                    EnemyStatusEngine.billboards[enemyModel] = bb
+                            -- Dynamic Height Offset based on HP Bar (places right above HP bar without overlapping)
+                            local gameHPBar = nil
+                            for _, d in ipairs(enemyModel:GetDescendants()) do
+                                if d:IsA("BillboardGui") and d ~= bb and d.Name ~= "EnemyInfoBB" and d.Name ~= "EnemyStatusBB" then
+                                    gameHPBar = d
+                                    break
                                 end
+                            end
 
-                                bb.StudsOffset = Vector3.new(0, 14, 0) -- Ensure 14 studs elevation
+                            if gameHPBar and gameHPBar.Adornee then
+                                bb.Adornee = gameHPBar.Adornee
+                                bb.StudsOffset = Vector3.new(0, gameHPBar.StudsOffset.Y + 2.4, 0)
+                            else
+                                bb.Adornee = head
+                                bb.StudsOffset = Vector3.new(0, 2.8, 0)
+                            end
 
-                                local infoLbl = bb:FindFirstChild("Info", true)
-                                if infoLbl then
-                                    local shortSkills = {}
-                                    for i = 1, math.min(3, #sData.skills) do
-                                        table.insert(shortSkills, sData.skills[i])
+                            local infoLbl = bb:FindFirstChild("InfoText", true)
+                            if infoLbl then
+                                local hpPercent = math.clamp(sData.curHp / math.max(1, sData.maxHp), 0, 1)
+                                local hpColor = hpPercent > 0.5 and "#2ECC71" or (hpPercent > 0.25 and "#F39C12" or "#E74C3C")
+                                
+                                local formattedSkills = {}
+                                local curLine = {}
+                                for i, badge in ipairs(sData.skills) do
+                                    table.insert(curLine, badge)
+                                    if #curLine == 2 or i == #sData.skills then
+                                        table.insert(formattedSkills, table.concat(curLine, "   |   "))
+                                        curLine = {}
                                     end
-                                    infoLbl.Text = string.format("<b>%s</b> (<font color='%s'>%d HP</font>) | ⚡ %d/%d E\n🎯 <b>Next:</b> <font color='#00FFFF'>%s (%dE)</font> | <i>Last: %s</i>\n%s", 
-                                        sData.name, hpColor, sData.curHp, sData.curEnergy, sData.maxEnergy, sData.predictedMove, sData.predictedCost, sData.lastAttack, table.concat(shortSkills, " • "))
                                 end
+
+                                infoLbl.Text = string.format("<b><font color='#FFFFFF'>%s</font></b> (<font color='%s'>%d/%d HP</font>)  •  ⚡ <font color='#00FFFF'><b>%d/%d E</b></font>  •  <i>Last: %s</i>
+%s", 
+                                    sData.name, hpColor, sData.curHp, sData.maxHp, sData.curEnergy, sData.maxEnergy, sData.lastAttack, table.concat(formattedSkills, "
+"))
                             end
                         end
                     end
                 end
-
-                if #activeEnemies == 0 then
-                    table.insert(hudLines, "<i>Waiting for combat enemies to appear...</i>")
-                end
-
-                local cLbl = hud and hud:FindFirstChild("Content")
-                if cLbl then
-                    cLbl.Text = table.concat(hudLines, "\n")
-                end
             else
-                if hud then hud.Visible = false end
                 for m, bb in pairs(EnemyStatusEngine.billboards) do
                     if bb and bb.Parent then bb:Destroy() end
                 end
