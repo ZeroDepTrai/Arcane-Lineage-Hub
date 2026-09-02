@@ -94,6 +94,7 @@ local VirtualInputManager = game:GetService("VirtualInputManager")
 local VirtualUser = game:GetService("VirtualUser")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
+local StarterGui = game:GetService("StarterGui")
 
 local GuiCollisionService = nil
 pcall(function()
@@ -2005,7 +2006,24 @@ function AutoYarthul.sendWebhook(eventType, extraData)
     end)
 end
 
--- 6. DIRECT HOOK ENGINE: TỰ ĐỘNG CHẤP NHẬN LOOT POOL / ITEM DROP BẰNG METAMETHOD VÀ CALLBACK TRỰC TIẾP
+-- 6. DIRECT HOOK ENGINE: TỰ ĐỘNG CHẤP NHẬN LOOT POOL / ITEM DROP (SAFE & TESTED METHOD)
+local function getAcceptButton(data)
+    if type(data) ~= "table" then return nil end
+    local keywords = { "accept", "accpet", "acc", "yes", "confirm", "ok", "take", "roll", "claim", "agree", "equip", "loot" }
+    
+    for _, btn in ipairs({ data.Button1, data.Button2 }) do
+        if type(btn) == "string" then
+            local bLower = btn:lower()
+            for _, kw in ipairs(keywords) do
+                if bLower:find(kw) then
+                    return btn
+                end
+            end
+        end
+    end
+    return nil
+end
+
 function AutoYarthul.hookLootRemote()
     -- Hook StarterGui:SetCore("SendNotification") qua hookmetamethod (__namecall)
     pcall(function()
@@ -2014,25 +2032,39 @@ function AutoYarthul.hookLootRemote()
             local oldNamecall
             oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
                 local method = getnamecallmethod()
-                local args = {...}
-                if (method == "SetCore" or method == "setCore") and args[1] == "SendNotification" and type(args[2]) == "table" then
-                    local coreData = args[2]
-                    local title = tostring(coreData.Title or "")
-                    local text = tostring(coreData.Text or "")
-                    if title:lower():find("item") or title:lower():find("drop") or text:lower():find("dropped") or text:lower():find("roll") or text:lower():find("dice") then
-                        print(string.format("[AutoLoot Hook] ⚡ Bắt được SetCore Notification '%s' -> Tự động kích hoạt Callback 'Accept' trực tiếp (0ms)!", title))
-                        if AutoYarthul and AutoYarthul.running then
-                            AutoYarthul.updateHUD("🎁 Đã Accept vào Loot Roll Pool (0ms)!")
-                            Library:Notify("🎁 Auto Accepted Loot Roll Pool!", 4)
-                            AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
-                        end
-                        if coreData.Callback then
-                            task.spawn(function()
+                if self == StarterGui and (method == "SetCore" or method == "setCore") then
+                    local args = { ... }
+                    if args[1] == "SendNotification" and type(args[2]) == "table" then
+                        local data = args[2]
+                        local targetBtn = getAcceptButton(data)
+                        
+                        if targetBtn and data.Callback then
+                            local title = tostring(data.Title or "")
+                            local text = tostring(data.Text or "")
+                            print(string.format("[AutoLoot] 🎁 Bắt được Notification '%s' ('%s') -> Tự động bấm: '%s'!", title, text, targetBtn))
+                            
+                            if AutoYarthul and AutoYarthul.running then
+                                AutoYarthul.updateHUD("🎁 Đã Accept vào Loot Roll Pool (0ms)!")
+                                if Library and Library.Notify then
+                                    Library:Notify(string.format("🎁 Auto Accepted: %s", (title ~= "" and title ~= "Item dropped!") and title or text), 4)
+                                end
                                 pcall(function()
-                                    if typeof(coreData.Callback) == "Instance" and coreData.Callback:IsA("BindableFunction") then
-                                        coreData.Callback:Fire("Accept")
-                                    elseif typeof(coreData.Callback) == "function" then
-                                        coreData.Callback("Accept")
+                                    AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
+                                end)
+                            end
+                            
+                            task.defer(function()
+                                task.wait(0.04)
+                                pcall(function()
+                                    if typeof(data.Callback) == "Instance" and data.Callback:IsA("BindableFunction") then
+                                        data.Callback:Invoke(targetBtn)
+                                        print(string.format("[AutoLoot] ✅ Callback:Invoke('%s') thành công!", targetBtn))
+                                    elseif typeof(data.Callback) == "Instance" and data.Callback:IsA("BindableEvent") then
+                                        data.Callback:Fire(targetBtn)
+                                        print(string.format("[AutoLoot] ✅ Callback:Fire('%s') thành công!", targetBtn))
+                                    elseif type(data.Callback) == "function" then
+                                        data.Callback(targetBtn)
+                                        print(string.format("[AutoLoot] ✅ Callback function('%s') thành công!", targetBtn))
                                     end
                                 end)
                             end)
@@ -2041,7 +2073,7 @@ function AutoYarthul.hookLootRemote()
                 end
                 return oldNamecall(self, ...)
             end)
-            print("[AutoLoot] ⚡ Đã cài đặt Hook SetCore SendNotification thành công!")
+            print("[AutoLoot] ⚡ Đã cài đặt Safe Hook SetCore SendNotification thành công!")
         end
     end)
 
@@ -2067,6 +2099,7 @@ function AutoYarthul.hookLootRemote()
         end
     end)
 end
+
 
 -- 7. Kiểm tra xem bảng Refight đã xuất hiện VÀ THỰC SỰ ĐANG HIỆN TRÊN MÀN HÌNH (Main.Visible == true)
 function AutoYarthul.isRefightActive()
