@@ -10825,10 +10825,9 @@ function EnemyStatusEngine.start()
                                     end
                                 end
 
-                                infoLbl.Text = string.format("<b><font color='#FFFFFF'>%s</font></b> (<font color='%s'>%d/%d HP</font>)  •  ⚡ <font color='#00FFFF'><b>%d/%d E</b></font>  •  <i>Last: %s</i>
-%s", 
-                                    sData.name, hpColor, sData.curHp, sData.maxHp, sData.curEnergy, sData.maxEnergy, sData.lastAttack, table.concat(formattedSkills, "
-"))
+                                local headerLine = string.format("<b><font color='#FFFFFF'>%s</font></b> (<font color='%s'>%d/%d HP</font>)  •  ⚡ <font color='#00FFFF'><b>%d/%d E</b></font>  •  <i>Last: %s</i>", sData.name, hpColor, sData.curHp, sData.maxHp, sData.curEnergy, sData.maxEnergy, sData.lastAttack)
+                                local skillsLine = table.concat(formattedSkills, "\n")
+                                infoLbl.Text = headerLine .. "\n" .. skillsLine
                             end
                         end
                     end
