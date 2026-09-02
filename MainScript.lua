@@ -5143,6 +5143,10 @@ end))
 -- =============================================================================
 -- TELEPORT SUITE (ALL 40+ ACCURATE CLASS TRAINERS, TOWNS, BOSSES & LANDMARKS)
 -- =============================================================================
+
+-- =============================================================================
+-- TELEPORT SUITE: ORGANIZED TRAINERS, QUESTS (ORDER/CHAOS), NPCS & LANDMARKS
+-- =============================================================================
 local BaseTrainers = {
     ["Base: Doran (Warrior - Sword)"]               = Vector3.new(5627.8, 703.8, -4336.9),
     ["Base: Luther (Thief - Dagger)"]                = Vector3.new(3496.5, 632.8, -3983.3),
@@ -5176,62 +5180,67 @@ local SuperTrainers = {
     ["Super: Dragon Knight (Mount Thul Peak)"]       = Vector3.new(12.5, 585.4, -4120.8),
 }
 
-local MajorBosses = {
-    ["Boss: Yar'thul, the Blazing Dragon (Mount Thul Door)"] = Vector3.new(40.5, 581.6, -4113.5),
-    ["Boss: Thorian, the Rotten (Remnants Gate)"]            = Vector3.new(8328.1, 645.0, -1544.1),
-    ["Boss: Seraphon (Illustris Light Sanctum)"]             = Vector3.new(710.5, 3449.1, -5678.1),
-    ["Boss: Arkhaia (Temple of Norn Door)"]                 = Vector3.new(14710.9, 550.7, 7133.7),
-    ["Boss: Handaconda (Desert Room Entrance)"]              = Vector3.new(3134.1, 179.1, -852.2),
-    ["Boss: Metrom's Vessel (Dungeon Entrance Spawn)"]      = Vector3.new(-3369.4, 129.8, 4266.4),
-}
-
-local KeyLocations = {
-    -- Towns & Major Settlements
-    ["Caldera Town (Central Plaza)"]                = Vector3.new(5091.2, 662.6, -4293.1),
-    ["Caldera Town (Meditation / Aretim Peak)"]     = Vector3.new(5075.4, 720.5, -4380.2),
-    ["Westwood Heart (Canopy Camp)"]                = Vector3.new(8327.3, 825.1, -5557.4),
-    ["Desert Oasis (Waving Sands)"]                 = Vector3.new(2815.3, 634.6, -3924.6),
-    ["Sanctuary of Blades (Underground)"]           = Vector3.new(2086.0, 386.8, -2978.3),
-    ["Church (Heavens Point Peak)"]                 = Vector3.new(831.6, 3436.9, -5602.3),
-    ["Forgotten Sanctum (Endgame Domain)"]          = Vector3.new(10831.2, 1581.7, -3463.6),
-    ["Dark Place Gate (Abyss Entrance)"]            = Vector3.new(7855.1, 1290.3, 7930.9),
-    ["Void Rift (Interdimensional Portal)"]         = Vector3.new(991.0, 41.4, 615.6),
-    ["Memori's House (Alchemist Witch Hut)"]        = Vector3.new(11851.5, 1064.9, -1776.8),
-    ["Icerift Approach (Frostlands Path)"]          = Vector3.new(5328.2, 742.7, -6530.2),
-    ["Mount Thul Volcano (Dragon Lair)"]            = Vector3.new(98.9, 577.0, -4115.9),
-
-    -- Sub Class Trainers & Specialists
+local SubclassTrainers = {
     ["Sub: Cantia (Bard - Melody Specialist)"]       = Vector3.new(2845.8, 624.1, -3222.9),
     ["Sub: Thorin (Beastmaster - Pet Specialist)"]   = Vector3.new(4253.1, 653.8, -3369.2),
     ["Sub: Selia (Alchemist - Potion Master)"]       = Vector3.new(8116.2, 822.5, -5456.4),
     ["Sub: Adelma (Blacksmith Subclass)"]           = Vector3.new(-425.4, 2712.7, -3388.1),
     ["Sub: Vanio (Miner - Ore Master)"]             = Vector3.new(7572.0, 593.2, -2674.0),
+}
 
-    -- Deities, Alignments & Enchants
-    ["Deity: Lodyssa (God of Wealth / Midas)"]       = Vector3.new(5213.0, 660.0, -4347.7),
-    ["Quest: Dead King (Reaper Enchant)"]           = Vector3.new(2623.8, 556.4, -4660.0),
-    ["Quest: Jyphar (Cursed Enchant)"]              = Vector3.new(7246.1, 619.2, -4672.5),
-    ["Quest: El'heith (Astra Enchant)"]             = Vector3.new(10883.0, 1573.4, -3489.5),
-    ["Master: The Soulmaster (Soul Awakening)"]      = Vector3.new(-44.9, 574.8, -5467.4),
-    ["Spirit: Staarun & Aderyn (Spirit Domain)"]     = Vector3.new(789.3, 233.0, 2053.5),
-    ["Quest: Bone Man (Necromancy Crypt)"]          = Vector3.new(1397.0, 610.3, -4097.6),
-    ["Chaos Path: Thuriaz (Chaos Transformation)"]   = Vector3.new(2151.2, 519.8, -3394.1),
-    ["Order Path: Prelate Fyran (Order Sanctuary)"]  = Vector3.new(8459.8, 822.4, -5885.1),
+local QuestNPCs = {
+    ["[Orderly] Prelate Fyran (Order Path Sanctuary)"]= Vector3.new(8459.8, 822.4, -5885.1),
+    ["[Orderly] Saint Fernain (Order Path Shrine)"]   = Vector3.new(2296.1, 663.3, -4392.7),
+    ["[Orderly] Heavens Point Church (Holy Blessing)"]= Vector3.new(831.6, 3436.9, -5602.3),
+    ["[Orderly] Aretim Peak (Soul Meditation)"]       = Vector3.new(5075.4, 720.5, -4380.2),
+    ["[Chaotic] Thuriaz (Chaos Transformation Path)"] = Vector3.new(2151.2, 519.8, -3394.1),
+    ["[Chaotic] Jyphar (Cursed Enchant Quest)"]       = Vector3.new(7246.1, 619.2, -4672.5),
+    ["[Chaotic] Dead King (Reaper Enchant Quest)"]    = Vector3.new(2623.8, 556.4, -4660.0),
+    ["[Chaotic] Bone Man (Necromancy Crypt Quest)"]   = Vector3.new(1397.0, 610.3, -4097.6),
+    ["[Chaotic] Momma Darkbeast (Darkwraith Altar)"]  = Vector3.new(8122.6, 581.8, -2138.1),
+    ["[Neutral] Lodyssa (God of Wealth / Midas Deity)"]= Vector3.new(5213.0, 660.0, -4347.7),
+    ["[Neutral] El'heith (Astra Starlight Enchant)"]  = Vector3.new(10883.0, 1573.4, -3489.5),
+    ["[Neutral] The Soulmaster (Soul Awakening)"]     = Vector3.new(-44.9, 574.8, -5467.4),
+    ["[Neutral] Spirit Domain: Staarun & Aderyn"]     = Vector3.new(789.3, 233.0, 2053.5),
+}
 
-    -- Town Merchants, Doctors & Blacksmiths
-    ["Blacksmith: Ferrum (Caldera)"]                = Vector3.new(4921.8, 657.9, -4162.3),
-    ["Blacksmith: Borin (Westwood)"]                = Vector3.new(8465.8, 821.8, -5589.8),
-    ["Blacksmith: Sanctuary Forge"]                 = Vector3.new(2079.6, 382.7, -2903.1),
-    ["Merchant: Lyle (Caldera General Goods)"]       = Vector3.new(5132.9, 658.0, -4124.2),
-    ["Merchant: Corin (Westwood Goods)"]            = Vector3.new(8473.8, 823.6, -5906.5),
-    ["Doctor: Caldera Clinic"]                      = Vector3.new(5035.6, 658.1, -4407.9),
-    ["Doctor: Westwood Clinic"]                     = Vector3.new(8079.1, 822.4, -5478.8),
-    ["Doctor: Desert Oasis Camp"]                   = Vector3.new(2790.2, 615.7, -3837.2),
-    ["Banker: Caldera Vault"]                       = Vector3.new(5184.7, 657.7, -4266.2),
-    ["Banker: Westwood Vault"]                      = Vector3.new(8470.3, 823.6, -5824.3),
-    ["Apothecarian: Caldera Potions"]               = Vector3.new(5131.5, 657.8, -4355.9),
-    ["Apothecarian: Westwood Potions"]              = Vector3.new(8388.3, 822.9, -5904.8),
-    ["Enchanter: Caldera Arcane Forge"]             = Vector3.new(5045.7, 657.5, -4234.2),
+local GeneralNPCs = {
+    ["Blacksmith: Ferrum (Caldera Town)"]             = Vector3.new(4921.8, 657.9, -4162.3),
+    ["Blacksmith: Borin (Westwood Canopy)"]           = Vector3.new(8465.8, 821.8, -5589.8),
+    ["Blacksmith: Sanctuary Underground Forge"]      = Vector3.new(2079.6, 382.7, -2903.1),
+    ["Merchant: Lyle (Caldera General Store)"]        = Vector3.new(5132.9, 658.0, -4124.2),
+    ["Merchant: Corin (Westwood Provisions)"]         = Vector3.new(8473.8, 823.6, -5906.5),
+    ["Doctor: Caldera Town Clinic"]                   = Vector3.new(5035.6, 658.1, -4407.9),
+    ["Doctor: Westwood Forest Clinic"]                = Vector3.new(8079.1, 822.4, -5478.8),
+    ["Doctor: Desert Oasis Camp Clinic"]              = Vector3.new(2790.2, 615.7, -3837.2),
+    ["Banker: Caldera Town Vault"]                    = Vector3.new(5184.7, 657.7, -4266.2),
+    ["Banker: Westwood Canopy Vault"]                 = Vector3.new(8470.3, 823.6, -5824.3),
+    ["Apothecarian: Caldera Potions"]                = Vector3.new(5131.5, 657.8, -4355.9),
+    ["Apothecarian: Westwood Potions"]               = Vector3.new(8388.3, 822.9, -5904.8),
+    ["Enchanter: Caldera Arcane Forge"]              = Vector3.new(5045.7, 657.5, -4234.2),
+}
+
+local MajorBosses = {
+    ["Boss: Yar'thul, the Blazing Dragon (Mount Thul Door)"] = Vector3.new(40.5, 581.6, -4113.5),
+    ["Boss: Thorian, the Rotten (Remnants Gate)"]            = Vector3.new(8328.1, 645.0, -1544.1),
+    ["Boss: Seraphon (Illustris Light Sanctum)"]             = Vector3.new(710.5, 3449.1, -5678.1),
+    ["Boss: Arkhaia (Temple of Norn Gate)"]                  = Vector3.new(14710.9, 550.7, 7133.7),
+    ["Boss: Handaconda (Desert Dungeon)"]                    = Vector3.new(3134.1, 179.1, -852.2),
+    ["Boss: Metrom's Vessel (Dungeon Spawn)"]                = Vector3.new(-3369.4, 129.8, 4266.4),
+}
+
+local KeyLocations = {
+    ["Caldera Town (Central Plaza)"]                = Vector3.new(5091.2, 662.6, -4293.1),
+    ["Westwood Heart (Canopy Village)"]             = Vector3.new(8327.3, 825.1, -5557.4),
+    ["Desert Oasis (Waving Sands Camp)"]            = Vector3.new(2815.3, 634.6, -3924.6),
+    ["Sanctuary of Blades (Underground Ruins)"]     = Vector3.new(2086.0, 386.8, -2978.3),
+    ["Church of Light (Heavens Point Peak)"]        = Vector3.new(831.6, 3436.9, -5602.3),
+    ["Mount Thul Volcano (Dragon Peak)"]            = Vector3.new(98.9, 577.0, -4115.9),
+    ["Forgotten Sanctum (Endgame Domain)"]          = Vector3.new(10831.2, 1581.7, -3463.6),
+    ["Dark Place Gate (Abyss Gate)"]                = Vector3.new(7855.1, 1290.3, 7930.9),
+    ["Void Rift (Interdimensional Portal)"]         = Vector3.new(991.0, 41.4, 615.6),
+    ["Memori's House (Alchemist Witch Hut)"]        = Vector3.new(11851.5, 1064.9, -1776.8),
+    ["Icerift Approach (Frostlands Path)"]          = Vector3.new(5328.2, 742.7, -6530.2),
 }
 local Teleporter = {
     active = false,
@@ -6334,117 +6343,173 @@ SpeedGroup:AddSlider("InfiniteJumpBoost", {
 -- -----------------------------------------------------------------------------
 -- TAB 4: TELEPORT SUITE (BASE TRAINERS, SUPER TRAINERS, MAJOR BOSSES, TOWNS & WARPS)
 -- -----------------------------------------------------------------------------
-local BaseGroup = Tabs.Teleport:AddLeftGroupbox("Base Class Trainers (7)")
-local BossGroup = Tabs.Teleport:AddLeftGroupbox("Major Bosses & Arenas (6)")
-local SuperGroup = Tabs.Teleport:AddRightGroupbox("Super Class Trainers (18)")
-local TownWarpGroup = Tabs.Teleport:AddRightGroupbox("Towns, Quests & Quick Warps")
+local BaseGroup = 
+-- -----------------------------------------------------------------------------
+-- TAB: TELEPORTATION SUITE (ORGANIZED TRAINERS, QUESTS, NPCS & LANDMARKS)
+-- -----------------------------------------------------------------------------
+local TrainerGroup = Tabs.Teleport:AddLeftGroupbox("Class Trainers (Base & Super & Sub)")
+local QuestGroup   = Tabs.Teleport:AddLeftGroupbox("Quest NPCs & Alignments")
+local NpcGroup     = Tabs.Teleport:AddRightGroupbox("Town Services & General NPCs")
+local LandmarkGroup= Tabs.Teleport:AddRightGroupbox("Towns, Landmarks & Boss Arenas")
 
--- 1. BASE CLASS TRAINERS (7)
+-- 1. Class Trainers Group
 local baseNames = {}
-for name, _ in pairs(BaseTrainers) do table.insert(baseNames, name) end
+for name in pairs(BaseTrainers) do table.insert(baseNames, name) end
 table.sort(baseNames)
 
-BaseGroup:AddDropdown("SelectedBaseTrainer", {
+TrainerGroup:AddDropdown("SelectedBaseTrainer", {
     Values = baseNames,
     Default = 1,
     Multi = false,
-    Text = "Select Base Trainer",
+    Text = "Base Class Trainers (7)",
 })
 
-BaseGroup:AddButton({
-    Text = "Teleport to Base Trainer",
+TrainerGroup:AddButton({
+    Text = "Warp to Selected Base Trainer",
     Func = function()
         local name = Options.SelectedBaseTrainer and Options.SelectedBaseTrainer.Value
         local pos = name and BaseTrainers[name]
-        if pos then teleportToLocation(pos) else Library:Notify("Select valid trainer!", 3) end
+        if pos then teleportToLocation(pos) end
     end
 })
 
--- 2. MAJOR BOSSES & ARENAS (7)
-local bossNames = {}
-for name, _ in pairs(MajorBosses) do table.insert(bossNames, name) end
-table.sort(bossNames)
+TrainerGroup:AddDivider()
 
-BossGroup:AddDropdown("SelectedMajorBoss", {
-    Values = bossNames,
-    Default = 1,
-    Multi = false,
-    Text = "Select Major Boss",
-})
-
-BossGroup:AddButton({
-    Text = "Teleport to Boss Arena",
-    Func = function()
-        local name = Options.SelectedMajorBoss and Options.SelectedMajorBoss.Value
-        local pos = name and MajorBosses[name]
-        if pos then teleportToLocation(pos) else Library:Notify("Select valid boss!", 3) end
-    end
-})
-
-BossGroup:AddButton({
-    Text = "Cancel Teleport",
-    Func = cancelTeleport
-})
-
--- 3. SUPER CLASS TRAINERS (18)
 local superNames = {}
-for name, _ in pairs(SuperTrainers) do table.insert(superNames, name) end
+for name in pairs(SuperTrainers) do table.insert(superNames, name) end
 table.sort(superNames)
 
-SuperGroup:AddDropdown("SelectedSuperTrainer", {
+TrainerGroup:AddDropdown("SelectedSuperTrainer", {
     Values = superNames,
     Default = 1,
     Multi = false,
-    Text = "Select Super Trainer",
+    Text = "Super Class Trainers (20+)",
 })
 
-SuperGroup:AddButton({
-    Text = "Teleport to Super Trainer",
+TrainerGroup:AddButton({
+    Text = "Warp to Selected Super Trainer",
     Func = function()
         local name = Options.SelectedSuperTrainer and Options.SelectedSuperTrainer.Value
         local pos = name and SuperTrainers[name]
-        if pos then teleportToLocation(pos) else Library:Notify("Select valid trainer!", 3) end
+        if pos then teleportToLocation(pos) end
     end
 })
 
--- 4. TOWNS, SERVICES & QUICK WARPS
-local townLocNames = {}
-for name, _ in pairs(KeyLocations) do table.insert(townLocNames, name) end
-table.sort(townLocNames)
+TrainerGroup:AddDivider()
 
-TownWarpGroup:AddDropdown("SelectedTownLoc", {
-    Values = townLocNames,
+local subNames = {}
+for name in pairs(SubclassTrainers) do table.insert(subNames, name) end
+table.sort(subNames)
+
+TrainerGroup:AddDropdown("SelectedSubTrainer", {
+    Values = subNames,
     Default = 1,
     Multi = false,
-    Text = "Towns & Landmarks",
+    Text = "Subclass Trainers (5)",
 })
 
-TownWarpGroup:AddButton({
-    Text = "Teleport to Location",
+TrainerGroup:AddButton({
+    Text = "Warp to Selected Sub Trainer",
+    Func = function()
+        local name = Options.SelectedSubTrainer and Options.SelectedSubTrainer.Value
+        local pos = name and SubclassTrainers[name]
+        if pos then teleportToLocation(pos) end
+    end
+})
+
+-- 2. Quest NPCs & Alignments Group
+local questNames = {}
+for name in pairs(QuestNPCs) do table.insert(questNames, name) end
+table.sort(questNames)
+
+QuestGroup:AddDropdown("SelectedQuestNPC", {
+    Values = questNames,
+    Default = 1,
+    Multi = false,
+    Text = "Quest NPCs (Orderly / Chaotic)",
+})
+
+QuestGroup:AddButton({
+    Text = "Warp to Quest NPC",
+    Func = function()
+        local name = Options.SelectedQuestNPC and Options.SelectedQuestNPC.Value
+        local pos = name and QuestNPCs[name]
+        if pos then teleportToLocation(pos) end
+    end
+})
+
+-- 3. Town Services & General NPCs Group
+local npcNames = {}
+for name in pairs(GeneralNPCs) do table.insert(npcNames, name) end
+table.sort(npcNames)
+
+NpcGroup:AddDropdown("SelectedGeneralNPC", {
+    Values = npcNames,
+    Default = 1,
+    Multi = false,
+    Text = "Merchants, Clinics & Services",
+})
+
+NpcGroup:AddButton({
+    Text = "Warp to NPC / Service",
+    Func = function()
+        local name = Options.SelectedGeneralNPC and Options.SelectedGeneralNPC.Value
+        local pos = name and GeneralNPCs[name]
+        if pos then teleportToLocation(pos) end
+    end
+})
+
+-- 4. Towns, Landmarks & Boss Arenas Group
+local landmarkNames = {}
+for name in pairs(KeyLocations) do table.insert(landmarkNames, name) end
+table.sort(landmarkNames)
+
+LandmarkGroup:AddDropdown("SelectedTownLoc", {
+    Values = landmarkNames,
+    Default = 1,
+    Multi = false,
+    Text = "Major Towns & Landmarks",
+})
+
+LandmarkGroup:AddButton({
+    Text = "Warp to Town / Landmark",
     Func = function()
         local name = Options.SelectedTownLoc and Options.SelectedTownLoc.Value
         local pos = name and KeyLocations[name]
-        if pos then teleportToLocation(pos) else Library:Notify("Select valid location!", 3) end
+        if pos then teleportToLocation(pos) end
     end
 })
 
-TownWarpGroup:AddLabel("--- Town Quick Warps ---")
-TownWarpGroup:AddButton(" Westwood", function() teleportToLocation(KeyLocations[" Westwood Heart"] or KeyLocations[" Westwood"]) end)
-TownWarpGroup:AddButton(" Caldera", function() teleportToLocation(KeyLocations[" Caldera Town"] or KeyLocations[" Caldera"]) end)
-TownWarpGroup:AddButton("🏜️ Desert", function() teleportToLocation(KeyLocations["🏜️ Desert (Waving Sands)"] or KeyLocations["🏜️ Desert"]) end)
-TownWarpGroup:AddButton(" Church", function() teleportToLocation(KeyLocations["Church (Heavens Point)"] or KeyLocations[" Church"]) end)
-TownWarpGroup:AddButton(" Sanctuary", function() teleportToLocation(KeyLocations[" Sanctuary of Blades"] or KeyLocations[" Sanctuary"]) end)
-TownWarpGroup:AddLabel("--- Boss Quick Warps ---")
-TownWarpGroup:AddButton(" Yar'thul (Mount Thul Door)", function() teleportToLocation(MajorBosses[" Boss: Yar'thul, the Blazing Dragon (Mount Thul Door)"]) end)
-TownWarpGroup:AddButton(" Thorian (Remnants Gate)", function() teleportToLocation(MajorBosses[" Boss: Thorian, the Rotten (Remnants Entrance Gate)"]) end)
-TownWarpGroup:AddButton(" Seraphon (Illustris Door)", function() teleportToLocation(MajorBosses[" Boss: Seraphon (Light Boss / Illustris Door)"]) end)
-TownWarpGroup:AddButton(" Arkhaia (Temple of Norn Door)", function() teleportToLocation(MajorBosses[" Boss: Arkhaia (Temple of Norn Door)"]) end)
-TownWarpGroup:AddButton(" Handaconda (Desert Room)", function() teleportToLocation(MajorBosses[" Boss: Handaconda (Desert Room Entrance)"]) end)
-TownWarpGroup:AddButton(" Metrom (Dungeon Entrance)", function() teleportToLocation(MajorBosses[" Boss: Metrom's Vessel (Dungeon Entrance Spawn)"]) end)
+LandmarkGroup:AddDivider()
 
--- -----------------------------------------------------------------------------
--- TAB 5: VISUALS & FPS BOOSTER
--- -----------------------------------------------------------------------------
+local bossNames = {}
+for name in pairs(MajorBosses) do table.insert(bossNames, name) end
+table.sort(bossNames)
+
+LandmarkGroup:AddDropdown("SelectedMajorBoss", {
+    Values = bossNames,
+    Default = 1,
+    Multi = false,
+    Text = "Major Boss Arenas (6)",
+})
+
+LandmarkGroup:AddButton({
+    Text = "Warp to Boss Arena Gate",
+    Func = function()
+        local name = Options.SelectedMajorBoss and Options.SelectedMajorBoss.Value
+        local pos = name and MajorBosses[name]
+        if pos then teleportToLocation(pos) end
+    end
+})
+
+LandmarkGroup:AddDivider()
+
+LandmarkGroup:AddButton({
+    Text = "Cancel Current Teleport",
+    Func = function()
+        Teleporter.cancel()
+    end
+})
 local PlayerESPGroup = Tabs.Visuals:AddLeftGroupbox("Player ESP & Trackers")
 local NpcESPGroup = Tabs.Visuals:AddLeftGroupbox("NPC & Waypoint ESP")
 local ESPGroup = Tabs.Visuals:AddLeftGroupbox("Ingredient & Ore ESP")
@@ -7712,7 +7777,7 @@ task.spawn(function()
         task.wait(0.25)
         if not HubState.running then break end
 
-        -- 1. GIẢI MÃ VÀ HIỆN TÊN THẬT CHO TẤT CẢ ITEM CHƯA GIÁM ĐỊNH (UNIDENTIFIED REVEALER)
+        -- 1. GIẢI MÃ VÀ HIỆN TÊN THẬT + FULL STATS KHI GIÁM ĐỊNH (UNIDENTIFIED REVEALER WITH STATS)
         if Toggles.RevealUnidentified and Toggles.RevealUnidentified.Value then
             pcall(function()
                 local pgui = PlayerGui
@@ -7740,17 +7805,47 @@ task.spawn(function()
                             if itemData and itemData.Config and itemData.Config.Unidentified then
                                 local realName = itemData.Name or itemData.Tool
                                 if realName then
-                                    local fakeConfig = {}
-                                    for ck, cv in pairs(itemData.Config) do
-                                        if ck ~= "Unidentified" then fakeConfig[ck] = cv end
+                                    local statList = {}
+                                    local cfg = itemData.Config
+
+                                    if cfg.Enchant and tostring(cfg.Enchant) ~= "" then
+                                        table.insert(statList, "Enchant: " .. tostring(cfg.Enchant))
                                     end
-                                    local fullLabel = realName
-                                    if ItemModifiers then
-                                        pcall(function()
-                                            fullLabel = ItemModifiers.LabelFor(realName, fakeConfig)
-                                        end)
+                                    if cfg.Tier then
+                                        table.insert(statList, "T" .. tostring(cfg.Tier))
                                     end
-                                    btn.Text = "" .. fullLabel
+
+                                    -- Quét chỉ số rolled stats từ Config
+                                    for k, v in pairs(cfg) do
+                                        if type(v) == "number" and v ~= 0 and k ~= "Unidentified" and k ~= "Tier" and k ~= "Cost" and k ~= "ID" then
+                                            table.insert(statList, string.format("+%d %s", v, tostring(k):sub(1, 3)))
+                                        elseif type(v) == "table" and tostring(k):lower():find("stat") then
+                                            for sk, sv in pairs(v) do
+                                                if type(sv) == "number" and sv ~= 0 then
+                                                    table.insert(statList, string.format("+%d %s", sv, tostring(sk):sub(1, 3)))
+                                                end
+                                            end
+                                        end
+                                    end
+
+                                    -- Quét chỉ số BaseStats từ ItemRegistry nếu có
+                                    if ItemRegistry and ItemRegistry.GetItem then
+                                        local regData = ItemRegistry:GetItem(realName:gsub(" ", ""))
+                                        if regData then
+                                            if regData.Stats and type(regData.Stats) == "table" then
+                                                for sk, sv in pairs(regData.Stats) do
+                                                    if type(sv) == "number" and sv ~= 0 then
+                                                        table.insert(statList, string.format("+%d %s", sv, tostring(sk):sub(1, 3)))
+                                                    end
+                                                end
+                                            end
+                                            if regData.Damage then table.insert(statList, string.format("%d Dmg", regData.Damage)) end
+                                            if regData.Defense then table.insert(statList, string.format("%d Def", regData.Defense)) end
+                                        end
+                                    end
+
+                                    local statsStr = #statList > 0 and (" [" .. table.concat(statList, ", ") .. "]") or ""
+                                    btn.Text = realName .. statsStr
                                 end
                             end
                         end
@@ -7761,7 +7856,7 @@ task.spawn(function()
                     if tooltip and tooltip.Visible then
                         local textLbl = tooltip:FindFirstChildWhichIsA("TextLabel", true)
                         if textLbl and textLbl.Text:find("You have no idea what this does") then
-                            textLbl.Text = "[Real Item Revealed by Arcane Hub]"
+                            textLbl.Text = "[Real Item & Stats Revealed by Arcane Hub]"
                         end
                     end
 
@@ -7775,7 +7870,7 @@ task.spawn(function()
                                 local regData = ItemRegistry:GetItem(realItemName)
                                 if regData then
                                     local descText = (regData.GearDesc and (regData.GearDesc .. " | ") or "") .. (regData.ToolTip or "")
-                                    descLbl.Text = "" .. descText
+                                    descLbl.Text = "[Stats Revealed] " .. descText
                                 end
                             end
                         end
@@ -7783,37 +7878,8 @@ task.spawn(function()
                 end
             end)
         end
-
-        -- 2. HIỂN THỊ MÁU & MANA/ENERGY THẬT KHI CHỊU TRIAL 'I FEEL NO PAIN!'
-        if Toggles.BypassNoPainHP and Toggles.BypassNoPainHP.Value then
-            pcall(function()
-                local char = LocalPlayer.Character
-                local hum = char and char:FindFirstChildOfClass("Humanoid")
-                local pgui = PlayerGui
-                local hud = pgui and pgui:FindFirstChild("HUD")
-                local holder = hud and (hud:FindFirstChild("Holder") or hud:FindFirstChild("HolderOLD"))
-
-                -- 1. GIẢI MÃ VÀ HIỆN MÁU THẬT (REAL HP)
-                if hum and holder then
-                    local hpOutline = holder:FindFirstChild("HPOutline", true)
-                    if hpOutline then
-                        local countLabel = hpOutline:FindFirstChild("Count", true)
-                        if countLabel and countLabel:IsA("TextLabel") then
-                            if countLabel.Text == "???" or countLabel.Text:find("%?") then
-                                countLabel.Text = string.format("%.1f/%.1f", hum.Health, hum.MaxHealth)
-                            end
-                        end
-                        local healthBar = hpOutline:FindFirstChild("Health", true)
-                        if healthBar and healthBar:IsA("GuiObject") then
-                            if healthBar.ImageColor3 == Color3.fromRGB(150, 0, 255) or healthBar.Size.X.Scale < 0.05 then
-                                local ratio = math.clamp(hum.Health / math.max(1, hum.MaxHealth), 0, 1)
-                                healthBar.Size = UDim2.new(ratio, 0, 0.7, 0)
-                            end
-                        end
-                    end
-                end
-
-                -- 2. GIẢI MÃ VÀ HIỆN MANA/ENERGY THẬT (REAL ENERGY / MANA)
+        
+        -- 2. GIẢI MÃ VÀ HIỆN MANA/ENERGY THẬT (REAL ENERGY / MANA)
                 if char and holder then
                     local status = char:FindFirstChild("Status")
                     local energyVal = status and status:FindFirstChild("Energy")
