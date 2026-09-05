@@ -5964,16 +5964,32 @@ function AutoYarthul.sendWebhook(eventType, extraData)
                 footer = { text = "Arcane Lineage • Automated Intelligence System" },
                 timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
             }
-        elseif eventType == "Loot" then
-            local itemName = extraData and extraData.itemName or "Rare Artifact"
+        elseif eventType == "Roll" then
+            local itemName = extraData and extraData.itemName or "Boss Artifact"
             local droppedBy = extraData and extraData.droppedBy or "Yar'thul, the Blazing Dragon"
             embed = {
-                title = "🎁 ITEM DROP RECEIVED",
-                description = string.format("Character automatically received **%s**!", itemName),
-                color = 0x06B6D4, -- Cyber Cyan
+                title = "🎲 AUTO-ACCEPTED DICE ROLL (LOOT POOL)",
+                description = string.format("Character automatically accepted dice roll for **%s**! (Solo mode: 100%% win upon server resolution)", itemName),
+                color = 0xF59E0B, -- Amber / Gold
                 fields = {
-                    { name = "📦 Item Drop", value = string.format("**%s**", itemName), inline = true },
+                    { name = "📦 Item Rolling", value = string.format("**%s**", itemName), inline = true },
                     { name = "⚔️ Source", value = string.format("`%s`", droppedBy), inline = true },
+                    { name = "🏆 Total Boss Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
+                    { name = "👤 Player", value = string.format("||%s||", LocalPlayer.Name), inline = true }
+                },
+                footer = { text = "Arcane Lineage • Automated Intelligence System" },
+                timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            }
+        elseif eventType == "LootConfirmed" or eventType == "Loot" then
+            local itemName = extraData and extraData.itemName or "Boss Artifact"
+            local count = extraData and extraData.count or 1
+            embed = {
+                title = "🎁 ITEM RECEIVED (CONFIRMED IN INVENTORY)",
+                description = string.format("Character successfully received **%s** (x%d) into inventory!", itemName, count),
+                color = 0x10B981, -- Emerald Green
+                fields = {
+                    { name = "📦 Item Confirmed", value = string.format("**%s** (+%d)", itemName, count), inline = true },
+                    { name = "⚔️ Source", value = "`Boss Defeat / Dice Roll`", inline = true },
                     { name = "🏆 Total Boss Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
                     { name = "👤 Player", value = string.format("||%s||", LocalPlayer.Name), inline = true }
                 },
@@ -6073,22 +6089,26 @@ local function handleNotification(data)
         end)
 
         if success then
-            local displayInfo = (title ~= "" and title ~= "Item dropped!") and title or text
-            print(string.format("[AutoLoot] ✅ Successfully pressed '%s' for drop notification: '%s' (%s)!", targetButton, title, text))
+            local cleanItemName = text:match("dropped a%s*:%s*(.-)%s*would you like") or text:match("dropped a%s*:%s*(.-)%?$") or text
+            cleanItemName = cleanItemName:gsub("^%s*(.-)%s*$", "%1")
+            if cleanItemName == "" then cleanItemName = "Rare Boss Drop" end
+
+            print(string.format("[AutoLoot] ✅ Successfully pressed '%s' for dice roll: '%s'!", targetButton, cleanItemName))
             
             pcall(function()
                 ZeroLib:Notify({
-                    Title = "Auto Loot Success",
-                    Content = string.format("Auto received: %s", displayInfo),
+                    Title = "Dice Roll Auto-Accepted",
+                    Content = string.format("Accepted roll for: %s", cleanItemName),
                     Type = "Success",
                     Duration = 4
                 })
             end)
 
             if AutoYarthul and AutoYarthul.running then
-                AutoYarthul.updateHUD(string.format("🎁 Auto Accepted: %s", displayInfo))
+                AutoYarthul.updateHUD(string.format("🎲 Rolling: %s (100%% Solo)", cleanItemName))
+                AutoYarthul.activeDiceRoll = { item = cleanItemName, startTime = os.clock() }
                 pcall(function()
-                    AutoYarthul.sendWebhook("Loot", { itemName = text, droppedBy = title })
+                    AutoYarthul.sendWebhook("Roll", { itemName = cleanItemName, droppedBy = (title ~= "" and title ~= "Item dropped!") and title or "Yar'thul, the Blazing Dragon" })
                 end)
             end
         end
@@ -6124,36 +6144,29 @@ function AutoYarthul.hookLootRemote()
         end
     end)
 
-    -- 1. Direct Server ItemDrop Hook (ReplicatedStorage.Remotes.Information.ItemDrop)
+    -- Hook ReplicatedStorage.Remotes.Data.InventorySync (Authoritative Ground Truth Item Receipt)
     pcall(function()
         local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-        local info = remotes and remotes:FindFirstChild("Information")
-        local itemDrop = info and info:FindFirstChild("ItemDrop")
-        if itemDrop and itemDrop:IsA("RemoteFunction") then
-            itemDrop.OnClientInvoke = function(mobName, itemName)
-                local mobStr = tostring(mobName or "Boss")
-                local itemStr = tostring(itemName or "Item")
-                
-                print(string.format("[AutoLoot] 🎁 Server ItemDrop: %s dropped '%s' -> Auto-Accepted successfully!", mobStr, itemStr))
-                
-                pcall(function()
-                    ZeroLib:Notify({
-                        Title = "Auto Loot Success",
-                        Content = string.format("Received item: %s (%s)", itemStr, mobStr),
-                        Type = "Success",
-                        Duration = 4
-                    })
-                end)
-
-                if AutoYarthul and AutoYarthul.running then
-                    AutoYarthul.updateHUD(string.format("🎁 Auto Accepted: %s", itemStr))
-                    pcall(function()
-                        AutoYarthul.sendWebhook("Loot", { itemName = itemStr, droppedBy = mobStr })
-                    end)
+        local dataRemotes = remotes and remotes:FindFirstChild("Data")
+        local invSync = dataRemotes and dataRemotes:FindFirstChild("InventorySync")
+        if invSync and invSync:IsA("RemoteEvent") and not shared._InventorySyncHook then
+            shared._InventorySyncHook = invSync.OnClientEvent:Connect(function(action, itemData)
+                if action == "Add" and type(itemData) == "table" and itemData.Name then
+                    local itemName = tostring(itemData.Name)
+                    local count = tonumber(itemData.Amount) or 1
+                    hubLog(string.format("[AutoLoot] 🎉 Confirmed Item Added to Inventory: %s (x%d)", itemName, count))
+                    
+                    if AutoYarthul and AutoYarthul.running then
+                        table.insert(AutoYarthul.sessionAcquiredDrops, { name = itemName, count = count })
+                        AutoYarthul.lastDroppedSummary = string.format("%s (+%d)", itemName, count)
+                        AutoYarthul.activeDiceRoll = nil
+                        pcall(function()
+                            AutoYarthul.sendWebhook("LootConfirmed", { itemName = itemName, count = count })
+                        end)
+                    end
                 end
-
-                return true
-            end
+            end)
+            print("[AutoLoot] ⚡ Đã gắn Authoritative Hook vào ReplicatedStorage.Remotes.Data.InventorySync!")
         end
     end)
 
@@ -7008,36 +7021,56 @@ function AutoYarthul.start()
                     AutoYarthul.turnExecutionLock = false
                     AutoYarthul.saveSession()
 
-                    AutoYarthul.updateHUD(string.format(" has ha guc Yar'thul! (Kills: %d) -> wait test Drop...", AutoYarthul.bossKillCount))
-                    hubLog(string.format("[AutoYarthul]  Yar'thul has bi ha guc (Ly do: %s)! total so lan ha guc: %d. is test Drop trong kho...", deadReason, AutoYarthul.bossKillCount))
+                    AutoYarthul.updateHUD(string.format("🏆 Đã hạ gục Yar'thul! (Kills: %d) -> Chờ nhận Loot...", AutoYarthul.bossKillCount))
+                    hubLog(string.format("[AutoYarthul] 🐉 Yar'thul đã bị hạ gục! Đang chờ Server xử lý Roll & trả Loot về túi đồ..."))
 
-                    -- Bam now lap tuc button YES tren bang Refight neu co
-                    if refightYesBtn then
-                        safeClickButton(refightYesBtn)
+                    -- CHỜ ĐỦ THỜI GIAN ĐỂ SERVER XỬ LÝ DICE ROLL VÀ NẠP ITEM VÀO TÚI ĐỒ (InventorySync)
+                    -- Nếu đang có activeDiceRoll, PHẢI CHỜ tới khi Roll xong (hoặc tối đa 6.0 giây)!
+                    -- TUYỆT ĐỐI KHÔNG BẤM REFIGHT TRƯỚC KHI LOOT ĐƯỢC TRAO!
+                    local lootWaitStart = os.clock()
+                    while os.clock() - lootWaitStart < 4.5 and AutoYarthul.running do
+                        if AutoYarthul.activeDiceRoll and (os.clock() - lootWaitStart < 6.0) then
+                            AutoYarthul.updateHUD(string.format("🎲 Đang chờ Server Roll: %s (%.1fs)...", AutoYarthul.activeDiceRoll.item, 6.0 - (os.clock() - lootWaitStart)))
+                            task.wait(0.5)
+                        else
+                            task.wait(0.5)
+                            if (not AutoYarthul.activeDiceRoll) and (os.clock() - lootWaitStart >= 2.5) then
+                                break
+                            end
+                        end
+                    end
+                    AutoYarthul.activeDiceRoll = nil
+
+                    -- Tổng hợp drops: Ưu tiên sessionAcquiredDrops (100% chính xác từ InventorySync), sau đó fallback detectInventoryDrops()
+                    local detectedDrops = {}
+                    if #AutoYarthul.sessionAcquiredDrops > 0 then
+                        for _, d in ipairs(AutoYarthul.sessionAcquiredDrops) do
+                            table.insert(detectedDrops, d)
+                        end
+                        table.clear(AutoYarthul.sessionAcquiredDrops)
+                    else
+                        detectedDrops = AutoYarthul.detectInventoryDrops()
                     end
 
-                    -- wait 1.5s de server allocated toan bo Drop / Artifact vao inventory
-                    task.wait(1.5)
-                    local detectedDrops = AutoYarthul.detectInventoryDrops()
                     local dropSummaryStr = ""
                     if #detectedDrops > 0 then
                         for _, item in ipairs(detectedDrops) do
                             dropSummaryStr = dropSummaryStr .. string.format("• **%s**: +%d\n", item.name, item.count)
-                            hubLog(string.format("[AutoYarthul Loot Detect]  receive duoc Drop: %s (x%d)!", item.name, item.count))
+                            hubLog(string.format("[AutoYarthul Loot Detect] 🎁 Nhận được Drop: %s (x%d)!", item.name, item.count))
                         end
                         AutoYarthul.lastDroppedSummary = string.format("%s (+%d)", detectedDrops[1].name, detectedDrops[1].count)
                         if #detectedDrops > 1 then
-                            AutoYarthul.lastDroppedSummary = AutoYarthul.lastDroppedSummary .. string.format(" +%d mon khac", #detectedDrops - 1)
+                            AutoYarthul.lastDroppedSummary = AutoYarthul.lastDroppedSummary .. string.format(" +%d món khác", #detectedDrops - 1)
                         end
-                        Library:Notify(string.format(" receive Drop moi: %s", detectedDrops[1].name), 6)
+                        Library:Notify(string.format("🎁 Nhận Drop mới: %s", detectedDrops[1].name), 6)
                     else
-                        dropSummaryStr = "• not co items moi (hoac has max stack)"
-                        AutoYarthul.lastDroppedSummary = "not co drop moi"
+                        dropSummaryStr = "• Không có drop hiếm lượt này (RNG boss drop)"
+                        AutoYarthul.lastDroppedSummary = "Không có drop mới"
                     end
 
-                    -- GUI DISCORD WEBHOOK CHI TIET TAT CA DROPS DUOC THEM VAO inventory
+                    -- GỬI DISCORD WEBHOOK TỔNG KẾT HẠ GỤC BOSS VỚI DROPS CHÍNH XÁC
                     AutoYarthul.sendWebhook("Kill", { dropStr = dropSummaryStr, drops = detectedDrops })
-                    AutoYarthul.updateHUD(string.format(" Ha guc #%d | Drop: %s", AutoYarthul.bossKillCount, AutoYarthul.lastDroppedSummary))
+                    AutoYarthul.updateHUD(string.format("🏆 Hạ gục #%d | Drop: %s", AutoYarthul.bossKillCount, AutoYarthul.lastDroppedSummary))
 
                     -- Bam Refight lien tuc trong 3.5s
                     local postTimer = 0
@@ -7050,7 +7083,9 @@ function AutoYarthul.start()
                 -- 2. TRUONG HOP 2: is TRONG TRAN CHIEN (BOSS CON SONG & DUNG TREN floor)
                 elseif isInCombat() then
                     if not AutoYarthul.wasInCombat then
-                        -- start tran chien moi -> Chup again snapshot inventory before tran
+                        -- Bắt đầu trận chiến mới -> Reset session drops và chụp baseline
+                        AutoYarthul.sessionAcquiredDrops = {}
+                        AutoYarthul.activeDiceRoll = nil
                         AutoYarthul.inventoryBaseline = AutoYarthul.getInventorySnapshot()
                     end
                     AutoYarthul.wasInCombat = true
