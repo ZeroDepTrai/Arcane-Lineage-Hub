@@ -3963,28 +3963,30 @@ local function safeClickButton(btn)
     if not btn then return false end
     local clicked = false
 
+    if firesignal then
+        pcall(function() firesignal(btn.MouseButton1Click) end)
+        pcall(function() firesignal(btn.Activated) end)
+        clicked = true
+    end
+
     if getconnections then
-        local conns = getconnections(btn.MouseButton1Click)
-        if conns and #conns > 0 then
-            for _, c in ipairs(conns) do
-                if c.Function then
-                    task.spawn(c.Function)
-                    clicked = true
-                elseif c.Fire then
-                    pcall(function() c:Fire() end)
-                    clicked = true
+        for _, sig in ipairs({ btn.MouseButton1Click, btn.Activated }) do
+            local conns = getconnections(sig)
+            if conns and #conns > 0 then
+                for _, c in ipairs(conns) do
+                    if c.Function then
+                        task.spawn(c.Function)
+                        clicked = true
+                    elseif c.Fire then
+                        pcall(function() c:Fire() end)
+                        clicked = true
+                    end
                 end
             end
-            if clicked then return true end
         end
     end
 
-    if firesignal then
-        pcall(function() firesignal(btn.MouseButton1Click) end)
-        return true
-    end
-
-    return false
+    return clicked
 end
 
 local function getCurrentStats()
@@ -4865,28 +4867,30 @@ local function safeClickButton(btn)
     if not btn then return false end
     local clicked = false
 
+    if firesignal then
+        pcall(function() firesignal(btn.MouseButton1Click) end)
+        pcall(function() firesignal(btn.Activated) end)
+        clicked = true
+    end
+
     if getconnections then
-        local conns = getconnections(btn.MouseButton1Click)
-        if conns and #conns > 0 then
-            for _, c in ipairs(conns) do
-                if c.Function then
-                    task.spawn(c.Function)
-                    clicked = true
-                elseif c.Fire then
-                    pcall(function() c:Fire() end)
-                    clicked = true
+        for _, sig in ipairs({ btn.MouseButton1Click, btn.Activated }) do
+            local conns = getconnections(sig)
+            if conns and #conns > 0 then
+                for _, c in ipairs(conns) do
+                    if c.Function then
+                        task.spawn(c.Function)
+                        clicked = true
+                    elseif c.Fire then
+                        pcall(function() c:Fire() end)
+                        clicked = true
+                    end
                 end
             end
-            if clicked then return true end
         end
     end
 
-    if firesignal then
-        pcall(function() firesignal(btn.MouseButton1Click) end)
-        return true
-    end
-
-    return false
+    return clicked
 end
 
 local function getCurrentStats()
@@ -5930,6 +5934,29 @@ end
 shared.ArcaneHandleNotification = handleNotification
 
 function AutoYarthul.hookLootRemote()
+    -- Hook ReplicatedStorage.Remotes.Fight.RefightBoss (Direct Remote Auto-Accept)
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+        local fight = remotes and remotes:FindFirstChild("Fight")
+        local refightRemote = fight and fight:FindFirstChild("RefightBoss")
+        if refightRemote and refightRemote:IsA("RemoteEvent") and not AutoYarthul.refightConn then
+            AutoYarthul.refightConn = refightRemote.OnClientEvent:Connect(function(action, data)
+                if AutoYarthul.running and AutoYarthul.isInsideInstance() then
+                    if action == "OpenGui" and type(data) == "table" and data.BattleID then
+                        AutoYarthul.lastBattleID = data.BattleID
+                        hubLog(string.format("[AutoRefight Remote] 🐉 [RefightBoss Remote] Nhận OpenGui (BattleID: %s) -> Gửi Remote Accept tức thì!", tostring(data.BattleID)))
+                        task.wait(0.2)
+                        pcall(function()
+                            refightRemote:FireServer(data.BattleID, "Accept")
+                        end)
+                        AutoYarthul.updateHUD("🐉 Đã gửi Remote Accept Refight Boss!")
+                    end
+                end
+            end)
+            print("[AutoRefight] ⚡ Đã gắn Direct Remote Hook vào ReplicatedStorage.Remotes.Fight.RefightBoss!")
+        end
+    end)
+
     -- 1. Direct Server ItemDrop Hook (ReplicatedStorage.Remotes.Information.ItemDrop)
     pcall(function()
         local remotes = ReplicatedStorage:FindFirstChild("Remotes")
@@ -6027,28 +6054,25 @@ function AutoYarthul.isRefightActive()
     local pgui = PlayerGui
     if not pgui then return false, nil end
 
-    -- DO NOT TRIGGER REFIGHT IF IN OVERWORLD (X > 0)
-    if not AutoYarthul.isInsideInstance() and not AutoYarthul.hasFoughtBoss then
-        return false, nil
-    end
-
+    -- Check Refight ScreenGui
     local refightGui = pgui:FindFirstChild("Refight")
     if refightGui and refightGui.Enabled then
-        local mainFrame = refightGui:FindFirstChild("Main")
-        if mainFrame and mainFrame:IsA("GuiObject") and mainFrame.Visible then
-            local yesBtn = mainFrame:FindFirstChild("Yes", true)
-            if yesBtn and (yesBtn:IsA("TextButton") or yesBtn:IsA("ImageButton")) and yesBtn.Visible then
+        local main = refightGui:FindFirstChild("Main")
+        if main and main:IsA("GuiObject") and main.Visible then
+            local yesBtn = main:FindFirstChild("Yes", true)
+            if yesBtn and yesBtn:IsA("GuiButton") and yesBtn.Visible then
                 return true, yesBtn
             end
         end
     end
 
+    -- Check BossReplay ScreenGui
     local bossReplay = pgui:FindFirstChild("BossReplay")
     if bossReplay and bossReplay.Enabled then
-        local mainFrame = bossReplay:FindFirstChild("Main") or bossReplay:FindFirstChild("Frame") or bossReplay:FindFirstChild("Choices")
-        if mainFrame and mainFrame:IsA("GuiObject") and mainFrame.Visible then
+        local main = bossReplay:FindFirstChild("Main")
+        if main and main:IsA("GuiObject") and main.Visible then
             local yesBtn = bossReplay:FindFirstChild("Yes", true)
-            if yesBtn and (yesBtn:IsA("TextButton") or yesBtn:IsA("ImageButton")) and yesBtn.Visible then
+            if yesBtn and yesBtn:IsA("GuiButton") and yesBtn.Visible then
                 return true, yesBtn
             end
         end
@@ -6846,6 +6870,12 @@ function AutoYarthul.start()
 
                 -- 3. TRUONG HOP 3: NGOAI TRAN (DI switch, DUNG gate & VAO TRAN - TUYET DOI not BAM REFIGHT)
                 else
+            local isRefight, yesBtn = AutoYarthul.isRefightActive()
+            if isRefight and yesBtn then
+                AutoYarthul.interactRefight()
+                task.wait(0.3)
+            end
+
                     local char = LocalPlayer.Character
                     local root = char and char:FindFirstChild("HumanoidRootPart")
                     local hum = char and char:FindFirstChildOfClass("Humanoid")
