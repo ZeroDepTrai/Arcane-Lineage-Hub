@@ -207,10 +207,88 @@ end)
 function UniversalAutoRefight.checkGui()
     if not UniversalAutoRefight.enabled then return end
     local now = os.clock()
-    if now - UniversalAutoRefight.lastClickTime < 0.8 then return end
+    if now - UniversalAutoRefight.lastClickTime < 0.5 then return end
 
     local pgui = PlayerGui
     if not pgui then return end
+
+    local function triggerYesButton(d, guiName)
+        UniversalAutoRefight.lastClickTime = now
+        hubLog(string.format("[Universal Refight] 🐉 Phát hiện bảng %s! Bấm YES tại (%d, %d)...", guiName, d.AbsolutePosition.X, d.AbsolutePosition.Y))
+
+        -- 1. Extract BattleID from button connections upvalues if available
+        local extractedBattleID = UniversalAutoRefight.lastBattleID
+        pcall(function()
+            if getconnections then
+                for _, conn in ipairs(getconnections(d.MouseButton1Down)) do
+                    if getupvalues and conn.Function then
+                        local uvs = getupvalues(conn.Function)
+                        for _, uv in pairs(uvs) do
+                            if type(uv) == "table" and uv.BattleID then
+                                extractedBattleID = uv.BattleID
+                                UniversalAutoRefight.lastBattleID = uv.BattleID
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end)
+
+        -- 2. Direct Remote Fire if BattleID is known
+        if extractedBattleID then
+            pcall(function()
+                local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                local fight = remotes and remotes:FindFirstChild("Fight")
+                local refightRemote = fight and fight:FindFirstChild("RefightBoss")
+                if refightRemote and refightRemote:IsA("RemoteEvent") then
+                    refightRemote:FireServer(extractedBattleID, "Accept")
+                    hubLog(string.format("[Universal Refight] ⚡ Direct FireServer(Accept) với BattleID: %s", tostring(extractedBattleID)))
+                end
+            end)
+        end
+
+        -- 3. firesignal MouseButton1Down (CHÍNH XÁC tín hiệu game Refight.Localscript lắng nghe!)
+        pcall(function()
+            if firesignal then
+                firesignal(d.MouseButton1Down)
+                firesignal(d.MouseButton1Click)
+                firesignal(d.Activated)
+            end
+        end)
+
+        -- 4. getconnections fire directly
+        pcall(function()
+            if getconnections then
+                for _, c in ipairs(getconnections(d.MouseButton1Down)) do
+                    pcall(function() c:Fire() end)
+                end
+                for _, c in ipairs(getconnections(d.MouseButton1Click)) do
+                    pcall(function() c:Fire() end)
+                end
+                for _, c in ipairs(getconnections(d.Activated)) do
+                    pcall(function() c:Fire() end)
+                end
+            end
+        end)
+
+        -- 5. VirtualInputManager clicks (cả Screen coords và Viewport coords)
+        pcall(function()
+            local gs = game:GetService("GuiService")
+            local inset = gs:GetGuiInset()
+            local pos = d.AbsolutePosition + (d.AbsoluteSize / 2)
+
+            -- Với GuiInset offset (screen coords)
+            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y + inset.Y, 0, true, game, 0)
+            task.wait(0.03)
+            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y + inset.Y, 0, false, game, 0)
+
+            -- Raw pos (viewport coords)
+            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+            task.wait(0.03)
+            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+        end)
+    end
 
     local refight = pgui:FindFirstChild("Refight")
     if refight and refight.Enabled then
@@ -218,33 +296,7 @@ function UniversalAutoRefight.checkGui()
         if main and main:IsA("GuiObject") and main.Visible then
             for _, d in ipairs(main:GetDescendants()) do
                 if d:IsA("TextButton") and (d.Name == "Yes" or d.Text == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
-                    UniversalAutoRefight.lastClickTime = now
-                    hubLog(string.format("[Universal Refight] 🐉 Bấm YES bảng Refight tại (%d, %d)...", d.AbsolutePosition.X, d.AbsolutePosition.Y))
-                    
-                    pcall(function()
-                        local pos = d.AbsolutePosition + (d.AbsoluteSize / 2)
-                        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-                        task.wait(0.04)
-                        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
-                    end)
-
-                    pcall(function()
-                        if firesignal then
-                            firesignal(d.MouseButton1Click)
-                            firesignal(d.Activated)
-                        end
-                    end)
-
-                    pcall(function()
-                        if UniversalAutoRefight.lastBattleID then
-                            local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                            local fight = remotes and remotes:FindFirstChild("Fight")
-                            local refightRemote = fight and fight:FindFirstChild("RefightBoss")
-                            if refightRemote and refightRemote:IsA("RemoteEvent") then
-                                refightRemote:FireServer(UniversalAutoRefight.lastBattleID, "Accept")
-                            end
-                        end
-                    end)
+                    triggerYesButton(d, "Refight")
                     return
                 end
             end
@@ -257,13 +309,7 @@ function UniversalAutoRefight.checkGui()
         if main and main:IsA("GuiObject") and main.Visible then
             for _, d in ipairs(main:GetDescendants()) do
                 if d:IsA("TextButton") and (d.Name == "Yes" or d.Text == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
-                    UniversalAutoRefight.lastClickTime = now
-                    pcall(function()
-                        local pos = d.AbsolutePosition + (d.AbsoluteSize / 2)
-                        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-                        task.wait(0.04)
-                        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
-                    end)
+                    triggerYesButton(d, "BossReplay")
                     return
                 end
             end
@@ -271,7 +317,6 @@ function UniversalAutoRefight.checkGui()
     end
 end
 
--- Chạy vòng lặp kiểm tra độc lập qua Heartbeat
 if shared._UniversalRefightHeartbeat then
     pcall(function() shared._UniversalRefightHeartbeat:Disconnect() end)
 end
@@ -5741,10 +5786,20 @@ function AutoYarthul.isInsideInstance()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if root then
-        -- Yar'thul Boss arena located at coordinates X < -200 (khoang X=-555, Y=645, Z=-4235)
-        -- While Overworld / Main Game is located at coordinates X > 0 (cua Mount Thul X=40.5)
-        if root.Position.X < -200 then
+        -- Yar'thul Boss arena can be at X < -200 OR X > 4000 (actual arena coordinates are around X=5081, Y=658, Z=-4274)
+        -- Or Z < -3000
+        if root.Position.X < -200 or root.Position.X > 4000 or root.Position.Z < -3000 then
             return true
+        end
+    end
+
+    -- Check if Yar'thul model exists in Living or workspace
+    local living = workspace:FindFirstChild("Living")
+    if living then
+        for _, m in ipairs(living:GetChildren()) do
+            if m:IsA("Model") and (m.Name:lower():find("yar") or m.Name:lower():find("thul")) then
+                return true
+            end
         end
     end
 
@@ -6050,15 +6105,18 @@ function AutoYarthul.hookLootRemote()
         local refightRemote = fight and fight:FindFirstChild("RefightBoss")
         if refightRemote and refightRemote:IsA("RemoteEvent") and not AutoYarthul.refightConn then
             AutoYarthul.refightConn = refightRemote.OnClientEvent:Connect(function(action, data)
-                if AutoYarthul.running and AutoYarthul.isInsideInstance() then
+                if AutoYarthul.running or UniversalAutoRefight.enabled then
                     if action == "OpenGui" and type(data) == "table" and data.BattleID then
                         AutoYarthul.lastBattleID = data.BattleID
+                        UniversalAutoRefight.lastBattleID = data.BattleID
                         hubLog(string.format("[AutoRefight Remote] 🐉 [RefightBoss Remote] Nhận OpenGui (BattleID: %s) -> Gửi Remote Accept tức thì!", tostring(data.BattleID)))
-                        task.wait(0.2)
+                        task.wait(0.1)
                         pcall(function()
                             refightRemote:FireServer(data.BattleID, "Accept")
                         end)
-                        AutoYarthul.updateHUD("🐉 Đã gửi Remote Accept Refight Boss!")
+                        if AutoYarthul.updateHUD then
+                            AutoYarthul.updateHUD("🐉 Đã gửi Remote Accept Refight Boss!")
+                        end
                     end
                 end
             end)
@@ -6696,35 +6754,79 @@ function AutoYarthul.interactRefight()
     if isRefight and yesBtn then
         hubLog(string.format("[AutoRefight] 🐉 Phát hiện bảng Refight! Bấm YES tại (%d, %d)...", yesBtn.AbsolutePosition.X, yesBtn.AbsolutePosition.Y))
         
-        -- 1. VirtualInputManager click (bắt buộc cho game Arcane Lineage vì GUI không kết nối MouseButton1Click)
+        -- 1. Trích xuất BattleID từ upvalues của MouseButton1Down nếu có
+        local battleID = AutoYarthul.lastBattleID or UniversalAutoRefight.lastBattleID
         pcall(function()
-            local pos = yesBtn.AbsolutePosition + (yesBtn.AbsoluteSize / 2)
-            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-            task.wait(0.04)
-            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+            if getconnections then
+                for _, conn in ipairs(getconnections(yesBtn.MouseButton1Down)) do
+                    if getupvalues and conn.Function then
+                        local uvs = getupvalues(conn.Function)
+                        for _, uv in pairs(uvs) do
+                            if type(uv) == "table" and uv.BattleID then
+                                battleID = uv.BattleID
+                                AutoYarthul.lastBattleID = uv.BattleID
+                                UniversalAutoRefight.lastBattleID = uv.BattleID
+                                break
+                            end
+                        end
+                    end
+                end
+            end
         end)
 
-        -- 2. firesignal fallback
+        -- 2. Gửi Remote trực tiếp tới Server (Authoritative)
+        if battleID then
+            pcall(function()
+                local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                local fight = remotes and remotes:FindFirstChild("Fight")
+                local refightRemote = fight and fight:FindFirstChild("RefightBoss")
+                if refightRemote and refightRemote:IsA("RemoteEvent") then
+                    refightRemote:FireServer(battleID, "Accept")
+                    hubLog(string.format("[AutoRefight] ⚡ Đã gửi RefightBoss:FireServer('%s', 'Accept')!", tostring(battleID)))
+                end
+            end)
+        end
+
+        -- 3. firesignal MouseButton1Down (Sự kiện thực tế trong Localscript của game!)
         pcall(function()
             if firesignal then
+                firesignal(yesBtn.MouseButton1Down)
                 firesignal(yesBtn.MouseButton1Click)
                 firesignal(yesBtn.Activated)
             end
         end)
 
-        -- 3. Remote fallback if lastBattleID is known
+        -- 4. Kích hoạt trực tiếp các kết nối qua getconnections
         pcall(function()
-            if AutoYarthul.lastBattleID then
-                local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-                local fight = remotes and remotes:FindFirstChild("Fight")
-                local refightRemote = fight and fight:FindFirstChild("RefightBoss")
-                if refightRemote and refightRemote:IsA("RemoteEvent") then
-                    refightRemote:FireServer(AutoYarthul.lastBattleID, "Accept")
+            if getconnections then
+                for _, c in ipairs(getconnections(yesBtn.MouseButton1Down)) do
+                    pcall(function() c:Fire() end)
+                end
+                for _, c in ipairs(getconnections(yesBtn.MouseButton1Click)) do
+                    pcall(function() c:Fire() end)
+                end
+                for _, c in ipairs(getconnections(yesBtn.Activated)) do
+                    pcall(function() c:Fire() end)
                 end
             end
         end)
 
-        task.wait(0.3)
+        -- 5. VirtualInputManager click (cả screen coords và viewport coords)
+        pcall(function()
+            local gs = game:GetService("GuiService")
+            local inset = gs:GetGuiInset()
+            local pos = yesBtn.AbsolutePosition + (yesBtn.AbsoluteSize / 2)
+
+            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y + inset.Y, 0, true, game, 0)
+            task.wait(0.03)
+            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y + inset.Y, 0, false, game, 0)
+
+            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+            task.wait(0.03)
+            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+        end)
+
+        task.wait(0.25)
         return
     end
 
@@ -6898,7 +7000,7 @@ function AutoYarthul.start()
                 local isDeadOrDown, deadReason, refightYesBtn = AutoYarthul.isBossDeadOrDown()
 
                 -- 1. TRUONG HOP 1: BOSS has BI HA GUC HOAC BANG REFIGHT is HIEN (CHI CHAY KHI is TRONG INSTANCE)
-                if isDeadOrDown and AutoYarthul.isInsideInstance() then
+                if isDeadOrDown then
                     AutoYarthul.wasInCombat = false
                     AutoYarthul.hasFoughtBoss = false
                     AutoYarthul.bossKillCount = AutoYarthul.bossKillCount + 1
@@ -6939,7 +7041,7 @@ function AutoYarthul.start()
 
                     -- Bam Refight lien tuc trong 3.5s
                     local postTimer = 0
-                    while postTimer < 3.5 and AutoYarthul.running and AutoYarthul.isInsideInstance() do
+                    while postTimer < 8.0 and AutoYarthul.running do
                         AutoYarthul.interactRefight()
                         task.wait(0.2)
                         postTimer = postTimer + 0.2
@@ -6981,6 +7083,7 @@ function AutoYarthul.start()
             if isRefight and yesBtn then
                 AutoYarthul.interactRefight()
                 task.wait(0.3)
+                return
             end
 
                     local char = LocalPlayer.Character
@@ -7363,8 +7466,17 @@ local function executeDirectRemoteTurn()
     -- 5. Sub-Actions for player in same turn (Meditate / Guard)
     if not isSummon then
         local shouldMed = (subAction == "Auto Meditate (Recover Energy)" or subAction:find("Meditate"))
-        if isYarthulActive and skillToUse == "Strike" then
+        
+        -- STRICT BAN: CARNAGE AND SENSE EXPANSION NEVER MEDITATE UNDER ANY CIRCUMSTANCES
+        local isCarnageSkill = (skillToUse == "Carnage") or (skillToUse and skillToUse:lower():find("carnage") ~= nil)
+        local isSenseSkill = (skillToUse == "Sense Expansion") or (skillToUse and skillToUse:lower():find("sense") ~= nil)
+        
+        if isCarnageSkill or isSenseSkill then
+            shouldMed = false
+        elseif isYarthulActive and skillToUse == "Strike" then
             shouldMed = (Toggles.YarthulMeditateSubAction == nil or Toggles.YarthulMeditateSubAction.Value ~= false)
+        elseif isYarthulActive and skillToUse ~= "Strike" then
+            shouldMed = false
         end
 
         if shouldMed then
