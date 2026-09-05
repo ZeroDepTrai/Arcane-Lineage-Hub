@@ -283,7 +283,7 @@ function UniversalAutoRefight.checkGui()
     if not UniversalAutoRefight.enabled then return end
     if isDiceRollingActive() then return end
     local now = os.clock()
-    if now - UniversalAutoRefight.lastClickTime < 0.5 then return end
+    if now - UniversalAutoRefight.lastClickTime < 1.0 then return end
 
     local pgui = PlayerGui
     if not pgui then return end
@@ -349,39 +349,30 @@ function UniversalAutoRefight.checkGui()
             end
         end)
 
-        -- 5. VirtualInputManager clicks (cả Screen coords và Viewport coords)
-        pcall(function()
-            local gs = game:GetService("GuiService")
-            local inset = gs:GetGuiInset()
-            local pos = d.AbsolutePosition + (d.AbsoluteSize / 2)
-
-            -- Với GuiInset offset (screen coords)
-            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y + inset.Y, 0, true, game, 0)
-            task.wait(0.03)
-            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y + inset.Y, 0, false, game, 0)
-
-            -- Raw pos (viewport coords)
-            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-            task.wait(0.03)
-            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
-        end)
+        -- 5. Không dùng VirtualInputManager để tránh cướp chuột / click của người chơi
     end
 
+    -- 1. Check Refight GUI: BẮT BUỘC MAIN.VISIBLE == TRUE (Tránh nhận nhầm khi bảng Refight đang đóng)
     local refight = pgui:FindFirstChild("Refight")
     if refight and refight.Enabled then
-        for _, d in ipairs(refight:GetDescendants()) do
-            if d:IsA("TextButton") and (d.Name == "Yes" or d.Text:upper() == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
-                triggerYesButton(d, "Refight")
+        local main = refight:FindFirstChild("Main")
+        if main and main:IsA("GuiObject") and main.Visible then
+            local yes = main:FindFirstChild("Yes", true)
+            if yes and yes:IsA("TextButton") and yes.Visible then
+                triggerYesButton(yes, "Refight")
                 return
             end
         end
     end
 
+    -- 2. Check BossReplay GUI: BẮT BUỘC MAIN.VISIBLE == TRUE
     local bossReplay = pgui:FindFirstChild("BossReplay")
     if bossReplay and bossReplay.Enabled then
-        for _, d in ipairs(bossReplay:GetDescendants()) do
-            if d:IsA("TextButton") and (d.Name == "Yes" or d.Text:upper() == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
-                triggerYesButton(d, "BossReplay")
+        local main = bossReplay:FindFirstChild("Main")
+        if main and main:IsA("GuiObject") and main.Visible then
+            local yes = main:FindFirstChild("Yes", true)
+            if yes and yes:IsA("TextButton") and yes.Visible then
+                triggerYesButton(yes, "BossReplay")
                 return
             end
         end
@@ -6328,22 +6319,26 @@ function AutoYarthul.isRefightActive()
     local pgui = PlayerGui
     if not pgui then return false, nil end
 
-    -- Check Refight ScreenGui
+    -- Check Refight ScreenGui: BẮT BUỘC MAIN.VISIBLE == TRUE
     local refightGui = pgui:FindFirstChild("Refight")
     if refightGui and refightGui.Enabled then
-        for _, d in ipairs(refightGui:GetDescendants()) do
-            if d:IsA("TextButton") and (d.Name == "Yes" or d.Text:upper() == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
-                return true, d
+        local main = refightGui:FindFirstChild("Main")
+        if main and main:IsA("GuiObject") and main.Visible then
+            local yes = main:FindFirstChild("Yes", true)
+            if yes and yes:IsA("TextButton") and yes.Visible then
+                return true, yes
             end
         end
     end
 
-    -- Check BossReplay ScreenGui
+    -- Check BossReplay ScreenGui: BẮT BUỘC MAIN.VISIBLE == TRUE
     local bossReplay = pgui:FindFirstChild("BossReplay")
     if bossReplay and bossReplay.Enabled then
-        for _, d in ipairs(bossReplay:GetDescendants()) do
-            if d:IsA("TextButton") and (d.Name == "Yes" or d.Text:upper() == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
-                return true, d
+        local main = bossReplay:FindFirstChild("Main")
+        if main and main:IsA("GuiObject") and main.Visible then
+            local yes = main:FindFirstChild("Yes", true)
+            if yes and yes:IsA("TextButton") and yes.Visible then
+                return true, yes
             end
         end
     end
@@ -6913,20 +6908,7 @@ function AutoYarthul.interactRefight()
             end
         end)
 
-        -- 5. VirtualInputManager click (cả screen coords và viewport coords)
-        pcall(function()
-            local gs = game:GetService("GuiService")
-            local inset = gs:GetGuiInset()
-            local pos = yesBtn.AbsolutePosition + (yesBtn.AbsoluteSize / 2)
-
-            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y + inset.Y, 0, true, game, 0)
-            task.wait(0.03)
-            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y + inset.Y, 0, false, game, 0)
-
-            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
-            task.wait(0.03)
-            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
-        end)
+        -- 5. Không dùng VirtualInputManager để tránh cướp chuột của người chơi
 
         task.wait(0.25)
         return
