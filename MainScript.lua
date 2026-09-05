@@ -175,33 +175,31 @@ end)
 end
 
 local lastQueueTimestamp = 0
--- USER DIRECTIVE: Auto load on queue/teleport is PERMANENTLY DISABLED
 local function queueTeleportScript(force)
-    pcall(function()
-        local clearQueueFn = clearqueueonteleport
-            or clearteleportqueue
-            or clear_teleport_queue
-            or (syn and syn.clear_teleport_queue)
-            or (getgenv and (getgenv().clearqueueonteleport or getgenv().clearteleportqueue or getgenv().clear_teleport_queue))
-        if clearQueueFn then
-            pcall(clearQueueFn)
+    local now = os.clock()
+    if not force and (now - lastQueueTimestamp < 4) then
+        return true
+    end
+    lastQueueTimestamp = now
+
+    local queueFn = queue_on_teleport 
+        or queueonteleport 
+        or (syn and syn.queue_on_teleport) 
+        or (fluxus and fluxus.queue_on_teleport) 
+        or (Krnl and Krnl.queue_on_teleport)
+        or (getgenv and (getgenv().queue_on_teleport or getgenv().queueonteleport))
+
+    if queueFn then
+        local ok, err = pcall(function()
+            queueFn(getQueuePayload())
+        end)
+        if ok then
+            print("[AutoQueue] ⚡ Successfully queued Arcane Hub on teleport!")
         end
-    end)
+        return ok
+    end
     return false
 end
-
--- Clear any leftover queue from previous sessions immediately on boot
-pcall(function()
-    local clearQueueFn = clearqueueonteleport
-        or clearteleportqueue
-        or clear_teleport_queue
-        or (syn and syn.clear_teleport_queue)
-        or (getgenv and (getgenv().clearqueueonteleport or getgenv().clearteleportqueue or getgenv().clear_teleport_queue))
-    if clearQueueFn then
-        pcall(clearQueueFn)
-        print("[AutoQueue] DISABLED • Teleport queue cleared on boot")
-    end
-end)
 
 
 -- =============================================================================
@@ -3380,7 +3378,9 @@ function ServerHopper.hop()
             ServerHopper.lastAttemptServer = targetServer.id
             saveVisitedServer(targetServer.id)
 
-            -- Auto load on teleport disabled per user request
+            if Toggles.AutoLoadOnChangingServer and Toggles.AutoLoadOnChangingServer.Value then
+                queueTeleportScript()
+            end
             pcall(function()
                 TeleportService:TeleportToPlaceInstance(placeId, targetServer.id, LocalPlayer)
             end)
@@ -6596,7 +6596,11 @@ function AutoYarthul.saveSession()
         end
     end)
 
-    -- Auto queue on teleport disabled per user request
+    pcall(function()
+        if queueTeleportScript then
+            queueTeleportScript(false)
+        end
+    end)
 end
 
 function AutoYarthul.clearSession()
@@ -11637,16 +11641,21 @@ end)
 
 MenuGroup:AddToggle("AutoLoadOnChangingServer", {
     Text = "Auto Load on Changing Server",
-    Default = false,
+    Default = true,
     Callback = function(Value)
         if Value then
-            -- Auto load on teleport disabled per user request
-            local queued = false
+            local queued = queueTeleportScript()
             if queued then
                 Library:Notify({ Title = "Auto Load", Content = "Teleport Queue Loaded!", Type = "Success" })
             else
                 Library:Notify({ Title = "Warning", Content = "Executor does not support queue_on_teleport!", Type = "Warning" })
             end
+        else
+            pcall(function()
+                local clearQueueFn = clearqueueonteleport or clearteleportqueue or clear_teleport_queue or (syn and syn.clear_teleport_queue)
+                if clearQueueFn then clearQueueFn() end
+            end)
+            Library:Notify({ Title = "Auto Load", Content = "Teleport Queue Cleared.", Type = "Info" })
         end
     end
 })
