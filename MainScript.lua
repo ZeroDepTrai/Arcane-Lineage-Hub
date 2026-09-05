@@ -67,6 +67,37 @@ local HubState = {
     connections = {},
 }
 
+-- Global Logging Engine (Declared at top so all modules can access it)
+local function hubLog(...)
+    if _G.ArcaneHubDebug then
+        print(...)
+    end
+end
+
+-- Universal Dice Roll Active Checker
+local function isDiceRollingActive()
+    local pgui = PlayerGui
+    local dr = pgui and pgui:FindFirstChild("DropRolling")
+    if dr and dr.Enabled then
+        return true
+    end
+    if shared._ArcanePendingRoll then
+        if os.clock() - shared._ArcanePendingRoll.startTime < 10.0 then
+            return true
+        else
+            shared._ArcanePendingRoll = nil
+        end
+    end
+    if shared.AutoYarthulInstance and shared.AutoYarthulInstance.activeDiceRoll then
+        if os.clock() - shared.AutoYarthulInstance.activeDiceRoll.startTime < 10.0 then
+            return true
+        else
+            shared.AutoYarthulInstance.activeDiceRoll = nil
+        end
+    end
+    return false
+end
+
 local function registerConnection(conn)
     if conn then
         table.insert(HubState.connections, conn)
@@ -86,6 +117,7 @@ pcall(function()
     end
 end)
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
@@ -186,16 +218,20 @@ pcall(function()
     local remotes = ReplicatedStorage:FindFirstChild("Remotes")
     local fight = remotes and remotes:FindFirstChild("Fight")
     local refightRemote = fight and fight:FindFirstChild("RefightBoss")
-    if refightRemote and refightRemote:IsA("RemoteEvent") and not shared._UniversalRefightConn then
+    if refightRemote and refightRemote:IsA("RemoteEvent") then
+        if shared._UniversalRefightConn then
+            pcall(function() shared._UniversalRefightConn:Disconnect() end)
+            shared._UniversalRefightConn = nil
+        end
         shared._UniversalRefightConn = refightRemote.OnClientEvent:Connect(function(action, data)
             if UniversalAutoRefight.enabled then
                 if action == "OpenGui" and type(data) == "table" and data.BattleID then
                     UniversalAutoRefight.lastBattleID = data.BattleID
-                    hubLog(string.format("[Universal Refight] 🐉 Nhận tín hiệu RefightBoss (BattleID: %s) -> Gửi Remote Accept!", tostring(data.BattleID)))
-                    task.wait(0.2)
-                    pcall(function()
-                        refightRemote:FireServer(data.BattleID, "Accept")
-                    end)
+                    if shared.AutoYarthulInstance then
+                        shared.AutoYarthulInstance.lastBattleID = data.BattleID
+                    end
+                    hubLog(string.format("[Universal Refight] 🐉 Ghi nhận BattleID: %s từ tín hiệu OpenGui!", tostring(data.BattleID)))
+                    -- CHÚ Ý: KHÔNG GỬI Accept TỨC THÌ Ở ĐÂY để tránh hủy bỏ Dice Roll / Item Drop từ Server!
                 end
             end
         end)
@@ -206,6 +242,9 @@ end)
 -- 2. Quét liên tục giao diện Refight GUI và click YES bằng VirtualInputManager
 function UniversalAutoRefight.checkGui()
     if not UniversalAutoRefight.enabled then return end
+    if isDiceRollingActive() then return end
+    -- Khi AutoYarthul đang chạy, AutoYarthul tự quản lý thời điểm Refight sau khi nhận xong loot
+    if shared.AutoYarthulInstance and shared.AutoYarthulInstance.running then return end
     local now = os.clock()
     if now - UniversalAutoRefight.lastClickTime < 0.5 then return end
 
@@ -213,6 +252,7 @@ function UniversalAutoRefight.checkGui()
     if not pgui then return end
 
     local function triggerYesButton(d, guiName)
+        if isDiceRollingActive() then return end
         UniversalAutoRefight.lastClickTime = now
         hubLog(string.format("[Universal Refight] 🐉 Phát hiện bảng %s! Bấm YES tại (%d, %d)...", guiName, d.AbsolutePosition.X, d.AbsolutePosition.Y))
 
@@ -372,6 +412,7 @@ local ZeroLib = (function()
 --]]
 
 local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
@@ -3181,11 +3222,7 @@ local SaveManager = nil
 -- =============================================================================
 -- LOGGING & SILENT CONSOLE MANAGEMENT
 -- =============================================================================
-local function hubLog(...)
-    if _G.ArcaneHubDebug then
-        hubLog(...)
-    end
-end
+-- hubLog defined at top of file
 
 local function singleClick(button)
     if not button then return end
@@ -6104,6 +6141,7 @@ local function handleNotification(data)
                 })
             end)
 
+            shared._ArcanePendingRoll = { item = cleanItemName, startTime = os.clock() }
             if AutoYarthul and AutoYarthul.running then
                 AutoYarthul.updateHUD(string.format("🎲 Rolling: %s (100%% Solo)", cleanItemName))
                 AutoYarthul.activeDiceRoll = { item = cleanItemName, startTime = os.clock() }
@@ -6118,29 +6156,49 @@ end
 shared.ArcaneHandleNotification = handleNotification
 
 function AutoYarthul.hookLootRemote()
-    -- Hook ReplicatedStorage.Remotes.Fight.RefightBoss (Direct Remote Auto-Accept)
+    -- Hook ReplicatedStorage.Remotes.Fight.RefightBoss (BattleID Listener)
     pcall(function()
         local remotes = ReplicatedStorage:FindFirstChild("Remotes")
         local fight = remotes and remotes:FindFirstChild("Fight")
         local refightRemote = fight and fight:FindFirstChild("RefightBoss")
-        if refightRemote and refightRemote:IsA("RemoteEvent") and not AutoYarthul.refightConn then
+        if refightRemote and refightRemote:IsA("RemoteEvent") then
+            if AutoYarthul.refightConn then
+                pcall(function() AutoYarthul.refightConn:Disconnect() end)
+                AutoYarthul.refightConn = nil
+            end
             AutoYarthul.refightConn = refightRemote.OnClientEvent:Connect(function(action, data)
-                if AutoYarthul.running or UniversalAutoRefight.enabled then
-                    if action == "OpenGui" and type(data) == "table" and data.BattleID then
-                        AutoYarthul.lastBattleID = data.BattleID
-                        UniversalAutoRefight.lastBattleID = data.BattleID
-                        hubLog(string.format("[AutoRefight Remote] 🐉 [RefightBoss Remote] Nhận OpenGui (BattleID: %s) -> Gửi Remote Accept tức thì!", tostring(data.BattleID)))
-                        task.wait(0.1)
-                        pcall(function()
-                            refightRemote:FireServer(data.BattleID, "Accept")
-                        end)
-                        if AutoYarthul.updateHUD then
-                            AutoYarthul.updateHUD("🐉 Đã gửi Remote Accept Refight Boss!")
-                        end
-                    end
+                if action == "OpenGui" and type(data) == "table" and data.BattleID then
+                    AutoYarthul.lastBattleID = data.BattleID
+                    UniversalAutoRefight.lastBattleID = data.BattleID
+                    hubLog(string.format("[AutoYarthul Refight] 🐉 Ghi nhận BattleID: %s (chờ loot hoàn tất trước khi refight)", tostring(data.BattleID)))
                 end
             end)
             print("[AutoRefight] ⚡ Đã gắn Direct Remote Hook vào ReplicatedStorage.Remotes.Fight.RefightBoss!")
+        end
+    end)
+
+    -- Hook ReplicatedStorage.Remotes.Data.RollRemote (Detect when Roll Finishes)
+    pcall(function()
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+        local dataRemotes = remotes and remotes:FindFirstChild("Data")
+        local rollRemote = dataRemotes and dataRemotes:FindFirstChild("RollRemote")
+        if rollRemote and rollRemote:IsA("RemoteEvent") then
+            if shared._ArcaneRollRemoteHook then
+                pcall(function() shared._ArcaneRollRemoteHook:Disconnect() end)
+                shared._ArcaneRollRemoteHook = nil
+            end
+            shared._ArcaneRollRemoteHook = rollRemote.OnClientEvent:Connect(function(player, score)
+                if not player then
+                    hubLog("[AutoLoot] 🎲 Server Roll hoàn tất! Chờ nạp item vào inventory...")
+                    task.delay(0.6, function()
+                        shared._ArcanePendingRoll = nil
+                        if AutoYarthul then
+                            AutoYarthul.activeDiceRoll = nil
+                        end
+                    end)
+                end
+            end)
+            print("[AutoLoot] ⚡ Đã gắn RollRemote Completion Listener!")
         end
     end)
 
@@ -6149,13 +6207,18 @@ function AutoYarthul.hookLootRemote()
         local remotes = ReplicatedStorage:FindFirstChild("Remotes")
         local dataRemotes = remotes and remotes:FindFirstChild("Data")
         local invSync = dataRemotes and dataRemotes:FindFirstChild("InventorySync")
-        if invSync and invSync:IsA("RemoteEvent") and not shared._InventorySyncHook then
+        if invSync and invSync:IsA("RemoteEvent") then
+            if shared._InventorySyncHook then
+                pcall(function() shared._InventorySyncHook:Disconnect() end)
+                shared._InventorySyncHook = nil
+            end
             shared._InventorySyncHook = invSync.OnClientEvent:Connect(function(action, itemData)
                 if action == "Add" and type(itemData) == "table" and itemData.Name then
                     local itemName = tostring(itemData.Name)
                     local count = tonumber(itemData.Amount) or 1
                     hubLog(string.format("[AutoLoot] 🎉 Confirmed Item Added to Inventory: %s (x%d)", itemName, count))
                     
+                    shared._ArcanePendingRoll = nil
                     if AutoYarthul and AutoYarthul.running then
                         table.insert(AutoYarthul.sessionAcquiredDrops, { name = itemName, count = count })
                         AutoYarthul.lastDroppedSummary = string.format("%s (+%d)", itemName, count)
@@ -6762,6 +6825,7 @@ end
 function AutoYarthul.interactRefight()
     local pgui = PlayerGui
     if not pgui then return end
+    if isDiceRollingActive() then return end
 
     local isRefight, yesBtn = AutoYarthul.isRefightActive()
     if isRefight and yesBtn then
@@ -7028,17 +7092,19 @@ function AutoYarthul.start()
                     -- Nếu đang có activeDiceRoll, PHẢI CHỜ tới khi Roll xong (hoặc tối đa 6.0 giây)!
                     -- TUYỆT ĐỐI KHÔNG BẤM REFIGHT TRƯỚC KHI LOOT ĐƯỢC TRAO!
                     local lootWaitStart = os.clock()
-                    while os.clock() - lootWaitStart < 4.5 and AutoYarthul.running do
-                        if AutoYarthul.activeDiceRoll and (os.clock() - lootWaitStart < 6.0) then
-                            AutoYarthul.updateHUD(string.format("🎲 Đang chờ Server Roll: %s (%.1fs)...", AutoYarthul.activeDiceRoll.item, 6.0 - (os.clock() - lootWaitStart)))
+                    while AutoYarthul.running and (os.clock() - lootWaitStart < 10.0) do
+                        if isDiceRollingActive() then
+                            local rollItem = (AutoYarthul.activeDiceRoll and AutoYarthul.activeDiceRoll.item) or (shared._ArcanePendingRoll and shared._ArcanePendingRoll.item) or "Boss Drop"
+                            AutoYarthul.updateHUD(string.format("🎲 Đang chờ Server Roll: %s (%.1fs)...", rollItem, 10.0 - (os.clock() - lootWaitStart)))
                             task.wait(0.5)
                         else
-                            task.wait(0.5)
-                            if (not AutoYarthul.activeDiceRoll) and (os.clock() - lootWaitStart >= 2.5) then
+                            if os.clock() - lootWaitStart >= 3.0 then
                                 break
                             end
+                            task.wait(0.25)
                         end
                     end
+                    shared._ArcanePendingRoll = nil
                     AutoYarthul.activeDiceRoll = nil
 
                     -- Tổng hợp drops: Ưu tiên sessionAcquiredDrops (100% chính xác từ InventorySync), sau đó fallback detectInventoryDrops()
@@ -7074,10 +7140,12 @@ function AutoYarthul.start()
 
                     -- Bam Refight lien tuc trong 3.5s
                     local postTimer = 0
-                    while postTimer < 8.0 and AutoYarthul.running do
-                        AutoYarthul.interactRefight()
-                        task.wait(0.2)
-                        postTimer = postTimer + 0.2
+                    while postTimer < 8.0 and AutoYarthul.running and not isInCombat() do
+                        if not isDiceRollingActive() then
+                            AutoYarthul.interactRefight()
+                        end
+                        task.wait(0.25)
+                        postTimer = postTimer + 0.25
                     end
 
                 -- 2. TRUONG HOP 2: is TRONG TRAN CHIEN (BOSS CON SONG & DUNG TREN floor)
