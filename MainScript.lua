@@ -224,9 +224,7 @@ local function queueTeleportScript(force)
         local ok, err = pcall(function()
             queueFn(getQueuePayload(delayVal))
         end)
-        if ok then
-            print(string.format("[AutoQueue] ⚡ Đã xếp hàng Arcane Hub trên teleport (Delay an toàn: %.1fs sau khi game fully loaded)!", delayVal))
-        end
+
         return ok
     end
     return false
@@ -303,7 +301,6 @@ pcall(function()
                 end)
             end
         end)
-        print("[Universal Refight] ⚡ Đã kích hoạt Universal Remote Hook cho RefightBoss!")
     end
 end)
 
@@ -6185,7 +6182,6 @@ local function handleNotification(data)
             cleanItemName = cleanItemName:gsub("^%s*(.-)%s*$", "%1")
             if cleanItemName == "" then cleanItemName = "Rare Boss Drop" end
 
-            print(string.format("[AutoLoot] ✅ Successfully pressed '%s' for dice roll: '%s'!", targetButton, cleanItemName))
             
             pcall(function()
                 ZeroLib:Notify({
@@ -6232,7 +6228,6 @@ function AutoYarthul.hookLootRemote()
                     hubLog(string.format("[AutoYarthul Refight] 🐉 Ghi nhận BattleID: %s (chờ loot hoàn tất trước khi refight)", tostring(data.BattleID)))
                 end
             end)
-            print("[AutoRefight] ⚡ Đã gắn Direct Remote Hook vào ReplicatedStorage.Remotes.Fight.RefightBoss!")
         end
     end)
 
@@ -6257,7 +6252,6 @@ function AutoYarthul.hookLootRemote()
                     end)
                 end
             end)
-            print("[AutoLoot] ⚡ Đã gắn RollRemote Completion Listener!")
         end
     end)
 
@@ -6313,7 +6307,6 @@ function AutoYarthul.hookLootRemote()
                     end
                 end
             end)
-            print("[AutoLoot] ⚡ Đã gắn Authoritative Hook vào ReplicatedStorage.Remotes.Data.InventorySync!")
         end
     end)
 
