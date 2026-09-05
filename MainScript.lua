@@ -224,15 +224,54 @@ pcall(function()
             shared._UniversalRefightConn = nil
         end
         shared._UniversalRefightConn = refightRemote.OnClientEvent:Connect(function(action, data)
-            if UniversalAutoRefight.enabled then
-                if action == "OpenGui" and type(data) == "table" and data.BattleID then
-                    UniversalAutoRefight.lastBattleID = data.BattleID
-                    if shared.AutoYarthulInstance then
-                        shared.AutoYarthulInstance.lastBattleID = data.BattleID
-                    end
-                    hubLog(string.format("[Universal Refight] 🐉 Ghi nhận BattleID: %s từ tín hiệu OpenGui!", tostring(data.BattleID)))
-                    -- CHÚ Ý: KHÔNG GỬI Accept TỨC THÌ Ở ĐÂY để tránh hủy bỏ Dice Roll / Item Drop từ Server!
+            if not UniversalAutoRefight.enabled then return end
+            if action == "OpenGui" and type(data) == "table" and data.BattleID then
+                local battleID = data.BattleID
+                UniversalAutoRefight.lastBattleID = battleID
+                if shared.AutoYarthulInstance then
+                    shared.AutoYarthulInstance.lastBattleID = battleID
                 end
+                hubLog(string.format("[Universal Refight] 🐉 Nhận OpenGui (BattleID: %s)! Chuẩn bị Auto Refight...", tostring(battleID)))
+
+                task.spawn(function()
+                    -- 1. Chờ tối thiểu 1.0s để kiểm tra xem Server có gửi Dice Roll (Drop hiếm) không
+                    task.wait(1.0)
+
+                    -- 2. Nếu có Dice Roll đang diễn ra (isDiceRollingActive() == true):
+                    -- Đợi server roll hoàn tất và nạp item vào túi đồ (tối đa 8.0s)
+                    local waitStart = os.clock()
+                    while isDiceRollingActive() and (os.clock() - waitStart < 8.0) do
+                        hubLog("[Universal Refight] 🎲 Đang chờ Dice Roll hoàn tất trước khi Accept Refight...")
+                        task.wait(0.3)
+                    end
+
+                    -- 3. GỬI LỆNH ACCEPT REFIGHT LÊN SERVER (AUTHORITATIVE)
+                    pcall(function()
+                        refightRemote:FireServer(battleID, "Accept")
+                        hubLog(string.format("[Universal Refight] ⚡ ĐÃ GỬI RefightBoss:FireServer('%s', 'Accept')!", tostring(battleID)))
+                    end)
+
+                    -- 4. Kích hoạt trực tiếp nút YES trên giao diện (firesignal + getconnections)
+                    pcall(function()
+                        local pgui = PlayerGui
+                        local refight = pgui and pgui:FindFirstChild("Refight")
+                        if refight then
+                            for _, d in ipairs(refight:GetDescendants()) do
+                                if d:IsA("TextButton") and (d.Name == "Yes" or d.Text:upper() == "YES") then
+                                    if firesignal then
+                                        firesignal(d.MouseButton1Down)
+                                        firesignal(d.MouseButton1Click)
+                                    end
+                                    if getconnections then
+                                        for _, c in ipairs(getconnections(d.MouseButton1Down)) do pcall(function() c:Fire() end) end
+                                        for _, c in ipairs(getconnections(d.MouseButton1Click)) do pcall(function() c:Fire() end) end
+                                    end
+                                    break
+                                end
+                            end
+                        end
+                    end)
+                end)
             end
         end)
         print("[Universal Refight] ⚡ Đã kích hoạt Universal Remote Hook cho RefightBoss!")
@@ -243,8 +282,6 @@ end)
 function UniversalAutoRefight.checkGui()
     if not UniversalAutoRefight.enabled then return end
     if isDiceRollingActive() then return end
-    -- Khi AutoYarthul đang chạy, AutoYarthul tự quản lý thời điểm Refight sau khi nhận xong loot
-    if shared.AutoYarthulInstance and shared.AutoYarthulInstance.running then return end
     local now = os.clock()
     if now - UniversalAutoRefight.lastClickTime < 0.5 then return end
 
@@ -332,26 +369,20 @@ function UniversalAutoRefight.checkGui()
 
     local refight = pgui:FindFirstChild("Refight")
     if refight and refight.Enabled then
-        local main = refight:FindFirstChild("Main")
-        if main and main:IsA("GuiObject") and main.Visible then
-            for _, d in ipairs(main:GetDescendants()) do
-                if d:IsA("TextButton") and (d.Name == "Yes" or d.Text == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
-                    triggerYesButton(d, "Refight")
-                    return
-                end
+        for _, d in ipairs(refight:GetDescendants()) do
+            if d:IsA("TextButton") and (d.Name == "Yes" or d.Text:upper() == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
+                triggerYesButton(d, "Refight")
+                return
             end
         end
     end
 
     local bossReplay = pgui:FindFirstChild("BossReplay")
     if bossReplay and bossReplay.Enabled then
-        local main = bossReplay:FindFirstChild("Main")
-        if main and main:IsA("GuiObject") and main.Visible then
-            for _, d in ipairs(main:GetDescendants()) do
-                if d:IsA("TextButton") and (d.Name == "Yes" or d.Text == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
-                    triggerYesButton(d, "BossReplay")
-                    return
-                end
+        for _, d in ipairs(bossReplay:GetDescendants()) do
+            if d:IsA("TextButton") and (d.Name == "Yes" or d.Text:upper() == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
+                triggerYesButton(d, "BossReplay")
+                return
             end
         end
     end
@@ -6300,12 +6331,9 @@ function AutoYarthul.isRefightActive()
     -- Check Refight ScreenGui
     local refightGui = pgui:FindFirstChild("Refight")
     if refightGui and refightGui.Enabled then
-        local main = refightGui:FindFirstChild("Main")
-        if main and main:IsA("GuiObject") and main.Visible then
-            for _, d in ipairs(main:GetDescendants()) do
-                if d:IsA("TextButton") and (d.Name == "Yes" or d.Text == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
-                    return true, d
-                end
+        for _, d in ipairs(refightGui:GetDescendants()) do
+            if d:IsA("TextButton") and (d.Name == "Yes" or d.Text:upper() == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
+                return true, d
             end
         end
     end
@@ -6313,12 +6341,9 @@ function AutoYarthul.isRefightActive()
     -- Check BossReplay ScreenGui
     local bossReplay = pgui:FindFirstChild("BossReplay")
     if bossReplay and bossReplay.Enabled then
-        local main = bossReplay:FindFirstChild("Main")
-        if main and main:IsA("GuiObject") and main.Visible then
-            for _, d in ipairs(main:GetDescendants()) do
-                if d:IsA("TextButton") and (d.Name == "Yes" or d.Text == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
-                    return true, d
-                end
+        for _, d in ipairs(bossReplay:GetDescendants()) do
+            if d:IsA("TextButton") and (d.Name == "Yes" or d.Text:upper() == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
+                return true, d
             end
         end
     end
@@ -6907,6 +6932,20 @@ function AutoYarthul.interactRefight()
         return
     end
 
+    -- Fallback Remote Accept if GUI is closed but battleID is known
+    local fallbackBattleID = AutoYarthul.lastBattleID or UniversalAutoRefight.lastBattleID
+    if fallbackBattleID then
+        pcall(function()
+            local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+            local fight = remotes and remotes:FindFirstChild("Fight")
+            local refightRemote = fight and fight:FindFirstChild("RefightBoss")
+            if refightRemote and refightRemote:IsA("RemoteEvent") then
+                refightRemote:FireServer(fallbackBattleID, "Accept")
+                hubLog(string.format("[AutoRefight] ⚡ Fallback Direct FireServer(Accept) với BattleID: %s", tostring(fallbackBattleID)))
+            end
+        end)
+    end
+
     -- B. Tua text thoại của Boss sau trận đánh
     pcall(function()
         for _, gui in ipairs(pgui:GetChildren()) do
@@ -7098,7 +7137,7 @@ function AutoYarthul.start()
                             AutoYarthul.updateHUD(string.format("🎲 Đang chờ Server Roll: %s (%.1fs)...", rollItem, 10.0 - (os.clock() - lootWaitStart)))
                             task.wait(0.5)
                         else
-                            if os.clock() - lootWaitStart >= 3.0 then
+                            if os.clock() - lootWaitStart >= 1.5 then
                                 break
                             end
                             task.wait(0.25)
