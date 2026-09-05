@@ -171,6 +171,115 @@ pcall(function()
     end
 end)
 
+
+-- =============================================================================
+-- UNIVERSAL AUTO REFIGHT ENGINE (HOẠT ĐỘNG ĐỘC LẬP CHO TẤT CẢ CÁC BOSS)
+-- =============================================================================
+local UniversalAutoRefight = {
+    enabled = true,
+    lastClickTime = 0,
+    lastBattleID = nil,
+}
+
+-- 1. Direct Remote Hook on RefightBoss (Universal cho King Slime, Yar'thul, etc.)
+pcall(function()
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    local fight = remotes and remotes:FindFirstChild("Fight")
+    local refightRemote = fight and fight:FindFirstChild("RefightBoss")
+    if refightRemote and refightRemote:IsA("RemoteEvent") and not shared._UniversalRefightConn then
+        shared._UniversalRefightConn = refightRemote.OnClientEvent:Connect(function(action, data)
+            if UniversalAutoRefight.enabled then
+                if action == "OpenGui" and type(data) == "table" and data.BattleID then
+                    UniversalAutoRefight.lastBattleID = data.BattleID
+                    hubLog(string.format("[Universal Refight] 🐉 Nhận tín hiệu RefightBoss (BattleID: %s) -> Gửi Remote Accept!", tostring(data.BattleID)))
+                    task.wait(0.2)
+                    pcall(function()
+                        refightRemote:FireServer(data.BattleID, "Accept")
+                    end)
+                end
+            end
+        end)
+        print("[Universal Refight] ⚡ Đã kích hoạt Universal Remote Hook cho RefightBoss!")
+    end
+end)
+
+-- 2. Quét liên tục giao diện Refight GUI và click YES bằng VirtualInputManager
+function UniversalAutoRefight.checkGui()
+    if not UniversalAutoRefight.enabled then return end
+    local now = os.clock()
+    if now - UniversalAutoRefight.lastClickTime < 0.8 then return end
+
+    local pgui = PlayerGui
+    if not pgui then return end
+
+    local refight = pgui:FindFirstChild("Refight")
+    if refight and refight.Enabled then
+        local main = refight:FindFirstChild("Main")
+        if main and main:IsA("GuiObject") and main.Visible then
+            for _, d in ipairs(main:GetDescendants()) do
+                if d:IsA("TextButton") and (d.Name == "Yes" or d.Text == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
+                    UniversalAutoRefight.lastClickTime = now
+                    hubLog(string.format("[Universal Refight] 🐉 Bấm YES bảng Refight tại (%d, %d)...", d.AbsolutePosition.X, d.AbsolutePosition.Y))
+                    
+                    pcall(function()
+                        local pos = d.AbsolutePosition + (d.AbsoluteSize / 2)
+                        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+                        task.wait(0.04)
+                        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+                    end)
+
+                    pcall(function()
+                        if firesignal then
+                            firesignal(d.MouseButton1Click)
+                            firesignal(d.Activated)
+                        end
+                    end)
+
+                    pcall(function()
+                        if UniversalAutoRefight.lastBattleID then
+                            local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                            local fight = remotes and remotes:FindFirstChild("Fight")
+                            local refightRemote = fight and fight:FindFirstChild("RefightBoss")
+                            if refightRemote and refightRemote:IsA("RemoteEvent") then
+                                refightRemote:FireServer(UniversalAutoRefight.lastBattleID, "Accept")
+                            end
+                        end
+                    end)
+                    return
+                end
+            end
+        end
+    end
+
+    local bossReplay = pgui:FindFirstChild("BossReplay")
+    if bossReplay and bossReplay.Enabled then
+        local main = bossReplay:FindFirstChild("Main")
+        if main and main:IsA("GuiObject") and main.Visible then
+            for _, d in ipairs(main:GetDescendants()) do
+                if d:IsA("TextButton") and (d.Name == "Yes" or d.Text == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
+                    UniversalAutoRefight.lastClickTime = now
+                    pcall(function()
+                        local pos = d.AbsolutePosition + (d.AbsoluteSize / 2)
+                        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+                        task.wait(0.04)
+                        VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+                    end)
+                    return
+                end
+            end
+        end
+    end
+end
+
+-- Chạy vòng lặp kiểm tra độc lập qua Heartbeat
+if shared._UniversalRefightHeartbeat then
+    pcall(function() shared._UniversalRefightHeartbeat:Disconnect() end)
+end
+shared._UniversalRefightHeartbeat = RunService.Heartbeat:Connect(function()
+    UniversalAutoRefight.checkGui()
+end)
+
+
 -- =============================================================================
 -- LOAD LINORIA GUI LIBRARY + THEME & SAVE MANAGERS
 -- =============================================================================
