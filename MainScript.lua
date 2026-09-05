@@ -143,38 +143,33 @@ end)
 end
 
 local lastQueueTimestamp = 0
+-- USER DIRECTIVE: Auto load on queue/teleport is PERMANENTLY DISABLED
 local function queueTeleportScript(force)
-    local now = os.clock()
-    if not force and (now - lastQueueTimestamp < 4) then
-        return true
-    end
-    lastQueueTimestamp = now
-
-    local clearQueueFn = clearqueueonteleport 
-        or clearteleportqueue 
-        or clear_teleport_queue 
-        or (syn and syn.clear_teleport_queue)
-        or (getgenv and (getgenv().clearqueueonteleport or getgenv().clearteleportqueue or getgenv().clear_teleport_queue))
-
-    if clearQueueFn then
-        pcall(clearQueueFn)
-    end
-
-    local queueFn = queue_on_teleport 
-        or queueonteleport 
-        or (syn and syn.queue_on_teleport) 
-        or (fluxus and fluxus.queue_on_teleport) 
-        or (Krnl and Krnl.queue_on_teleport)
-        or (getgenv and (getgenv().queue_on_teleport or getgenv().queueonteleport))
-
-    if queueFn then
-        local ok, err = pcall(function()
-            queueFn(getQueuePayload())
-        end)
-        return ok
-    end
+    pcall(function()
+        local clearQueueFn = clearqueueonteleport
+            or clearteleportqueue
+            or clear_teleport_queue
+            or (syn and syn.clear_teleport_queue)
+            or (getgenv and (getgenv().clearqueueonteleport or getgenv().clearteleportqueue or getgenv().clear_teleport_queue))
+        if clearQueueFn then
+            pcall(clearQueueFn)
+        end
+    end)
     return false
 end
+
+-- Clear any leftover queue from previous sessions immediately on boot
+pcall(function()
+    local clearQueueFn = clearqueueonteleport
+        or clearteleportqueue
+        or clear_teleport_queue
+        or (syn and syn.clear_teleport_queue)
+        or (getgenv and (getgenv().clearqueueonteleport or getgenv().clearteleportqueue or getgenv().clear_teleport_queue))
+    if clearQueueFn then
+        pcall(clearQueueFn)
+        print("[AutoQueue] DISABLED • Teleport queue cleared on boot")
+    end
+end)
 
 -- =============================================================================
 -- LOAD LINORIA GUI LIBRARY + THEME & SAVE MANAGERS
@@ -3172,9 +3167,7 @@ function ServerHopper.hop()
             ServerHopper.lastAttemptServer = targetServer.id
             saveVisitedServer(targetServer.id)
 
-            if Toggles.AutoLoadOnChangingServer and Toggles.AutoLoadOnChangingServer.Value then
-                queueTeleportScript()
-            end
+            -- Auto load on teleport disabled per user request
             pcall(function()
                 TeleportService:TeleportToPlaceInstance(placeId, targetServer.id, LocalPlayer)
             end)
@@ -6283,11 +6276,7 @@ function AutoYarthul.saveSession()
         end
     end)
 
-    pcall(function()
-        if queueTeleportScript then
-            queueTeleportScript(false)
-        end
-    end)
+    -- Auto queue on teleport disabled per user request
 end
 
 function AutoYarthul.clearSession()
@@ -11231,7 +11220,8 @@ MenuGroup:AddToggle("AutoLoadOnChangingServer", {
     Default = false,
     Callback = function(Value)
         if Value then
-            local queued = queueTeleportScript()
+            -- Auto load on teleport disabled per user request
+            local queued = false
             if queued then
                 Library:Notify({ Title = "Auto Load", Content = "Teleport Queue Loaded!", Type = "Success" })
             else
