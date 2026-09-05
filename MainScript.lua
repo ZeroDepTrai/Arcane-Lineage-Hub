@@ -5832,6 +5832,8 @@ local AutoYarthul = {
     turnExecutionLock = false,
     inventoryBaseline = {},
     lastDroppedSummary = "None drop moi",
+    sessionAcquiredDrops = {},
+    recentRolledItems = {},
 }
 
 shared.AutoYarthulInstance = AutoYarthul
@@ -6048,7 +6050,7 @@ function AutoYarthul.sendWebhook(eventType, extraData)
                 color = 0x10B981, -- Emerald Green
                 fields = {
                     { name = "📦 Item Confirmed", value = string.format("**%s** (+%d)", itemName, count), inline = true },
-                    { name = "⚔️ Source", value = "`Boss Defeat / Dice Roll`", inline = true },
+                    { name = "⚔️ Source", value = "`🎲 Dice Roll (Loot Pool)`", inline = true },
                     { name = "🏆 Total Boss Kills", value = string.format("`%d` Kills", AutoYarthul.bossKillCount), inline = true },
                     { name = "👤 Player", value = string.format("||%s||", LocalPlayer.Name), inline = true }
                 },
@@ -6164,12 +6166,16 @@ local function handleNotification(data)
             end)
 
             shared._ArcanePendingRoll = { item = cleanItemName, startTime = os.clock() }
-            if AutoYarthul and AutoYarthul.running then
-                AutoYarthul.updateHUD(string.format("🎲 Rolling: %s (100%% Solo)", cleanItemName))
-                AutoYarthul.activeDiceRoll = { item = cleanItemName, startTime = os.clock() }
-                pcall(function()
-                    AutoYarthul.sendWebhook("Roll", { itemName = cleanItemName, droppedBy = (title ~= "" and title ~= "Item dropped!") and title or "Yar'thul, the Blazing Dragon" })
-                end)
+            if AutoYarthul then
+                AutoYarthul.recentRolledItems = AutoYarthul.recentRolledItems or {}
+                AutoYarthul.recentRolledItems[cleanItemName:lower()] = os.clock()
+                if AutoYarthul.running then
+                    AutoYarthul.updateHUD(string.format("🎲 Rolling: %s (100%% Solo)", cleanItemName))
+                    AutoYarthul.activeDiceRoll = { item = cleanItemName, startTime = os.clock() }
+                    pcall(function()
+                        AutoYarthul.sendWebhook("Roll", { itemName = cleanItemName, droppedBy = (title ~= "" and title ~= "Item dropped!") and title or "Yar'thul, the Blazing Dragon" })
+                    end)
+                end
             end
         end
     end)
@@ -6240,14 +6246,39 @@ function AutoYarthul.hookLootRemote()
                     local count = tonumber(itemData.Amount) or 1
                     hubLog(string.format("[AutoLoot] 🎉 Confirmed Item Added to Inventory: %s (x%d)", itemName, count))
                     
+                    -- Xác định xem item này có phải từ Dice Roll hay không
+                    local isFromDiceRoll = false
+                    local cleanLower = itemName:lower()
+                    
+                    if AutoYarthul and AutoYarthul.recentRolledItems then
+                        for rolledName, rollTime in pairs(AutoYarthul.recentRolledItems) do
+                            if os.clock() - rollTime < 30 and (string.find(cleanLower, rolledName, 1, true) or string.find(rolledName, cleanLower, 1, true)) then
+                                isFromDiceRoll = true
+                                AutoYarthul.recentRolledItems[rolledName] = nil
+                                break
+                            end
+                        end
+                    end
+                    
+                    if not isFromDiceRoll and shared._ArcanePendingRoll and shared._ArcanePendingRoll.item then
+                        local pendingName = shared._ArcanePendingRoll.item:lower()
+                        if string.find(cleanLower, pendingName, 1, true) or string.find(pendingName, cleanLower, 1, true) then
+                            isFromDiceRoll = true
+                        end
+                    end
+
                     shared._ArcanePendingRoll = nil
                     if AutoYarthul and AutoYarthul.running then
-                        table.insert(AutoYarthul.sessionAcquiredDrops, { name = itemName, count = count })
+                        table.insert(AutoYarthul.sessionAcquiredDrops, { name = itemName, count = count, isDiceRoll = isFromDiceRoll })
                         AutoYarthul.lastDroppedSummary = string.format("%s (+%d)", itemName, count)
                         AutoYarthul.activeDiceRoll = nil
-                        pcall(function()
-                            AutoYarthul.sendWebhook("LootConfirmed", { itemName = itemName, count = count })
-                        end)
+                        
+                        -- CHỈ GỬI DISCORD ALERT RIÊNG 'LootConfirmed' NẾU LÀ ITEM TỪ DICE ROLL (Tránh gửi nhầm cho drop thường)
+                        if isFromDiceRoll then
+                            pcall(function()
+                                AutoYarthul.sendWebhook("LootConfirmed", { itemName = itemName, count = count })
+                            end)
+                        end
                     end
                 end
             end)
@@ -7128,35 +7159,51 @@ function AutoYarthul.start()
                     shared._ArcanePendingRoll = nil
                     AutoYarthul.activeDiceRoll = nil
 
-                    -- Tổng hợp drops: Ưu tiên sessionAcquiredDrops (100% chính xác từ InventorySync), sau đó fallback detectInventoryDrops()
-                    local detectedDrops = {}
+                    -- Tổng hợp drops: Gom nhóm theo tên item và cộng dồn số lượng (tránh duplicate +1 nhiều dòng)
+                    local rawDrops = {}
                     if #AutoYarthul.sessionAcquiredDrops > 0 then
                         for _, d in ipairs(AutoYarthul.sessionAcquiredDrops) do
-                            table.insert(detectedDrops, d)
+                            table.insert(rawDrops, d)
                         end
                         table.clear(AutoYarthul.sessionAcquiredDrops)
                     else
-                        detectedDrops = AutoYarthul.detectInventoryDrops()
+                        rawDrops = AutoYarthul.detectInventoryDrops()
+                    end
+
+                    local aggregatedMap = {}
+                    local aggregatedList = {}
+                    for _, d in ipairs(rawDrops) do
+                        if aggregatedMap[d.name] then
+                            aggregatedMap[d.name].count = aggregatedMap[d.name].count + (d.count or 1)
+                            if d.isDiceRoll then
+                                aggregatedMap[d.name].isDiceRoll = true
+                            end
+                        else
+                            local entry = { name = d.name, count = d.count or 1, isDiceRoll = d.isDiceRoll or false }
+                            aggregatedMap[d.name] = entry
+                            table.insert(aggregatedList, entry)
+                        end
                     end
 
                     local dropSummaryStr = ""
-                    if #detectedDrops > 0 then
-                        for _, item in ipairs(detectedDrops) do
-                            dropSummaryStr = dropSummaryStr .. string.format("• **%s**: +%d\n", item.name, item.count)
-                            hubLog(string.format("[AutoYarthul Loot Detect] 🎁 Nhận được Drop: %s (x%d)!", item.name, item.count))
+                    if #aggregatedList > 0 then
+                        for _, item in ipairs(aggregatedList) do
+                            local diceTag = item.isDiceRoll and " 🎲 *(Dice Roll)*" or ""
+                            dropSummaryStr = dropSummaryStr .. string.format("• **%s**: +%d%s\n", item.name, item.count, diceTag)
+                            hubLog(string.format("[AutoYarthul Loot Detect] 🎁 Nhận được Drop: %s (x%d)%s!", item.name, item.count, diceTag))
                         end
-                        AutoYarthul.lastDroppedSummary = string.format("%s (+%d)", detectedDrops[1].name, detectedDrops[1].count)
-                        if #detectedDrops > 1 then
-                            AutoYarthul.lastDroppedSummary = AutoYarthul.lastDroppedSummary .. string.format(" +%d món khác", #detectedDrops - 1)
+                        AutoYarthul.lastDroppedSummary = string.format("%s (+%d)", aggregatedList[1].name, aggregatedList[1].count)
+                        if #aggregatedList > 1 then
+                            AutoYarthul.lastDroppedSummary = AutoYarthul.lastDroppedSummary .. string.format(" +%d món khác", #aggregatedList - 1)
                         end
-                        Library:Notify(string.format("🎁 Nhận Drop mới: %s", detectedDrops[1].name), 6)
+                        Library:Notify(string.format("🎁 Nhận Drop mới: %s", aggregatedList[1].name), 6)
                     else
                         dropSummaryStr = "• Không có drop hiếm lượt này (RNG boss drop)"
                         AutoYarthul.lastDroppedSummary = "Không có drop mới"
                     end
 
                     -- GỬI DISCORD WEBHOOK TỔNG KẾT HẠ GỤC BOSS VỚI DROPS CHÍNH XÁC
-                    AutoYarthul.sendWebhook("Kill", { dropStr = dropSummaryStr, drops = detectedDrops })
+                    AutoYarthul.sendWebhook("Kill", { dropStr = dropSummaryStr, drops = aggregatedList })
                     AutoYarthul.updateHUD(string.format("🏆 Hạ gục #%d | Drop: %s", AutoYarthul.bossKillCount, AutoYarthul.lastDroppedSummary))
 
                     -- Bam Refight lien tuc trong 3.5s
