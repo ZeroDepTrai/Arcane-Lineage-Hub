@@ -29,27 +29,29 @@ if globalEnv._ArcaneHubInitLock and (currentInitTime - globalEnv._ArcaneHubInitL
 end
 globalEnv._ArcaneHubInitLock = currentInitTime
 
+-- Đợi Game nạp xong hoàn toàn (Tránh inject sớm gây mất skill / lỗi nhân vật)
 if not game:IsLoaded() then
     local loaded = false
     local conn
     conn = game.Loaded:Connect(function() loaded = true end)
-    local startTime = os.clock()
-    while not game:IsLoaded() and not loaded and (os.clock() - startTime < 8) do
-        task.wait(0.1)
+    while not game:IsLoaded() and not loaded do
+        task.wait(0.2)
     end
     if conn then conn:Disconnect() end
 end
 
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-if not LocalPlayer then
-    local startWait = os.clock()
-    while not Players.LocalPlayer and (os.clock() - startWait < 10) do
-        task.wait(0.1)
-    end
-    LocalPlayer = Players.LocalPlayer
-end
-local PlayerGui = LocalPlayer and (LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5))
+local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+
+-- Đợi Character và HumanoidRootPart sẵn sàng
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart", 25)
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 25)
+
+-- Đợi HUD để đảm bảo Arcane Lineage đã hoàn tất gán skills & stats cho client
+pcall(function()
+    PlayerGui:WaitForChild("HUD", 20)
+end)
 
 if shared.ArcaneHub then
     pcall(function()
@@ -134,17 +136,45 @@ end)
 
 local HttpRequest = (syn and syn.request) or (http and http.request) or http_request or request
 
-local function getQueuePayload()
-    return [=[
+local function getQueuePayload(customDelay)
+    local delayNum = tonumber(customDelay) or 6.0
+    if delayNum < 2.0 then delayNum = 2.0 end
+    return string.format([=[
 task.spawn(function()
-    task.wait(1.5)
+    -- 1. Đợi Game nạp xong hoàn toàn (Không chạy khi đang ở Loading Screen)
+    if not game:IsLoaded() then
+        game.Loaded:Wait()
+    end
+
+    -- 2. Đợi LocalPlayer và Character xuất hiện đầy đủ
+    local Players = game:GetService("Players")
+    local lp = Players.LocalPlayer
+    while not lp do
+        task.wait(0.25)
+        lp = Players.LocalPlayer
+    end
+
+    local char = lp.Character or lp.CharacterAdded:Wait()
+    local hrp = char:WaitForChild("HumanoidRootPart", 30)
+
+    -- 3. Đợi PlayerGui và HUD nạp xong để chắc chắn Server đã nạp xong Skills & Stats
+    local pgui = lp:WaitForChild("PlayerGui", 30)
+    if pgui then
+        pcall(function()
+            pgui:WaitForChild("HUD", 25)
+        end)
+    end
+
+    -- 4. BUFFER STABILIZATION DELAY: Chờ %.1fs để Arcane Lineage hoàn tất setup Skill Tree & Cooldown
+    task.wait(%.1f)
+
     local genv = (getgenv and getgenv()) or _G
     if genv._ArcaneHubRunning or (shared and shared.ArcaneHub) then
         return
     end
 
     local executed = false
-    -- 1. Try loading from executor local script
+    -- 5. Try loading from executor local script
     local fileCandidates = {
         "MainScript.lua",
         "Arcane_Hub_ZeroLib.lua",
@@ -164,14 +194,14 @@ task.spawn(function()
         end
     end
 
-    -- 2. Master GitHub Loader
+    -- 6. Master GitHub Loader
     if not executed then
         pcall(function()
             loadstring(game:HttpGet("https://raw.githubusercontent.com/ZeroDepTrai/Arcane-Lineage-Hub/main/MainScript.lua"))()
         end)
     end
 end)
-]=]
+]=], delayNum, delayNum)
 end
 
 local lastQueueTimestamp = 0
@@ -190,11 +220,12 @@ local function queueTeleportScript(force)
         or (getgenv and (getgenv().queue_on_teleport or getgenv().queueonteleport))
 
     if queueFn then
+        local delayVal = Options and Options.AutoLoadDelay and Options.AutoLoadDelay.Value or 6.0
         local ok, err = pcall(function()
-            queueFn(getQueuePayload())
+            queueFn(getQueuePayload(delayVal))
         end)
         if ok then
-            print("[AutoQueue] ⚡ Successfully queued Arcane Hub on teleport!")
+            print(string.format("[AutoQueue] ⚡ Đã xếp hàng Arcane Hub trên teleport (Delay an toàn: %.1fs sau khi game fully loaded)!", delayVal))
         end
         return ok
     end
@@ -11656,6 +11687,21 @@ MenuGroup:AddToggle("AutoLoadOnChangingServer", {
                 if clearQueueFn then clearQueueFn() end
             end)
             Library:Notify({ Title = "Auto Load", Content = "Teleport Queue Cleared.", Type = "Info" })
+        end
+    end
+})
+
+MenuGroup:AddSlider("AutoLoadDelay", {
+    Text = "Queue Delay (Anti Skill-Loss)",
+    Default = 6,
+    Min = 3,
+    Max = 15,
+    Rounding = 0,
+    Suffix = "s",
+    Tooltip = "Thời gian chờ sau khi Game & Character fully loaded trước khi inject Arcane Hub để tránh mất skill",
+    Callback = function(Value)
+        if Toggles.AutoLoadOnChangingServer and Toggles.AutoLoadOnChangingServer.Value then
+            queueTeleportScript(true)
         end
     end
 })
