@@ -6059,9 +6059,10 @@ function AutoYarthul.isRefightActive()
     if refightGui and refightGui.Enabled then
         local main = refightGui:FindFirstChild("Main")
         if main and main:IsA("GuiObject") and main.Visible then
-            local yesBtn = main:FindFirstChild("Yes", true)
-            if yesBtn and yesBtn:IsA("GuiButton") and yesBtn.Visible then
-                return true, yesBtn
+            for _, d in ipairs(main:GetDescendants()) do
+                if d:IsA("TextButton") and (d.Name == "Yes" or d.Text == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
+                    return true, d
+                end
             end
         end
     end
@@ -6071,9 +6072,10 @@ function AutoYarthul.isRefightActive()
     if bossReplay and bossReplay.Enabled then
         local main = bossReplay:FindFirstChild("Main")
         if main and main:IsA("GuiObject") and main.Visible then
-            local yesBtn = bossReplay:FindFirstChild("Yes", true)
-            if yesBtn and yesBtn:IsA("GuiButton") and yesBtn.Visible then
-                return true, yesBtn
+            for _, d in ipairs(main:GetDescendants()) do
+                if d:IsA("TextButton") and (d.Name == "Yes" or d.Text == "YES") and d.Visible and d.AbsolutePosition.Y > 0 then
+                    return true, d
+                end
             end
         end
     end
@@ -6581,46 +6583,43 @@ function AutoYarthul.interactRefight()
     local pgui = PlayerGui
     if not pgui then return end
 
-    -- TUYET DOI not CHAY NEU is O MAINGAME / OVERWORLD (X > 0)
-    if not AutoYarthul.isInsideInstance() and not AutoYarthul.hasFoughtBoss then
+    local isRefight, yesBtn = AutoYarthul.isRefightActive()
+    if isRefight and yesBtn then
+        hubLog(string.format("[AutoRefight] 🐉 Phát hiện bảng Refight! Bấm YES tại (%d, %d)...", yesBtn.AbsolutePosition.X, yesBtn.AbsolutePosition.Y))
+        
+        -- 1. VirtualInputManager click (bắt buộc cho game Arcane Lineage vì GUI không kết nối MouseButton1Click)
+        pcall(function()
+            local pos = yesBtn.AbsolutePosition + (yesBtn.AbsoluteSize / 2)
+            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, true, game, 0)
+            task.wait(0.04)
+            VirtualInputManager:SendMouseButtonEvent(pos.X, pos.Y, 0, false, game, 0)
+        end)
+
+        -- 2. firesignal fallback
+        pcall(function()
+            if firesignal then
+                firesignal(yesBtn.MouseButton1Click)
+                firesignal(yesBtn.Activated)
+            end
+        end)
+
+        -- 3. Remote fallback if lastBattleID is known
+        pcall(function()
+            if AutoYarthul.lastBattleID then
+                local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+                local fight = remotes and remotes:FindFirstChild("Fight")
+                local refightRemote = fight and fight:FindFirstChild("RefightBoss")
+                if refightRemote and refightRemote:IsA("RemoteEvent") then
+                    refightRemote:FireServer(AutoYarthul.lastBattleID, "Accept")
+                end
+            end
+        end)
+
+        task.wait(0.3)
         return
     end
 
-    -- A. Bam truc tiep button YES tren ScreenGui 'Refight' hoac 'BossReplay'
-    pcall(function()
-        local isRefight, yesBtn = AutoYarthul.isRefightActive()
-        if isRefight and yesBtn then
-            hubLog(string.format("[AutoYarthul]  Bam button YES tren bang Refight: '%s'!", yesBtn.Name))
-            safeClickButton(yesBtn)
-            task.wait(0.2)
-            return
-        end
-
-        for _, gui in ipairs(pgui:GetChildren()) do
-            if gui:IsA("ScreenGui") and gui.Enabled and gui.Name ~= "LinoriaGui" and gui.Name ~= "Arcane_Yarthul_HUD" then
-                local gname = gui.Name:lower()
-                if gname:find("refight") or gname:find("replay") or gname:find("boss") or gname:find("dialogue") then
-                    local mainF = gui:FindFirstChild("Main") or gui:FindFirstChild("Frame") or gui:FindFirstChild("Choices")
-                    if mainF and mainF:IsA("GuiObject") and mainF.Visible then
-                        for _, btn in ipairs(mainF:GetDescendants()) do
-                            if (btn:IsA("TextButton") or btn:IsA("ImageButton")) and btn.Visible then
-                                local txt = (btn:IsA("TextButton") and btn.Text or btn.Name):lower()
-                                if txt == "yes" or txt:find("refight") or txt:find("again") or txt:find("solo") or txt:find("replay") then
-                                    if not txt:find("no") and not txt:find("cancel") and not txt:find("decline") and not txt:find("leave") and not txt:find("lobby") then
-                                        hubLog(string.format("[AutoYarthul]  Bam button Refight / Danh tiep: '%s' tren '%s'", btn.Name, gui.Name))
-                                        safeClickButton(btn)
-                                        task.wait(0.2)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end)
-
-    -- B. Tua text thoai cua Boss after tran danh
+    -- B. Tua text thoại của Boss sau trận đánh
     pcall(function()
         for _, gui in ipairs(pgui:GetChildren()) do
             if gui:IsA("ScreenGui") and gui.Enabled and gui.Name ~= "LinoriaGui" and gui.Name ~= "Arcane_Yarthul_HUD" then
@@ -6640,7 +6639,6 @@ function AutoYarthul.interactRefight()
     end)
 end
 
--- 14. TUONG TAC gate NGOAI TRAN (CHI CHAY KHI is DUNG nearby gate arena & not yet VAO TRAN)
 function AutoYarthul.interactGate()
     if tick() - AutoYarthul.lastGateInteractTime < 2.5 then return end
     AutoYarthul.lastGateInteractTime = tick()
